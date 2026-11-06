@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --color-ink: #0b1f20;
+  --color-brand-50: #eef7f6;
+  --color-brand-100: #d5ebe8;
+  --color-brand-200: #a9d6d0;
+  --color-brand-500: #1f7a74;
+  --color-brand-600: #17625d;
+  --color-brand-700: #124d4a;
+  --color-brand-800: #0f3d3e;
+  --color-brand-900: #0a2b2c;
+  --color-gold-300: #f8d27e;
+  --color-gold-400: #f5b841;
+  --color-gold-500: #e39f1c;
+  --color-sand: #faf7f2;
+
+  --color-navy-50: #f2f5fa;
+  --color-navy-100: #e1e8f2;
+  --color-navy-200: #c3d0e3;
+  --color-navy-300: #94a8c7;
+  --color-navy-500: #3d5a85;
+  --color-navy-600: #2c4569;
+  --color-navy-700: #1f3352;
+  --color-navy-800: #15243d;
+  --color-navy-900: #0c172a;
+  --color-mist: #f5f7fa;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-sand font-sans text-ink antialiased;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-gold-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@utility container-x {
+  @apply mx-auto w-full max-w-7xl px-5 sm:px-8;
+}
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-gold-400 text-brand-900 shadow-sm hover:bg-gold-300 hover:shadow-md;
+}
+@utility btn-dark {
+  @apply btn bg-brand-800 text-white hover:bg-brand-700;
+}
+@utility btn-ghost {
+  @apply btn border border-brand-800/15 bg-white text-brand-800 hover:border-brand-800/40;
+}
+@utility eyebrow {
+  @apply text-xs font-semibold uppercase tracking-[0.18em] text-brand-500;
+}
+@utility card {
+  @apply rounded-3xl border border-brand-800/10 bg-white shadow-[0_1px_2px_rgba(11,31,32,0.04)];
+}
+@utility field-label {
+  @apply mb-1.5 block text-sm font-medium text-brand-900;
+}
+@utility field {
+  @apply w-full rounded-xl border border-brand-800/15 bg-white px-4 py-3 text-base text-ink sm:text-sm transition placeholder:text-ink/40 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 focus:outline-none;
+}
+@utility field-error {
+  @apply mt-1 text-xs font-medium text-red-600;
+}
+
+@utility panel {
+  @apply rounded-2xl border border-navy-800/10 bg-white;
+}
+@utility scroll-area {
+  @apply min-h-0 overflow-y-auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-navy-200) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+@utility scroll-x {
+  @apply overflow-x-auto overflow-y-hidden;
+  scrollbar-width: none;
+}
+
+@media (max-width: 639px) {
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise 0.5s ease-out both;
+}
