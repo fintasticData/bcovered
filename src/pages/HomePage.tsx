@@ -94,13 +94,14 @@ export default function HomePage() {
                 ))}
               </div>
               <button
-                onClick={() => navigate(pick === 'car' ? '/assist' : `/quote?product=${pick}`)}
+                onClick={() => navigate(pick === 'car' ? '/assist' : pick === 'business' ? '/business/risk-review' : `/quote?product=${pick}`)}
                 className="btn-dark mt-3 w-full"
               >
-                {pick === 'car' ? 'Start with Ava' : 'Compare quotes'} <ArrowRight className="h-4 w-4" />
+                {pick === 'car' ? 'Start with Ava' : pick === 'business' ? 'Start a business risk review' : 'Compare quotes'}{' '}
+                <ArrowRight className="h-4 w-4" />
               </button>
               <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
-                Motor runs through Ava’s AI-assisted assessment in this demo; other cover uses the quote form.
+                Motor and business cover run through AI-assisted assessments in this demo; other cover uses the quote form.
               </p>
             </div>
           </div>

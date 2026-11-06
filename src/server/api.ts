@@ -99,6 +99,11 @@ export function listIdentities(): DemoIdentity[] {
   ]
 }
 
+/** True when the demo identity still exists, for example after a data reset removed it. */
+export function sessionExists(userId: string) {
+  return Boolean(new Repo(TENANT_ID).get('app_users', userId))
+}
+
 export function getSessionUser(auth: Auth) {
   return principal(auth).user
 }

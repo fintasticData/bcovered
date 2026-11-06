@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import Logo from './Logo'
 import { products } from '../data/products'
+import { LEGAL_SECTIONS } from '../pages/LegalPage'
 
 export default function Footer() {
   return (
@@ -32,6 +33,7 @@ export default function Footer() {
               ['/assist', 'Find my cover with Ava'],
               ['/quote', 'Quote form'],
               ['/claims', 'Log a claim'],
+              ['/business', 'Business insurance'],
               ['/demo', 'Demo Studio'],
               ['/about', 'About us'],
               ['/contact', 'Contact'],
@@ -64,7 +66,13 @@ export default function Footer() {
           </p>
           <div className="flex flex-col gap-2 text-brand-100/50 md:flex-row md:justify-between">
             <p>© {new Date().getFullYear()} BCovered – fictional demo on InsureFlow AI.</p>
-            <p>Privacy notice (POPIA) · Complaints · Conflict of interest policy · FAIS disclosures</p>
+            <nav aria-label="Legal" className="flex flex-wrap gap-x-3 gap-y-1">
+              {LEGAL_SECTIONS.map((s) => (
+                <Link key={s.id} to={`/legal#${s.id}`} className="hover:text-gold-300">
+                  {s.label}
+                </Link>
+              ))}
+            </nav>
           </div>
         </div>
       </div>

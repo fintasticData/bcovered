@@ -31,6 +31,13 @@ export default function ProductPage() {
                 </Link>
                 <Link to={`/quote?product=${product.slug}`} className="btn-ghost">Prefer a form?</Link>
               </>
+            ) : product.slug === 'business' ? (
+              <>
+                <Link to="/business/risk-review" className="btn-primary">
+                  Start a business risk review <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link to="/business" className="btn-ghost">Explore business insurance</Link>
+              </>
             ) : (
               <Link to={`/quote?product=${product.slug}`} className="btn-primary">
                 Get a quote <ArrowRight className="h-4 w-4" />

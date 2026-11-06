@@ -39,7 +39,14 @@ export const session = {
   },
 }
 
-const auth = (): server.Auth => ({ userId: session.get() })
+const auth = (): server.Auth => {
+  const userId = session.get()
+  if (userId && !server.sessionExists(userId)) {
+    session.set(null)
+    return { userId: null }
+  }
+  return { userId: userId || null }
+}
 
 // ---------------------------------------------------------------- transport
 

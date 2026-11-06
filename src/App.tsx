@@ -10,6 +10,7 @@ import ClaimsPage from './pages/ClaimsPage'
 import AboutPage from './pages/AboutPage'
 import ContactPage from './pages/ContactPage'
 import NotFound from './pages/NotFound'
+import LegalPage from './pages/LegalPage'
 import AssistPage from './pages/AssistPage'
 import DemoStudioPage from './pages/DemoStudioPage'
 import PortalPage from './pages/portal/PortalPage'
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo" element={<DemoStudioPage />} />
+          <Route path="/legal" element={<LegalPage />} />
           <Route path="/business" element={<BusinessHomePage />} />
           <Route path="/business/industries" element={<BusinessIndustriesPage />} />
           <Route path="/business/cover" element={<BusinessCoverPage />} />
@@ -135,6 +137,7 @@ export default function App() {
           <Route path="commercial/risk-twins" element={<RiskTwinsPage />} />
           <Route path="commercial/submissions" element={<SubmissionsPage />} />
           <Route path="commercial/submissions/:submissionId" element={<SubmissionPage />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </Suspense>
