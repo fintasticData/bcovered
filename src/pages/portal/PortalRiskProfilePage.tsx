@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { ArrowLeft, MapPin } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import { usePortalBusiness } from '@/api/hooks'
 import { AdviceNotice, CoverageBadge, ProvenanceBadge } from '@/components/commercial/badges'
 import { humanise } from '@/components/StatusBadge'
@@ -18,6 +19,7 @@ const LEGEND: Array<[FieldSource, string]> = [
 export default function PortalRiskProfilePage() {
   const { data, isLoading, error } = usePortalBusiness()
   if (isLoading) return <div className="container-x py-10"><LoadingState /></div>
+  if (error instanceof ApiError && error.code === 'not_found') return <Navigate to="/portal/business" replace />
   if (error || !data) return <div className="container-x py-10"><ErrorState message={error?.message ?? 'Could not load your risk profile'} /></div>
   const p = data.profile
   const src = (k: string): FieldSource => p.field_sources[k] ?? 'missing'

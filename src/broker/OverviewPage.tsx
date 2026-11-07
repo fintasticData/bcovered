@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AlertTriangle, ArrowRight, CheckSquare, ListChecks, Send, Sparkles, Users, UserSquare2 } from 'lucide-react'
 import { useApprovals, useOverview } from '@/api/hooks'
 import { humanise } from '@/components/StatusBadge'
@@ -16,12 +15,13 @@ export default function OverviewPage() {
 
   const kpis = [
     { label: 'Open leads', value: data.kpis.open_leads, icon: Users, to: '/broker/leads' },
-    { label: 'Quotes awaiting approval', value: data.kpis.quotes_awaiting_approval, icon: CheckSquare, to: '/broker/approvals', warn: data.kpis.quotes_awaiting_approval > 0 },
+    { label: 'Awaiting your approval', value: data.kpis.approvals_pending, icon: CheckSquare, to: '/broker/approvals', warn: data.kpis.approvals_pending > 0 },
     { label: 'Proposals released', value: data.kpis.proposals_released, icon: Send, to: '/broker/leads' },
     { label: 'Active agent jobs', value: data.kpis.active_jobs, icon: ListChecks, to: '/broker/jobs' },
     { label: 'Failed jobs', value: data.kpis.failed_jobs, icon: AlertTriangle, to: '/broker/jobs', warn: data.kpis.failed_jobs > 0 },
     { label: 'Customers and prospects', value: data.kpis.customers, icon: UserSquare2, to: '/broker/leads' },
   ]
+  const maxLeads = Math.max(0, ...data.leads_by_status.map((d) => d.count))
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
@@ -56,17 +56,28 @@ export default function OverviewPage() {
         <section className="panel p-5">
           <h2 className="text-sm font-semibold text-navy-900">Lead pipeline</h2>
           <p className="text-xs text-navy-600">Leads by status, from the leads table</p>
-          <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.leads_by_status.map((d) => ({ ...d, label: humanise(d.status) }))} margin={{ left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e1e8f2" />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#2c4569' }} interval={0} angle={-20} textAnchor="end" height={50} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#2c4569' }} />
-                <Tooltip cursor={{ fill: '#f2f5fa' }} />
-                <Bar dataKey="count" name="Leads" fill="#1f7a74" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {maxLeads === 0 ? (
+            <p className="mt-4 text-xs text-navy-600">No leads yet.</p>
+          ) : (
+            <ul className="mt-4 space-y-3" aria-label="Leads by status">
+              {data.leads_by_status.map((d) => (
+                <li key={d.status}>
+                  <Link to="/broker/leads" className="group block">
+                    <span className="flex items-baseline justify-between text-xs">
+                      <span className="font-medium text-navy-800 group-hover:text-brand-600">{humanise(d.status)}</span>
+                      <span className="font-semibold text-navy-900">{d.count}</span>
+                    </span>
+                    <span className="mt-1 block h-2.5 overflow-hidden rounded-full bg-navy-50">
+                      <span
+                        className="block h-full rounded-full bg-brand-500 transition-all"
+                        style={{ width: `${Math.max(4, (d.count / maxLeads) * 100)}%` }}
+                      />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="panel p-5">

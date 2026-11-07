@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { decideApproval, listApprovals, sendMessage, startConversation, type Auth } from '../api'
+import { decideApproval, getOverview, listApprovals, listIdentities, sendMessage, startConversation, type Auth } from '../api'
 import { handleCopilotCommand } from '../agents/copilotCommands'
 import { RESTAURANT_GROUP } from '../demo/scenarios'
 import { SEED_IDS, TENANT_ID } from '../db/seed'
@@ -142,6 +142,15 @@ describe('commercial_discovery_review vertical slice', () => {
     expect(r.require('jobs', job.id).status).toBe('completed')
     expect(r.require('commercial_submissions', submission.id).status).toBe('ready_for_market')
     expect(r.list('communications', (c) => c.customer_id === profile.customer_id && c.channel === 'in_app')).toHaveLength(1)
+  })
+
+  it('lands the new business contact on the business portal and personal customers on the personal portal', async () => {
+    await runRestaurantScenario()
+    const identities = listIdentities()
+    expect(identities.find((i) => i.full_name === 'Nomsa Dlamini')?.home).toBe('/portal/business')
+    expect(identities.find((i) => i.full_name === 'Johan van der Merwe')?.home).toBe('/portal')
+    expect(identities.find((i) => i.role === 'broker')?.home).toBe('/broker')
+    expect(getOverview(broker).kpis.approvals_pending).toBe(1)
   })
 
   it('blocks agents from approving and from finalising without approval', async () => {

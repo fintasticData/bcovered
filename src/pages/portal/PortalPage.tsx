@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Bell, Building2, Clock, FileText, Sparkles } from 'lucide-react'
-import { usePortal } from '@/api/hooks'
+import { useMe, usePortal } from '@/api/hooks'
 import { SimulatedBadge } from '@/components/SimulatedBadge'
 import { humanise } from '@/components/StatusBadge'
 import { describeVehicle } from '@/server/domain/motor'
@@ -19,10 +19,12 @@ const REVIEW_LABEL: Record<string, string> = {
 
 export default function PortalPage() {
   const { data, isLoading, error } = usePortal()
+  const { data: me } = useMe()
 
   if (isLoading) return <div className="container-x py-10"><LoadingState /></div>
   if (error || !data) return <div className="container-x py-10"><ErrorState message={error?.message ?? 'Could not load your portal'} /></div>
-  const first = data.customer.customer_type === 'commercial' ? data.customer.full_name : data.customer.full_name.split(' ')[0]
+  const first = (me?.full_name ?? data.customer.full_name).split(' ')[0]
+  const isBusiness = Boolean(data.business_profile_id)
 
   return (
     <div className="bg-mist">
@@ -124,9 +126,17 @@ export default function PortalPage() {
               <h2 className="flex items-center gap-2 text-sm font-semibold text-navy-900">
                 <Sparkles className="h-4 w-4 text-brand-500" /> Need something else?
               </h2>
-              <p className="mt-1 text-xs text-navy-600">Start a new motor comparison with Ava, or contact your broker.</p>
+              <p className="mt-1 text-xs text-navy-600">
+                {isBusiness
+                  ? 'Open your business portal for document requests, or contact your broker.'
+                  : 'Start a new motor comparison with Ava, or contact your broker.'}
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link to="/assist" className="btn-dark px-4 py-2 text-xs">Talk to Ava</Link>
+                {isBusiness ? (
+                  <Link to="/portal/business" className="btn-dark px-4 py-2 text-xs">Business portal</Link>
+                ) : (
+                  <Link to="/assist" className="btn-dark px-4 py-2 text-xs">Talk to Ava</Link>
+                )}
                 <Link to="/contact" className="btn-ghost px-4 py-2 text-xs">Contact my broker</Link>
               </div>
             </section>

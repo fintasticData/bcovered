@@ -71,6 +71,8 @@ export interface DemoIdentity {
   full_name: string
   role: Role
   description: string
+  /** Where the role switcher lands this identity. */
+  home: string
 }
 
 export function listIdentities(): DemoIdentity[] {
@@ -79,22 +81,26 @@ export function listIdentities(): DemoIdentity[] {
   const people = repo
     .list('app_users')
     .sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))
-    .map((u) => ({
-      user_id: u.id,
-      customer_id: u.customer_id,
-      full_name: u.full_name,
-      role: u.role,
-      description:
-        u.role === 'customer'
-          ? u.customer_id && repo.get('customers', u.customer_id)?.customer_type === 'commercial'
-            ? `Business portal · ${repo.get('customers', u.customer_id)!.full_name}`
-            : 'Customer portal'
-          : u.role === 'manager'
-            ? 'Brokerage manager'
-            : 'Licensed broker',
-    }))
+    .map((u) => {
+      const business = u.role === 'customer' && u.customer_id ? repo.find('business_profiles', (b) => b.customer_id === u.customer_id) : undefined
+      return {
+        user_id: u.id,
+        customer_id: u.customer_id,
+        full_name: u.full_name,
+        role: u.role,
+        description:
+          u.role === 'customer'
+            ? business
+              ? `Business portal · ${business.trading_name ?? business.registered_name}`
+              : 'Customer portal'
+            : u.role === 'manager'
+              ? 'Brokerage manager'
+              : 'Licensed broker',
+        home: u.role === 'customer' ? (business ? '/portal/business' : '/portal') : '/broker',
+      }
+    })
   return [
-    { user_id: null, customer_id: null, full_name: 'Public visitor', role: 'visitor' as Role, description: 'Public website' },
+    { user_id: null, customer_id: null, full_name: 'Public visitor', role: 'visitor' as Role, description: 'Public website', home: '/' },
     ...people,
   ]
 }
@@ -651,7 +657,7 @@ export function getPortalProposal(auth: Auth, body: { quote_id: string }): Quote
 export interface OverviewData {
   kpis: {
     open_leads: number
-    quotes_awaiting_approval: number
+    approvals_pending: number
     proposals_released: number
     active_jobs: number
     failed_jobs: number
@@ -692,7 +698,7 @@ export function getOverview(auth: Auth): OverviewData {
   return {
     kpis: {
       open_leads: leads.filter((l) => !['won', 'lost'].includes(l.status)).length,
-      quotes_awaiting_approval: p.repo.list('quotes', (q) => q.status === 'awaiting_approval').length,
+      approvals_pending: p.repo.list('approval_requests', (a) => a.status === 'pending').length,
       proposals_released: p.repo.list('quotes', (q) => q.status === 'released').length,
       active_jobs: jobs.filter((j) => ['queued', 'running', 'awaiting_approval', 'awaiting_information', 'paused'].includes(j.status)).length,
       failed_jobs: jobs.filter((j) => j.status === 'failed').length,

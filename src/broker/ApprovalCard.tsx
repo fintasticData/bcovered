@@ -10,9 +10,17 @@ import { describeVehicle, formatMotorField } from '@/server/domain/motor'
 import { rand } from '@/lib/quote'
 import { formatDateTime } from '@/lib/utils'
 
-type Decision = 'approved' | 'rejected' | 'changes_requested'
+export type Decision = 'approved' | 'rejected' | 'changes_requested'
 
-export function ApprovalCard({ view, compact = false }: { view: ApprovalView; compact?: boolean }) {
+export function ApprovalCard({
+  view,
+  compact = false,
+  onDecided,
+}: {
+  view: ApprovalView
+  compact?: boolean
+  onDecided?: (view: ApprovalView, decision: Decision) => void
+}) {
   const { approval, quote, customer, job, submission } = view
   const pack = submission?.submission.pack
   const stale = submission ? !submission.current_pack_matches : false
@@ -29,7 +37,10 @@ export function ApprovalCard({ view, compact = false }: { view: ApprovalView; co
       return
     }
     setNoteError(null)
-    decide.mutate({ approval_id: approval.id, decision, note: note.trim() || undefined, payload_hash: approval.payload_hash })
+    decide.mutate(
+      { approval_id: approval.id, decision, note: note.trim() || undefined, payload_hash: approval.payload_hash },
+      { onSuccess: () => onDecided?.(view, decision) },
+    )
   }
 
   return (

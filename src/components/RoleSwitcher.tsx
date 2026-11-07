@@ -6,8 +6,6 @@ import { useIdentities, useMe } from '@/api/hooks'
 import { humanise } from './StatusBadge'
 import { cn } from '@/lib/utils'
 
-const HOME: Record<string, string> = { visitor: '/', customer: '/portal', broker: '/broker', manager: '/broker', admin: '/broker' }
-
 export function RoleSwitcher({ dark = false, align = 'right' }: { dark?: boolean; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -23,10 +21,10 @@ export function RoleSwitcher({ dark = false, align = 'right' }: { dark?: boolean
     return () => document.removeEventListener('mousedown', close)
   }, [])
 
-  const choose = (userId: string | null, role: string) => {
+  const choose = (userId: string | null, home: string) => {
     session.set(userId)
     setOpen(false)
-    navigate(HOME[role] ?? '/')
+    navigate(home)
   }
 
   const current = me ? `${me.full_name} · ${humanise(me.role)}` : 'Public visitor'
@@ -68,7 +66,7 @@ export function RoleSwitcher({ dark = false, align = 'right' }: { dark?: boolean
                 key={i.user_id ?? 'visitor'}
                 role="menuitem"
                 type="button"
-                onClick={() => choose(i.user_id, i.role)}
+                onClick={() => choose(i.user_id, i.home)}
                 className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-navy-50"
               >
                 <span className="min-w-0 flex-1">

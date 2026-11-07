@@ -18,11 +18,12 @@ import { ErrorState, LoadingState } from '../PageHeader'
 import { MobilePaneSwitch, type Pane } from '../MobilePaneSwitch'
 import { ProfileEditor, TaskList } from './ClientDetailPage'
 
+/** Replaces the submission status badge when the approval state says more than the status alone. */
 const APPROVAL_CHIP: Record<SubmissionDetail['approval_state'], { label: string; className: string } | null> = {
   none: null,
-  pending_current: { label: 'Approval pending', className: 'bg-amber-50 text-amber-800' },
-  pending_stale: { label: 'Changed since approval was requested', className: 'bg-red-50 text-red-700' },
-  approved: { label: 'Approved by broker', className: 'bg-emerald-50 text-emerald-700' },
+  pending_current: null,
+  pending_stale: { label: 'Unapproved changes · request approval again', className: 'bg-red-50 text-red-700' },
+  approved: null,
   changes_requested: { label: 'Changes requested', className: 'bg-amber-50 text-amber-800' },
   rejected: { label: 'Rejected', className: 'bg-red-50 text-red-700' },
 }
@@ -101,9 +102,12 @@ export default function SubmissionPage() {
               · submission pack
             </h1>
             <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-navy-600">
-              <StatusBadge status={s.status} />
-              <SimulatedBadge label={s.status === 'ready_for_market' ? 'Ready for market · not sent' : 'Draft · not sent to any insurer'} />
-              {chip && <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', chip.className)}>{chip.label}</span>}
+              {chip ? (
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', chip.className)}>{chip.label}</span>
+              ) : (
+                <StatusBadge status={s.status} />
+              )}
+              <SimulatedBadge label="Not sent to any insurer" />
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

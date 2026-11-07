@@ -101,6 +101,7 @@ function acknowledge(before: MotorDetails, after: MotorDetails): string {
       if (k === 'claims_last_3_years') parts.push(after.claims_last_3_years ? `${after.claims_last_3_years} claim(s) in 3 years` : 'no recent claims')
       else if (k === 'licence_years') parts.push(`licensed ${after.licence_years} years`)
       else if (k === 'tracker') parts.push(after.tracker ? 'tracker fitted' : 'no tracker')
+      else if (k === 'value') parts.push(formatMotorField(k, after))
       else parts.push(formatMotorField(k, after).toLowerCase())
     })
   if (changed.includes('year') && !changed.includes('make')) parts.unshift(`${after.year} model`)

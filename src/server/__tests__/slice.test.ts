@@ -68,6 +68,13 @@ describe('Ava deterministic intake', () => {
     expect(asked.indexOf('consent')).toBeLessThan(asked.indexOf('full_name'))
   })
 
+  it('echoes the vehicle value as a rand amount', async () => {
+    let state = initialIntakeState()
+    let reply = ''
+    for (const line of NEW_MOTOR_LEAD.script.slice(0, 3)) ({ state, reply } = await deterministicAdapter.intakeTurn(state, line))
+    expect(reply).toMatch(/Noted: R\s245\s000\./)
+  })
+
   it('does not capture personal details when consent is declined', async () => {
     let state = initialIntakeState()
     for (const line of NEW_MOTOR_LEAD.script.slice(0, 8)) state = (await deterministicAdapter.intakeTurn(state, line)).state

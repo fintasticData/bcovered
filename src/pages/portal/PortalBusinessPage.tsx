@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Bell, Building2, CheckCircle2, ClipboardList, FileText, Network } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import { usePortalBusiness } from '@/api/hooks'
 import { AdviceNotice } from '@/components/commercial/badges'
 import { humanise } from '@/components/StatusBadge'
@@ -9,6 +10,29 @@ import { ErrorState, LoadingState } from '@/broker/PageHeader'
 export default function PortalBusinessPage() {
   const { data, isLoading, error } = usePortalBusiness()
   if (isLoading) return <div className="container-x py-10"><LoadingState /></div>
+  if (error instanceof ApiError && error.code === 'not_found') {
+    return (
+      <div className="bg-mist">
+        <div className="container-x py-10">
+          <p className="eyebrow mb-1 flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5" /> Business portal
+          </p>
+          <h1 className="font-display text-3xl font-bold text-navy-900 sm:text-4xl">No business linked yet</h1>
+          <p className="mt-2 max-w-2xl text-sm text-navy-600">
+            Your account has no business risk review. Tell the Business Discovery Agent how your business operates and a broker
+            reviews the findings. In Demo Studio, Scenario A creates a fictional restaurant group you can explore as Nomsa Dlamini.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link to="/business/risk-review" className="btn-dark px-4 py-2 text-xs">
+              Start a business risk review <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link to="/portal" className="btn-ghost px-4 py-2 text-xs">Back to my portal</Link>
+            <Link to="/demo" className="btn-ghost px-4 py-2 text-xs">Demo Studio</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
   if (error || !data) return <div className="container-x py-10"><ErrorState message={error?.message ?? 'Could not load your business portal'} /></div>
   const name = data.profile.trading_name ?? data.profile.registered_name
   const contact = data.profile.primary_contact?.name.split(' ')[0]
