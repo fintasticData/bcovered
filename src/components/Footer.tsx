@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import Logo from './Logo'
 import { products } from '../data/products'
-import { LEGAL_SECTIONS } from '../pages/LegalPage'
+import { LEGAL_SECTIONS } from '../data/legal'
 
 export default function Footer() {
   return (

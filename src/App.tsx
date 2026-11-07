@@ -4,19 +4,19 @@ import Header from './components/Header'
 import Footer from './components/Footer'
 import { RequireRole } from './components/RequireRole'
 import HomePage from './pages/HomePage'
-import ProductPage from './pages/ProductPage'
-import QuotePage from './pages/QuotePage'
-import ClaimsPage from './pages/ClaimsPage'
-import AboutPage from './pages/AboutPage'
-import ContactPage from './pages/ContactPage'
 import NotFound from './pages/NotFound'
-import LegalPage from './pages/LegalPage'
-import AssistPage from './pages/AssistPage'
-import DemoStudioPage from './pages/DemoStudioPage'
-import PortalPage from './pages/portal/PortalPage'
-import PortalProposalPage from './pages/portal/PortalProposalPage'
 import { LoadingState } from './broker/PageHeader'
 
+const ProductPage = lazy(() => import('./pages/ProductPage'))
+const QuotePage = lazy(() => import('./pages/QuotePage'))
+const ClaimsPage = lazy(() => import('./pages/ClaimsPage'))
+const AboutPage = lazy(() => import('./pages/AboutPage'))
+const ContactPage = lazy(() => import('./pages/ContactPage'))
+const LegalPage = lazy(() => import('./pages/LegalPage'))
+const AssistPage = lazy(() => import('./pages/AssistPage'))
+const DemoStudioPage = lazy(() => import('./pages/DemoStudioPage'))
+const PortalPage = lazy(() => import('./pages/portal/PortalPage'))
+const PortalProposalPage = lazy(() => import('./pages/portal/PortalProposalPage'))
 const BrokerLayout = lazy(() => import('./broker/BrokerLayout'))
 const OverviewPage = lazy(() => import('./broker/OverviewPage'))
 const WorkspacePage = lazy(() => import('./broker/WorkspacePage'))
@@ -53,9 +53,19 @@ function PublicLayout() {
       </div>
       <Header />
       <main className="flex-1">
-        <Outlet />
+        <Suspense fallback={<div className="container-x min-h-[60vh]"><LoadingState /></div>}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
+    </div>
+  )
+}
+
+function AppLoading() {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-mist">
+      <LoadingState label="Loading the workspace…" />
     </div>
   )
 }
@@ -64,7 +74,7 @@ const STAFF = ['broker', 'manager', 'admin'] as const
 
 export default function App() {
   return (
-    <Suspense fallback={<div className="container-x"><LoadingState /></div>}>
+    <Suspense fallback={<AppLoading />}>
       <ScrollToTop />
       <Routes>
         <Route element={<PublicLayout />}>

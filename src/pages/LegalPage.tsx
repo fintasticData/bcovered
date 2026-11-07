@@ -1,14 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ShieldCheck } from 'lucide-react'
+import { LEGAL_SECTIONS } from '@/data/legal'
 import { PRIVACY_NOTICE_VERSION } from '@/server/llm/adapter'
-
-export const LEGAL_SECTIONS = [
-  { id: 'privacy', label: 'Privacy notice (POPIA)' },
-  { id: 'complaints', label: 'Complaints' },
-  { id: 'conflicts', label: 'Conflict of interest policy' },
-  { id: 'fais', label: 'FAIS disclosures' },
-] as const
 
 export default function LegalPage() {
   const { hash } = useLocation()
