@@ -8,6 +8,7 @@ import {
   Network,
   ChevronsLeft,
   ChevronsRight,
+  CircleHelp,
   ExternalLink,
   FlaskConical,
   LayoutDashboard,
@@ -112,6 +113,9 @@ function FooterLinks({ collapsed }: { collapsed: boolean }) {
     <>
       <Link to="/demo" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
         <FlaskConical className="h-4 w-4 shrink-0" /> {!collapsed && 'Demo Studio'}
+      </Link>
+      <Link to="/help" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
+        <CircleHelp className="h-4 w-4 shrink-0" /> {!collapsed && 'Help and capabilities'}
       </Link>
       <Link to="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
         <ExternalLink className="h-4 w-4 shrink-0" /> {!collapsed && 'Public site'}

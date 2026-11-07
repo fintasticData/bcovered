@@ -75,6 +75,7 @@ export default function Header() {
           <NavLink to="/claims" className={navLink}>Claims</NavLink>
           <NavLink to="/about" className={navLink}>About us</NavLink>
           <NavLink to="/demo" className={navLink}>Demo Studio</NavLink>
+          <NavLink to="/help" className={navLink}>Help</NavLink>
           {workspace && <NavLink to={workspace.to} className={navLink}>{workspace.label}</NavLink>}
         </nav>
 
@@ -112,6 +113,7 @@ export default function Header() {
               ['/about', 'About us'],
               ['/contact', 'Contact'],
               ['/demo', 'Demo Studio'],
+              ['/help', 'Help and capabilities'],
               ...(workspace ? [[workspace.to, workspace.label]] : []),
             ].map(([to, label]) => (
               <Link key={to} to={to} className="block rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-brand-50">

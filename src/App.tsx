@@ -15,6 +15,7 @@ const ContactPage = lazy(() => import('./pages/ContactPage'))
 const LegalPage = lazy(() => import('./pages/LegalPage'))
 const AssistPage = lazy(() => import('./pages/AssistPage'))
 const DemoStudioPage = lazy(() => import('./pages/DemoStudioPage'))
+const HelpPage = lazy(() => import('./pages/HelpPage'))
 const PortalPage = lazy(() => import('./pages/portal/PortalPage'))
 const PortalProposalPage = lazy(() => import('./pages/portal/PortalProposalPage'))
 const BrokerLayout = lazy(() => import('./broker/BrokerLayout'))
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo" element={<DemoStudioPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/legal" element={<LegalPage />} />
           <Route path="/business" element={<BusinessHomePage />} />
           <Route path="/business/industries" element={<BusinessIndustriesPage />} />
