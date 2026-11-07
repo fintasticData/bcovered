@@ -1,6 +1,9 @@
 // Commercial request handlers shaped like the future FastAPI routes (/api/v1/commercial/...). Reached only via src/api/client.ts.
 import { principal, requireCustomer, requireRole, STAFF_ROLES, summariseJob, type Auth, type JobSummary } from './api'
-import { COMMERCIAL_REVIEW } from './agents/commercialOrchestrator'
+import { activeCommercialJob, BUSINESS_WORKFLOWS, COMMERCIAL_REVIEW, RISK_ASSESSMENT, startCommercialReview, startTwinBuild } from './agents/commercialOrchestrator'
+import { DEMO_SUBMISSION_PROFILE_IDS, demoDecisions, sectionDecision } from './demo/completedSubmissions'
+import { insertDemoBusinesses } from './demo/demoBusinesses'
+import { configureRunner, kick, onApprovalResolved } from './jobs/runner'
 import type {
   BusinessActivity,
   BusinessLegalEntity,
@@ -14,12 +17,14 @@ import type {
   RiskAssessmentRecord,
   RiskDependency,
   RiskExposure,
+  RiskPriority,
   SubmissionSection,
   Task,
 } from './db/commercialSchema'
 import type { ApprovalRequest, Communication, Customer } from './db/schema'
 import type { Repo } from './db/store'
 import { coverLabel, coverOrder } from './domain/commercial/coverClasses'
+import { audit } from './lib/audit'
 import { hashPayload } from './lib/hash'
 import { ToolError } from './lib/errors'
 import type { EditableProfileField } from './tools/business'
@@ -46,8 +51,12 @@ export interface BusinessRow {
   customer_name: string
   industry_name: string
   location_count: number
+  asset_count: number
   exposure_count: number
   high_priority_count: number
+  assigned_broker: string | null
+  /** As declared on the current cover; never turned into a date. */
+  renewal_month: string | null
   twin_version: number | null
   submission: Pick<CommercialSubmission, 'id' | 'status' | 'completeness'> | null
   open_broker_tasks: number
@@ -60,16 +69,17 @@ function businessRow(repo: Repo, profile: BusinessProfile): BusinessRow {
   const exposures = twin ? repo.list('risk_exposures', (e) => e.risk_profile_id === twin.id) : []
   const tasks = repo.list('tasks', (t) => t.subject_id === profile.id && t.status === 'open')
   const sub = latestSubmission(repo, profile.id)
-  const job = repo
-    .list('jobs', (j) => j.workflow_type === COMMERCIAL_REVIEW && j.customer_id === profile.customer_id && !['completed', 'failed', 'cancelled'].includes(j.status))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+  const job = activeCommercialJob(repo, profile.customer_id)
   return {
     profile,
     customer_name: repo.get('customers', profile.customer_id)?.full_name ?? 'Unknown',
     industry_name: templateFor(repo, profile.industry_key).name,
     location_count: repo.list('business_locations', (l) => l.business_profile_id === profile.id).length,
+    asset_count: repo.list('commercial_assets', (a) => a.business_profile_id === profile.id).length,
     exposure_count: exposures.length,
     high_priority_count: exposures.filter((e) => e.priority === 'high').length,
+    assigned_broker: profile.assigned_broker_id ? (repo.get('app_users', profile.assigned_broker_id)?.full_name ?? null) : null,
+    renewal_month: profile.existing_cover?.renewal_month ?? null,
     twin_version: twin?.version ?? null,
     submission: sub ? { id: sub.id, status: sub.status, completeness: sub.completeness } : null,
     open_broker_tasks: tasks.filter((t) => t.audience === 'broker').length,
@@ -107,7 +117,7 @@ export interface BusinessDetail {
   assigned_broker: string | null
 }
 
-function businessDetail(repo: Repo, profileId: string): BusinessDetail {
+export function businessDetail(repo: Repo, profileId: string): BusinessDetail {
   const profile = repo.require('business_profiles', profileId)
   const of = <T extends { business_profile_id: string }>(rows: T[]) => rows.filter((r) => r.business_profile_id === profileId)
   const twin = currentTwin(repo, profileId)
@@ -129,7 +139,7 @@ function businessDetail(repo: Repo, profileId: string): BusinessDetail {
     tasks: repo.list('tasks', (t) => t.subject_id === profileId || submissions.some((s) => s.id === t.subject_id)).sort((a, b) => a.created_at.localeCompare(b.created_at)),
     submissions,
     jobs: repo
-      .list('jobs', (j) => j.workflow_type === COMMERCIAL_REVIEW && j.customer_id === profile.customer_id)
+      .list('jobs', (j) => BUSINESS_WORKFLOWS.includes(j.workflow_type) && j.customer_id === profile.customer_id)
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map((j) => summariseJob(repo, j)),
     approvals: repo.list('approval_requests', (a) => submissions.some((s) => s.id === a.subject_id)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -164,37 +174,162 @@ export function updateTask(auth: Auth, body: { task_id: string; status: Task['st
 
 // ---------------------------------------------------------------- broker: Risk Twins
 
-export interface RiskTwinRow {
-  risk_profile: BusinessRiskProfile
-  profile_id: string
-  business_name: string
-  industry_name: string
-  exposure_count: number
-  high_priority_count: number
-  coverage: Record<CoverageStatus, number>
+/** screened: exposures identified by a Twin build, no formal assessment yet. signed_off: approved by a broker. */
+export type AssessmentStatus = 'not_assessed' | 'screened' | 'in_progress' | 'awaiting_review' | 'signed_off'
+
+const ASSESSMENT_STATUS: Record<RiskAssessmentRecord['status'], AssessmentStatus> = {
+  draft: 'screened',
+  in_progress: 'in_progress',
+  awaiting_review: 'awaiting_review',
+  approved: 'signed_off',
+  superseded: 'not_assessed',
 }
 
-export function listRiskTwins(auth: Auth): RiskTwinRow[] {
+export interface RiskTwinRow extends BusinessRow {
+  risk_profile: BusinessRiskProfile
+  priority_counts: Record<RiskPriority, number>
+  coverage: Record<CoverageStatus, number>
+  /** Exposures whose coverage is unknown or still awaiting broker review. */
+  coverage_gap_count: number
+  assessment_status: AssessmentStatus
+  last_assessed_at: string | null
+}
+
+export interface RiskTwinPortfolio {
+  twins: RiskTwinRow[]
+  without_twin: BusinessRow[]
+}
+
+const UNCONFIRMED: CoverageStatus[] = ['unknown', 'awaiting_broker_review']
+
+export function getRiskTwinPortfolio(auth: Auth): RiskTwinPortfolio {
   const p = principal(auth)
   requireRole(p, STAFF_ROLES)
-  return p.repo
-    .list('business_risk_profiles', (r) => r.status === 'current')
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((rp) => {
-      const profile = p.repo.require('business_profiles', rp.business_profile_id)
-      const exposures = p.repo.list('risk_exposures', (e) => e.risk_profile_id === rp.id)
-      const coverage: Record<CoverageStatus, number> = { confirmed_covered: 0, confirmed_excluded: 0, potentially_covered: 0, unknown: 0, awaiting_broker_review: 0 }
-      exposures.forEach((e) => coverage[e.coverage_status]++)
-      return {
-        risk_profile: rp,
-        profile_id: profile.id,
-        business_name: nameOf(profile),
-        industry_name: templateFor(p.repo, profile.industry_key).name,
-        exposure_count: exposures.length,
-        high_priority_count: exposures.filter((e) => e.priority === 'high').length,
-        coverage,
-      }
+  const rows = listBusinessProfiles(auth)
+  const twins: RiskTwinRow[] = []
+  const without_twin: BusinessRow[] = []
+  rows.forEach((row) => {
+    const rp = currentTwin(p.repo, row.profile.id)
+    if (!rp) return void without_twin.push(row)
+    const exposures = p.repo.list('risk_exposures', (e) => e.risk_profile_id === rp.id)
+    const coverage: Record<CoverageStatus, number> = { confirmed_covered: 0, confirmed_excluded: 0, potentially_covered: 0, unknown: 0, awaiting_broker_review: 0 }
+    const priority_counts: Record<RiskPriority, number> = { high: 0, medium: 0, low: 0 }
+    exposures.forEach((e) => {
+      coverage[e.coverage_status]++
+      priority_counts[e.priority]++
     })
+    const live = p.repo
+      .list('risk_assessments', (a) => a.business_profile_id === row.profile.id && a.status !== 'superseded')
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    const assessment = live.find((a) => a.status !== 'draft' && a.risk_profile_id === rp.id) ?? live.find((a) => a.risk_profile_id === rp.id) ?? live[0]
+    const running = p.repo.find('jobs', (j) => j.workflow_type === RISK_ASSESSMENT && j.customer_id === row.profile.customer_id && !['completed', 'failed', 'cancelled', 'awaiting_approval'].includes(j.status))
+    twins.push({
+      ...row,
+      risk_profile: rp,
+      priority_counts,
+      coverage,
+      coverage_gap_count: exposures.filter((e) => UNCONFIRMED.includes(e.coverage_status)).length,
+      assessment_status: running || (row.active_job_id && !assessment) ? 'in_progress' : assessment ? ASSESSMENT_STATUS[assessment.status] : 'not_assessed',
+      last_assessed_at: assessment?.created_at ?? null,
+    })
+  })
+  twins.sort((a, b) => b.risk_profile.created_at.localeCompare(a.risk_profile.created_at))
+  return { twins, without_twin }
+}
+
+export function startTwinBuildForProfile(auth: Auth, body: { profile_id: string }): { job_id: string; reused: boolean } {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const { job, reused } = startTwinBuild(p.repo, p.actor, body.profile_id)
+  return { job_id: job.id, reused }
+}
+
+export function loadDemoBusinesses(auth: Auth): { inserted: number; builds_started: number; profile_ids: string[] } {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const { inserted, profile_ids } = insertDemoBusinesses(p.repo)
+  if (inserted) audit(p.repo, p.actor, 'demo.load_businesses', null, { after: { inserted, profile_ids } }, null)
+  let builds_started = 0
+  profile_ids.forEach((id) => {
+    if (currentTwin(p.repo, id)) return
+    if (!startTwinBuild(p.repo, p.actor, id).reused) builds_started++
+  })
+  return { inserted, builds_started, profile_ids }
+}
+
+export interface CompletedSubmissionsResult {
+  completed: number
+  already_completed: number
+  failed: Array<{ business_name: string; reason: string }>
+}
+
+/**
+ * Takes each synthetic demo business through the full review workflow: Risk Twin, exposures, draft pack, broker decisions on
+ * every proposed section, broker approval by the signed-in person and "ready for market". Businesses that already have a
+ * ready-for-market pack are left alone.
+ */
+export async function loadCompletedSubmissions(auth: Auth): Promise<CompletedSubmissionsResult> {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const { inserted } = insertDemoBusinesses(p.repo)
+  if (inserted) audit(p.repo, p.actor, 'demo.load_businesses', null, { after: { inserted } }, null)
+
+  const result: CompletedSubmissionsResult = { completed: 0, already_completed: 0, failed: [] }
+  const previous = configureRunner({ stepDelayMs: 0 })
+  try {
+    for (const profileId of DEMO_SUBMISSION_PROFILE_IDS) {
+      const profile = p.repo.require('business_profiles', profileId)
+      if (latestSubmission(p.repo, profileId)?.status === 'ready_for_market') {
+        result.already_completed++
+        continue
+      }
+      try {
+        await completeDemoSubmission(p.repo, auth, profileId)
+        result.completed++
+      } catch (e) {
+        result.failed.push({ business_name: nameOf(profile), reason: e instanceof Error ? e.message : String(e) })
+      }
+    }
+  } finally {
+    configureRunner(previous)
+  }
+  if (result.completed) audit(p.repo, p.actor, 'demo.load_completed_submissions', null, { after: { completed: result.completed } }, null)
+  return result
+}
+
+async function completeDemoSubmission(repo: Repo, auth: Auth, profileId: string) {
+  const p = principal(auth)
+  const profile = repo.require('business_profiles', profileId)
+  let job = activeCommercialJob(repo, profile.customer_id)
+  if (job && job.workflow_type !== COMMERCIAL_REVIEW) {
+    await kick(repo.tenantId, job.id)
+    job = undefined
+  }
+  job ??= startCommercialReview(repo, p.actor, { source: 'broker_copilot', business_profile_id: profileId })
+  await kick(repo.tenantId, job.id)
+
+  job = repo.require('jobs', job.id)
+  if (job.status !== 'awaiting_approval') throw new Error(`The review stopped at "${job.status.replace(/_/g, ' ')}"`)
+  const submissionId = (job.outputs as { submission?: { submission_id?: string } } | null)?.submission?.submission_id
+  if (!submissionId) throw new Error('The review did not produce a submission pack')
+
+  const decisions = demoDecisions(profileId)
+  repo
+    .list('submission_sections', (x) => x.submission_id === submissionId && x.status === 'proposed')
+    .forEach((x) => invokeTool('underwriting.update_section', { section_id: x.id, ...sectionDecision(x, decisions) }, { repo, actor: p.actor }))
+
+  if (submissionDetail(repo, submissionId).approval_state === 'pending_stale') requestSubmissionApproval(auth, { submission_id: submissionId })
+  const pending = submissionDetail(repo, submissionId).pending_approval
+  if (!pending) throw new Error('No pending approval for the pack')
+  invokeTool(
+    'approval.resolve',
+    { approval_id: pending.id, decision: 'approved', note: 'Sections, limits and notes reviewed. Approved as ready for market.', payload_hash: pending.payload_hash },
+    { repo, actor: p.actor },
+  )
+  onApprovalResolved(repo, pending.id)
+  await kick(repo.tenantId, job.id)
+
+  if (repo.require('commercial_submissions', submissionId).status !== 'ready_for_market') throw new Error('The pack was approved but not finalised')
 }
 
 // ---------------------------------------------------------------- broker: submissions

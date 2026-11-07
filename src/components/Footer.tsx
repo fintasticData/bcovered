@@ -17,7 +17,9 @@ export default function Footer() {
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-white">Personal</h3>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="h-2 w-2 rounded-full bg-personal-500" aria-hidden /> Personal
+          </h3>
           <ul className="space-y-2 text-sm">
             {personalProducts.map((p) => (
               <li key={p.slug}>
@@ -31,7 +33,9 @@ export default function Footer() {
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-white">Business</h3>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="h-2 w-2 rounded-full bg-business-500" aria-hidden /> Business
+          </h3>
           <ul className="space-y-2 text-sm">
             {[
               ['/business', 'Business insurance'],

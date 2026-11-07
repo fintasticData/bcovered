@@ -1,7 +1,8 @@
 import { GLOBAL_TABLES, type Row, type TableName, type Tables } from './schema'
 import { seedTables } from './seed'
 
-const STORAGE_KEY = 'insureflow_demo_v2'
+/** Bumped when stored rows gain required fields, so an older browser copy is replaced by fresh seed data. */
+const STORAGE_KEY = 'insureflow_demo_v3'
 const hasStorage = typeof localStorage !== 'undefined'
 
 export class NotFoundError extends Error {
@@ -168,6 +169,13 @@ export class Repo {
     markChanged(table)
     return row
   }
+
+  remove<T extends TableName>(table: T, id: string): void {
+    const row = this.require(table, id)
+    const rows = this.rows(table)
+    rows.splice(rows.indexOf(row), 1)
+    markChanged(table)
+  }
 }
 
 const UPDATED_AT_TABLES: TableName[] = [
@@ -184,6 +192,14 @@ const UPDATED_AT_TABLES: TableName[] = [
   'business_locations',
   'commercial_assets',
   'risk_exposures',
+  'risk_assessments',
+  'risk_assessment_findings',
+  'business_dependency_links',
+  'business_documents',
+  'insurance_policies',
+  'policy_sections',
+  'coverage_findings',
+  'twin_update_proposals',
   'industry_risk_templates',
   'commercial_submissions',
   'submission_sections',

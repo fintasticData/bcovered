@@ -79,7 +79,7 @@ export function proposeSections(s: ProfileSnapshot, exposures: RiskExposure[]): 
 }
 
 export function countSources(s: ProfileSnapshot): Record<FieldSource, number> {
-  const out: Record<FieldSource, number> = { verified: 0, declared: 0, inferred: 0, missing: 0 }
+  const out: Record<FieldSource, number> = { verified: 0, declared: 0, extracted: 0, inferred: 0, missing: 0 }
   Object.values(s.profile.field_sources).forEach((v) => out[v]++)
   ;[...s.locations, ...s.activities, ...s.assets, ...s.legal_entities].forEach((r) => out[r.source]++)
   return out

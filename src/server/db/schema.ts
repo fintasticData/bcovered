@@ -320,6 +320,8 @@ export type ApprovalType =
   | 'bulk_campaign'
   | 'renewal_recommendation'
   | 'underwriting_submission'
+  | 'risk_assessment_signoff'
+  | 'risk_investigation_review'
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested' | 'cancelled'
 

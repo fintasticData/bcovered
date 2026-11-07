@@ -34,8 +34,8 @@ export default function CommercialWorkspacePage() {
   const withViews = messages.filter((m) => m.view && m.view.kind !== 'none')
   const current: MessageView | undefined = withViews.find((m) => m.id === selected) ?? withViews[withViews.length - 1]
   const view: CopilotView = current?.view ?? { kind: 'none' }
-  const focusJobId = view.kind === 'job' || view.kind === 'business' ? view.job_id : null
-  const focusProfileId = view.kind === 'business' ? view.profile_id : null
+  const focusJobId = view.kind === 'job' || view.kind === 'business' || view.kind === 'twin' ? view.job_id : null
+  const focusProfileId = view.kind === 'business' || view.kind === 'twin' ? view.profile_id : null
   const { data: job } = useJob(focusJobId)
   const { data: business } = useCommercialClient(focusProfileId)
   const { data: pending = [] } = useApprovals(['pending'])

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, FileStack, Loader2, Pencil, Sparkles, X } from 'lucide-react'
+import { Check, FileStack, Loader2, Network, Pencil, Sparkles, X } from 'lucide-react'
 import type { BusinessDetail } from '@/api/client'
 import { useCommercialClient, useUpdateCommercialClient, useUpdateTask } from '@/api/hooks'
 import { AdviceNotice, ProvenanceBadge } from '@/components/commercial/badges'
+import { BuildTwinButton } from '@/components/commercial/BuildTwinButton'
 import { ExposureCard } from '@/components/commercial/ExposureCard'
 import { RiskTwinMap } from '@/components/commercial/RiskTwinMap'
 import { SimulatedBadge } from '@/components/SimulatedBadge'
@@ -39,7 +40,7 @@ export default function ClientDetailPage() {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={p.status} />
-            {(['verified', 'declared', 'inferred', 'missing'] as FieldSource[]).map((s) =>
+            {(['verified', 'declared', 'extracted', 'inferred', 'missing'] as FieldSource[]).map((s) =>
               sources[s] ? (
                 <span key={s} className="flex items-center gap-1 text-[11px] text-navy-600">
                   <ProvenanceBadge source={s} /> {sources[s]}
@@ -50,6 +51,11 @@ export default function ClientDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="accent" size="sm" asChild>
+            <Link to={`/broker/commercial/risk-twins/${p.id}`}>
+              <Network /> Open Twin workspace
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link to={`/broker/commercial?prompt=${encodeURIComponent(`Review ${name} and identify outstanding insurance questions`)}`}>
               <Sparkles /> Review with Copilot
             </Link>
@@ -88,7 +94,16 @@ export default function ClientDetailPage() {
               <RiskTwinMap data={data} brokerName={data.assigned_broker} />
             </section>
           ) : (
-            <EmptyState title="No Risk Twin yet">Use “Review with Copilot” to build one from the existing records.</EmptyState>
+            <EmptyState title="No Risk Twin yet">
+              <p>Build one from the records already held for this client. No submission is drafted and nothing is sent to an insurer.</p>
+              <div className="mt-3 flex justify-center">
+                <BuildTwinButton
+                  profileId={p.id}
+                  activeJobId={data.jobs.find((j) => !['completed', 'failed', 'cancelled'].includes(j.status))?.id ?? null}
+                  label="Build Risk Twin"
+                />
+              </div>
+            </EmptyState>
           )}
         </TabsContent>
 

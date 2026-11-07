@@ -2,6 +2,7 @@
 // when FastAPI is connected, each becomes a fetch to the matching /api/v1 route with the same request and response shapes.
 import * as server from '@/server/api'
 import * as commercial from '@/server/commercialApi'
+import * as twin from '@/server/twinApi'
 import type { Channel, Json } from '@/server/db/schema'
 import { db } from '@/server/db/store'
 import { TENANT_ID } from '@/server/db/seed'
@@ -109,13 +110,44 @@ export const api = {
     clients: () => call(() => commercial.listBusinessProfiles(auth())),
     client: (id: string) => call(() => commercial.getBusinessProfile(auth(), { profile_id: id })),
     updateClient: (body: Parameters<typeof commercial.updateBusinessProfile>[1]) => call(() => commercial.updateBusinessProfile(auth(), body)),
-    riskTwins: () => call(() => commercial.listRiskTwins(auth())),
+    riskTwins: () => call(() => commercial.getRiskTwinPortfolio(auth())),
+    buildTwin: (profileId: string) => call(() => commercial.startTwinBuildForProfile(auth(), { profile_id: profileId })),
+    loadDemoBusinesses: () => call(() => commercial.loadDemoBusinesses(auth())),
+    loadCompletedSubmissions: () => call(() => commercial.loadCompletedSubmissions(auth())),
     submissions: () => call(() => commercial.listSubmissions(auth())),
     submission: (id: string) => call(() => commercial.getSubmission(auth(), { submission_id: id })),
     updateSection: (body: Parameters<typeof commercial.updateSubmissionSection>[1]) => call(() => commercial.updateSubmissionSection(auth(), body)),
     requestApproval: (id: string) => call(() => commercial.requestSubmissionApproval(auth(), { submission_id: id })),
     updateTask: (body: Parameters<typeof commercial.updateTask>[1]) => call(() => commercial.updateTask(auth(), body)),
     portal: () => call(() => commercial.getPortalBusiness(auth())),
+  },
+
+  // /api/v1/commercial/twins
+  twin: {
+    workspace: (profileId: string) => call(() => twin.getTwinWorkspace(auth(), { profile_id: profileId })),
+    startAssessment: (body: Parameters<typeof twin.startAssessmentForProfile>[1]) => call(() => twin.startAssessmentForProfile(auth(), body)),
+    startInvestigation: (body: Parameters<typeof twin.startInvestigationForProfile>[1]) => call(() => twin.startInvestigationForProfile(auth(), body)),
+    node: (body: Parameters<typeof twin.getTwinNode>[1]) => call(() => twin.getTwinNode(auth(), body)),
+    impact: (body: Parameters<typeof twin.traceTwinImpact>[1]) => call(() => twin.traceTwinImpact(auth(), body)),
+    dependencies: (body: Parameters<typeof twin.traceTwinDependencies>[1]) => call(() => twin.traceTwinDependencies(auth(), body)),
+    overridePriority: (body: Parameters<typeof twin.overrideExposurePriority>[1]) => call(() => twin.overrideExposurePriority(auth(), body)),
+    decideFinding: (body: Parameters<typeof twin.decideFinding>[1]) => call(() => twin.decideFinding(auth(), body)),
+    reviewCoverage: (body: Parameters<typeof twin.reviewCoverageFinding>[1]) => call(() => twin.reviewCoverageFinding(auth(), body)),
+    checkCoverage: (profileId: string) => call(() => twin.checkCoverageEvidence(auth(), { profile_id: profileId })),
+    addDocument: (body: Parameters<typeof twin.addBusinessDocument>[1]) => call(() => twin.addBusinessDocument(auth(), body)),
+    decideProposal: (body: Parameters<typeof twin.decideTwinProposal>[1]) => call(() => twin.decideTwinProposal(auth(), body)),
+    compare: (profileId: string) => call(() => twin.compareTwinWithBaseline(auth(), { profile_id: profileId })),
+    gatherMissing: (profileId: string) => call(() => twin.gatherMissingInformation(auth(), { profile_id: profileId })),
+    createTask: (body: Parameters<typeof twin.createTwinTask>[1]) => call(() => twin.createTwinTask(auth(), body)),
+    decideDependency: (body: Parameters<typeof twin.decideDependency>[1]) => call(() => twin.decideDependency(auth(), body)),
+    updateAsset: (body: Parameters<typeof twin.updateCommercialAsset>[1]) => call(() => twin.updateCommercialAsset(auth(), body)),
+    report: (assessmentId: string) => call(() => twin.getAssessmentReport(auth(), { assessment_id: assessmentId })),
+  },
+
+  // /api/v1/systems (loaded on demand: only managers and admins open it)
+  systems: {
+    catalogue: () => call(async () => (await import('@/server/systemsApi')).getSystemsCatalogue(auth())),
+    ask: (question: string) => call(async () => (await import('@/server/systemsApi')).askSystemsCopilot(auth(), { question })),
   },
 }
 
@@ -152,8 +184,15 @@ export type {
   BusinessDetail,
   BusinessRow,
   PortalBusinessView,
+  AssessmentStatus,
+  RiskTwinPortfolio,
   RiskTwinRow,
   SectionView,
   SubmissionDetail,
   SubmissionRow,
 } from '@/server/commercialApi'
+export type { AssessmentReport, InvestigationView, LinkView, ProposalView, ReportFact, StageStatus, TwinWorkspace, WorkflowStage } from '@/server/twinApi'
+export type { NodeDetail, ChangeReport } from '@/server/tools/twin'
+export type { SystemsCatalogue, AgentInfo, ToolInfo, WorkflowInfo } from '@/server/systems/catalogue'
+export type { SystemsAnswer, SystemsFocus, SystemsTab, DatabaseView } from '@/server/systems/copilot'
+export type { ImpactReport, TraceResult } from '@/server/domain/commercial/graph'

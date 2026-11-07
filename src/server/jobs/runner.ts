@@ -34,6 +34,7 @@ export interface WorkflowDefinition {
 
 const workflows = new Map<string, WorkflowDefinition>()
 export const registerWorkflow = (def: WorkflowDefinition) => void workflows.set(def.type, def)
+export const listWorkflows = (): WorkflowDefinition[] => [...workflows.values()]
 export function getWorkflow(type: string): WorkflowDefinition {
   const def = workflows.get(type)
   if (!def) throw new ToolError('not_found', `Unknown workflow ${type}`)
@@ -43,8 +44,11 @@ export function getWorkflow(type: string): WorkflowDefinition {
 const TAB_ID = `tab-${newId().slice(0, 8)}`
 const LOCK_STALE_MS = 8000
 let stepDelayMs = 900
-export function configureRunner(opts: { stepDelayMs?: number }) {
+/** Returns the previous settings so a caller can restore them. */
+export function configureRunner(opts: { stepDelayMs?: number }): { stepDelayMs: number } {
+  const previous = { stepDelayMs }
   if (opts.stepDelayMs !== undefined) stepDelayMs = opts.stepDelayMs
+  return previous
 }
 
 const active = new Map<string, Promise<void>>()

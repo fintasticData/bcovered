@@ -1,13 +1,16 @@
 import { jobTools } from '../jobs/jobTools'
 import { approvalTools } from './approval'
+import { assessmentTools } from './assessment'
 import { businessTools } from './business'
 import { communicationTools } from './communication'
+import { coverageTools } from './coverage'
 import { customerTools } from './customer'
 import { leadTools } from './lead'
 import { quoteTools } from './quote'
 import { registerTools } from './registry'
 import { riskTools } from './risk'
 import { taskTools } from './task'
+import { twinTools } from './twin'
 import { underwritingTools } from './underwriting'
 
 registerTools([
@@ -19,6 +22,9 @@ registerTools([
   ...jobTools,
   ...businessTools,
   ...riskTools,
+  ...twinTools,
+  ...assessmentTools,
+  ...coverageTools,
   ...underwritingTools,
   ...taskTools,
 ])

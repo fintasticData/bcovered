@@ -1,19 +1,21 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Building2, FileStack } from 'lucide-react'
-import { useApprovals, useCommercialClient, useCommercialClients, useJob, useSubmissions } from '@/api/hooks'
+import { useApprovals, useCommercialClient, useCommercialClients, useJob, useSubmissions, useTwinImpact, useTwinWorkspace } from '@/api/hooks'
 import { ExecutionPlan } from '@/components/ExecutionPlan'
-import { PriorityBadge } from '@/components/commercial/badges'
+import { AssessmentPriorityBadge, PriorityBadge } from '@/components/commercial/badges'
 import { SimulatedBadge } from '@/components/SimulatedBadge'
 import { StatusBadge, humanise } from '@/components/StatusBadge'
 import type { CopilotView } from '@/server/agents/copilotCommands'
 import { ApprovalCard } from '../ApprovalCard'
 import { EmptyState } from '../PageHeader'
 
-export type CommercialView = Extract<CopilotView, { kind: 'business' | 'businesses' | 'submissions' }>
+export type CommercialView = Extract<CopilotView, { kind: 'business' | 'businesses' | 'submissions' | 'twin' }>
 
-export const isCommercialView = (v: CopilotView): v is CommercialView => v.kind === 'business' || v.kind === 'businesses' || v.kind === 'submissions'
+export const isCommercialView = (v: CopilotView): v is CommercialView =>
+  v.kind === 'business' || v.kind === 'businesses' || v.kind === 'submissions' || v.kind === 'twin'
 
 export function CommercialResult({ view }: { view: CommercialView }) {
+  if (view.kind === 'twin') return <TwinResult view={view} />
   if (view.kind === 'business') return <BusinessReview profileId={view.profile_id} jobId={view.job_id} />
   if (view.kind === 'businesses') return <ClientList ids={view.profile_ids} />
   return <SubmissionList ids={view.submission_ids} />
@@ -72,8 +74,8 @@ function BusinessReview({ profileId, jobId }: { profileId: string; jobId: string
               </ul>
             </>
           )}
-          <Link to={`/broker/commercial/clients/${profileId}`} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
-            Open the Risk Twin and all exposures <ArrowRight className="h-3 w-3" />
+          <Link to={`/broker/commercial/risk-twins/${profileId}`} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
+            Open the Twin workspace and all exposures <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       )}
@@ -94,6 +96,96 @@ function BusinessReview({ profileId, jobId }: { profileId: string; jobId: string
           </span>
           <SimulatedBadge label="Not sent" />
         </Link>
+      )}
+      {approval && <ApprovalCard view={approval} compact />}
+    </div>
+  )
+}
+
+function TwinResult({ view }: { view: Extract<CopilotView, { kind: 'twin' }> }) {
+  const { data } = useTwinWorkspace(view.profile_id)
+  const { data: job } = useJob(view.job_id)
+  const { data: impact } = useTwinImpact(view.impact ?? null)
+  const { data: approvals = [] } = useApprovals(['pending'])
+  if (!data) return null
+  const approval = approvals.find((a) => a.risk?.profile_id === view.profile_id)
+  const name = data.business.profile.trading_name ?? data.business.profile.registered_name
+  const focusTab = view.focus === 'graph' && view.impact ? `graph&impact=${view.impact.table}:${view.impact.id}` : view.focus
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-navy-800/10 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-navy-900">{name}</p>
+            <p className="text-xs text-navy-600">
+              {data.business.industry.name} · {data.business.risk_profile ? `Risk Twin v${data.business.risk_profile.version}` : 'no Risk Twin yet'}
+            </p>
+          </div>
+          {job && <StatusBadge status={job.job.status} />}
+        </div>
+        {job && (
+          <div className="mt-3">
+            <ExecutionPlan steps={job.steps} />
+          </div>
+        )}
+        <Link to={`/broker/commercial/risk-twins/${view.profile_id}?tab=${focusTab}`} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
+          Open the Twin workspace <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      {view.focus === 'assessment' && data.findings.some((f) => f.is_priority_area) && (
+        <div className="rounded-xl border border-navy-800/10 p-4">
+          <p className="text-sm font-semibold text-navy-900">Most important areas requiring review</p>
+          <ol className="mt-2 space-y-2">
+            {data.findings
+              .filter((f) => f.is_priority_area)
+              .map((f) => (
+                <li key={f.id} className="text-sm">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-navy-900">
+                      {f.rank}. {f.title}
+                    </span>
+                    <AssessmentPriorityBadge priority={f.priority} />
+                  </span>
+                  <span className="block text-xs text-navy-600">{f.rationale[1] ?? f.rationale[0]}</span>
+                </li>
+              ))}
+          </ol>
+        </div>
+      )}
+
+      {impact && (
+        <div className="rounded-xl border border-navy-800/10 p-4 text-sm">
+          <p className="font-semibold text-navy-900">Impact paths</p>
+          <ul className="mt-2 space-y-1 text-xs text-navy-700">
+            {impact.paths.map((p) => (
+              <li key={p.keys.join('>')}>{p.labels.join(' → ')}</li>
+            ))}
+          </ul>
+          {impact.missing.length > 0 && (
+            <>
+              <p className="mt-3 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Missing information</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-navy-700">
+                {impact.missing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {view.focus === 'changes' && data.changes.length > 0 && (
+        <div className="rounded-xl border border-navy-800/10 p-4">
+          <p className="text-sm font-semibold text-navy-900">Latest changes</p>
+          <ul className="mt-2 space-y-1.5 text-xs text-navy-700">
+            {data.changes.slice(0, 8).map((c) => (
+              <li key={c.id}>
+                <strong className="text-navy-900">{c.label}:</strong> {c.finding}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {approval && <ApprovalCard view={approval} compact />}
     </div>

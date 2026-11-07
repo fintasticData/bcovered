@@ -30,6 +30,50 @@
   --color-mist: #f5f7fa;
 }
 
+@theme static {
+  /* Personal identity: warm coral */
+  --color-personal-50: #fff4f0;
+  --color-personal-100: #ffe3d9;
+  --color-personal-200: #fdc4b1;
+  --color-personal-500: #e2603f;
+  --color-personal-600: #c74c2e;
+  --color-personal-700: #a23c23;
+  --color-personal-800: #7a2f1e;
+  --color-personal-900: #561f14;
+
+  /* Business identity: cobalt */
+  --color-business-50: #f0f3ff;
+  --color-business-100: #dfe5ff;
+  --color-business-200: #bfcbfc;
+  --color-business-500: #4461d8;
+  --color-business-600: #3349b8;
+  --color-business-700: #283a93;
+  --color-business-800: #1f2d70;
+  --color-business-900: #151f50;
+}
+
+/* Inside an identity scope every brand-* utility resolves to that identity's palette. */
+[data-identity='personal'] {
+  --color-brand-50: var(--color-personal-50);
+  --color-brand-100: var(--color-personal-100);
+  --color-brand-200: var(--color-personal-200);
+  --color-brand-500: var(--color-personal-500);
+  --color-brand-600: var(--color-personal-600);
+  --color-brand-700: var(--color-personal-700);
+  --color-brand-800: var(--color-personal-800);
+  --color-brand-900: var(--color-personal-900);
+}
+[data-identity='business'] {
+  --color-brand-50: var(--color-business-50);
+  --color-brand-100: var(--color-business-100);
+  --color-brand-200: var(--color-business-200);
+  --color-brand-500: var(--color-business-500);
+  --color-brand-600: var(--color-business-600);
+  --color-brand-700: var(--color-business-700);
+  --color-brand-800: var(--color-business-800);
+  --color-brand-900: var(--color-business-900);
+}
+
 html {
   scroll-behavior: smooth;
 }

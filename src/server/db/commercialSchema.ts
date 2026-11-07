@@ -1,8 +1,14 @@
 // Row types mirror supabase/migrations/20261106_0002_commercial_core.sql one to one.
-import type { ISODate, UUID } from './schema'
+import type { ISODate, Json, UUID } from './schema'
 
-/** Where a value came from. Only a document check makes a value verified. */
-export type FieldSource = 'verified' | 'declared' | 'inferred' | 'missing'
+/**
+ * Where a value came from. Only a person checking a document makes a value verified; values read from a document by an
+ * agent are extracted until a broker confirms them.
+ */
+export type FieldSource = 'verified' | 'declared' | 'extracted' | 'inferred' | 'missing'
+
+/** The basis of an assessment finding: the weakest source among its evidence. AI inference is never treated as fact. */
+export type FactBasis = 'verified' | 'declared' | 'extracted' | 'inferred' | 'unknown'
 
 export type CoverageStatus = 'confirmed_covered' | 'confirmed_excluded' | 'potentially_covered' | 'unknown' | 'awaiting_broker_review'
 
@@ -10,6 +16,9 @@ export type CoverageStatus = 'confirmed_covered' | 'confirmed_excluded' | 'poten
 export type ValueBasis = 'replacement' | 'market' | 'book' | 'unknown'
 
 export type RiskPriority = 'high' | 'medium' | 'low'
+
+/** Qualitative assessment priority. Explained by its rationale; never presented as actuarially validated. */
+export type AssessmentPriority = 'critical' | 'high' | 'medium' | 'low' | 'unassessed'
 
 export type AssetClass = 'buildings' | 'contents' | 'stock' | 'machinery' | 'electronic_equipment' | 'vehicle' | 'mobile_plant' | 'other'
 
@@ -135,7 +144,18 @@ export interface BusinessRiskProfile {
   edge_count: number
   summary: string | null
   job_id: UUID | null
+  /** The business records as they were when this version was built, for change comparison. */
+  snapshot: TwinSnapshot | null
   created_at: ISODate
+}
+
+export interface TwinSnapshot {
+  profile: Pick<BusinessProfile, 'registered_name' | 'trading_name' | 'annual_turnover' | 'employee_count' | 'operating_regions' | 'existing_cover' | 'loss_history'>
+  locations: Array<Pick<BusinessLocation, 'id' | 'name' | 'occupancy' | 'ownership' | 'fire_protection' | 'security' | 'backup_power'>>
+  activities: Array<Pick<BusinessActivity, 'id' | 'kind' | 'name' | 'share_of_revenue'>>
+  assets: Array<Pick<CommercialAsset, 'id' | 'asset_class' | 'description' | 'quantity' | 'declared_value' | 'value_basis' | 'location_id'>>
+  policy_sections: Array<{ id: UUID; cover_class: string; sum_insured: number | null; limit_of_indemnity: number | null }>
+  exposure_count: number
 }
 
 export type TwinTable =
@@ -155,9 +175,34 @@ export interface RiskDependency {
   from_id: UUID
   to_table: TwinTable
   to_id: UUID
-  relation: 'owns' | 'operates_at' | 'located_at' | 'generates_revenue_at' | 'depends_on' | 'exposes'
+  relation: StructuralRelation | OperationalRelation
   note: string | null
+  /** Structural edges follow the records' own links (declared); operational edges carry the link's provenance. */
+  source: Exclude<FieldSource, 'missing'>
   created_at: ISODate
+}
+
+export type StructuralRelation = 'owns' | 'operates_at' | 'located_at' | 'generates_revenue_at' | 'depends_on' | 'exposes'
+
+/** Explicit operational dependencies, used for impact tracing. Direction is from the thing depended on to the thing that depends on it. */
+export type OperationalRelation = 'supports' | 'stores' | 'feeds' | 'supplies' | 'serves'
+
+/** A persistent operational dependency between business records, copied into every Twin version. */
+export interface BusinessDependencyLink {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  from_table: TwinTable
+  from_id: UUID
+  to_table: TwinTable
+  to_id: UUID
+  relation: OperationalRelation
+  note: string | null
+  source: Exclude<FieldSource, 'missing'>
+  status: 'active' | 'rejected'
+  confirmed_by: UUID | null
+  created_at: ISODate
+  updated_at: ISODate
 }
 
 export interface ExposureEvidence {
@@ -187,8 +232,34 @@ export interface RiskExposure {
   assigned_broker_id: UUID | null
   outstanding_questions: string[]
   review_date: ISODate | null
+  /** A broker's recorded override of the assessment priority. */
+  priority_override: AssessmentPriority | null
+  override_reason: string | null
+  overridden_by: UUID | null
+  overridden_at: ISODate | null
   created_at: ISODate
   updated_at: ISODate
+}
+
+export type AssessmentType =
+  | 'initial'
+  | 'annual_renewal'
+  | 'new_location'
+  | 'new_asset'
+  | 'business_change'
+  | 'incident_triggered'
+  | 'targeted_specialist'
+
+/** draft: exposure screening from a Twin build. approved: signed off by a broker. */
+export type AssessmentRecordStatus = 'draft' | 'in_progress' | 'awaiting_review' | 'approved' | 'superseded'
+
+export type CompletenessStatus = 'complete' | 'partial' | 'missing' | 'pending'
+
+export interface CompletenessItem {
+  key: 'business' | 'locations' | 'assets' | 'dependencies' | 'insurance' | 'broker_review'
+  label: string
+  status: CompletenessStatus
+  missing: string[]
 }
 
 export interface RiskAssessmentRecord {
@@ -197,12 +268,178 @@ export interface RiskAssessmentRecord {
   business_profile_id: UUID
   risk_profile_id: UUID
   job_id: UUID | null
+  assessment_type: AssessmentType
+  status: AssessmentRecordStatus
+  scope: string[]
+  assessor_id: UUID | null
+  approval_id: UUID | null
   template_key: string
   template_version: number
   exposure_count: number
   high_priority_count: number
   findings: string[]
   gaps: string[]
+  completeness: CompletenessItem[]
+  summary: string | null
+  next_review_date: ISODate | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export interface FindingCoverage {
+  status: CoverageStatus
+  sections: string[]
+  note: string
+}
+
+export interface RiskAssessmentFinding {
+  id: UUID
+  tenant_id: UUID
+  assessment_id: UUID
+  business_profile_id: UUID
+  exposure_id: UUID | null
+  rank: number
+  /** One of the most important areas requiring broker review. */
+  is_priority_area: boolean
+  title: string
+  category: RiskExposure['category']
+  priority: AssessmentPriority
+  rationale: string[]
+  evidence: ExposureEvidence[]
+  fact_basis: FactBasis
+  coverage: FindingCoverage
+  outstanding: string[]
+  status: 'proposed' | 'accepted' | 'rejected' | 'overridden'
+  broker_note: string | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export type DocumentType =
+  | 'policy_schedule'
+  | 'policy_wording'
+  | 'asset_register'
+  | 'financial_summary'
+  | 'business_description'
+  | 'risk_survey'
+  | 'vehicle_schedule'
+  | 'lease'
+  | 'contract'
+  | 'other'
+
+export interface BusinessDocument {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  file_name: string
+  doc_type: DocumentType
+  page_count: number | null
+  file_size: number | null
+  status: 'uploaded' | 'extracted' | 'reviewed' | 'rejected'
+  /** Extraction came from a synthetic fixture, not from reading the file. */
+  is_simulated: boolean
+  fixture_key: string | null
+  extraction_note: string | null
+  uploaded_by: UUID | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export interface InsurancePolicy {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  insurer: string
+  policy_number: string | null
+  inception_date: ISODate | null
+  renewal_date: ISODate | null
+  source: Exclude<FieldSource, 'missing'>
+  document_id: UUID | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export interface PolicySection {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  policy_id: UUID
+  cover_class: string
+  section_name: string
+  sum_insured: number | null
+  limit_of_indemnity: number | null
+  excess: string | null
+  basis: string | null
+  conditions: string[]
+  exclusions: string[]
+  warranties: string[]
+  source: Exclude<FieldSource, 'missing'>
+  document_id: UUID | null
+  page_ref: string | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+/** Evidence linking an exposure to policy wording. Agents may propose; only a broker confirms covered or excluded. */
+export interface CoverageFinding {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  exposure_id: UUID
+  policy_section_id: UUID | null
+  status: CoverageStatus
+  insurer: string | null
+  section_name: string | null
+  clause_ref: string | null
+  page_ref: string | null
+  document_id: UUID | null
+  rationale: string
+  proposed_by_agent: string | null
+  reviewed_by: UUID | null
+  reviewed_at: ISODate | null
+  review_note: string | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export type ProposalKind = 'add_asset' | 'update_asset' | 'add_policy' | 'add_policy_section'
+
+/** A change proposed from a document. Never applied without a broker; conflicts with confirmed values are flagged. */
+export interface TwinUpdateProposal {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  document_id: UUID
+  kind: ProposalKind
+  target_id: UUID | null
+  label: string
+  current: Json
+  suggested: Json
+  page_ref: string | null
+  conflict: string | null
+  status: 'pending' | 'applied' | 'rejected'
+  decided_by: UUID | null
+  decided_at: ISODate | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+export interface RiskTwinChangeEvent {
+  id: UUID
+  tenant_id: UUID
+  business_profile_id: UUID
+  from_risk_profile_id: UUID | null
+  /** Null when compared with the live records rather than another version. */
+  to_risk_profile_id: UUID | null
+  entity_table: string
+  entity_id: UUID | null
+  change_type: 'added' | 'removed' | 'changed'
+  field: string | null
+  label: string
+  before: Json
+  after: Json
+  finding: string
+  task_id: UUID | null
   created_at: ISODate
 }
 
@@ -348,6 +585,14 @@ export interface CommercialTables {
   risk_dependencies: RiskDependency[]
   risk_exposures: RiskExposure[]
   risk_assessments: RiskAssessmentRecord[]
+  risk_assessment_findings: RiskAssessmentFinding[]
+  business_dependency_links: BusinessDependencyLink[]
+  business_documents: BusinessDocument[]
+  insurance_policies: InsurancePolicy[]
+  policy_sections: PolicySection[]
+  coverage_findings: CoverageFinding[]
+  twin_update_proposals: TwinUpdateProposal[]
+  risk_twin_change_events: RiskTwinChangeEvent[]
   industry_risk_templates: IndustryRiskTemplate[]
   commercial_submissions: CommercialSubmission[]
   submission_sections: SubmissionSection[]

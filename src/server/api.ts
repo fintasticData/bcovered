@@ -31,6 +31,7 @@ import { db, Repo } from './db/store'
 import type { QuoteAnswer } from './domain/quotes'
 import type { CommercialSubmission } from './db/commercialSchema'
 import { hashPayload } from './lib/hash'
+import { assessmentReviewPayload } from './tools/assessmentPayload'
 import { ToolError } from './lib/errors'
 import { ADAPTERS, getAssistantAdapter, initialIntakeState, PRIVACY_NOTICE_VERSION, type IntakeState } from './llm'
 import { getWorkflow, onApprovalResolved, recoverJobs } from './jobs/runner'
@@ -254,6 +255,7 @@ export async function sendMessage(auth: Auth, body: { conversation_id: string; t
 
   if (c.channel === 'broker') {
     requireRole(p, STAFF_ROLES)
+    if (c.assistant === 'commercial_copilot' && c.context.broker_discovery) return brokerDiscoveryTurn(p, c, text)
     const out = handleCopilotCommand(p.repo, p.actor, text, c.assistant === 'commercial_copilot' ? 'commercial' : 'personal')
     p.repo.insert('conversation_messages', {
       conversation_id: c.id,
@@ -261,8 +263,15 @@ export async function sendMessage(auth: Auth, body: { conversation_id: string; t
       content: out.reply,
       structured: { quick_replies: out.suggestions, view: out.view } as unknown as Json,
     })
-    const jobId = out.view.kind === 'job' ? out.view.job_id : out.view.kind === 'business' ? out.view.job_id : null
-    if (jobId) p.repo.update('conversations', c.id, { context: { ...c.context, job_id: jobId } })
+    const jobId = out.view.kind === 'job' || out.view.kind === 'business' || out.view.kind === 'twin' ? out.view.job_id : null
+    const context: Record<string, Json> = { ...c.context }
+    if (jobId) context.job_id = jobId
+    if (out.discovery) {
+      const intake = initialCommercialState()
+      intake.facts.registered_name = out.discovery.business_name
+      context.broker_discovery = { business_name: out.discovery.business_name, intake: intake as unknown as Json }
+    }
+    if (jobId || out.discovery) p.repo.update('conversations', c.id, { context })
     return conversationView(p.repo, p.repo.require('conversations', c.id))
   }
 
@@ -333,6 +342,53 @@ export async function sendMessage(auth: Auth, body: { conversation_id: string; t
     p.repo.update('conversations', c.id, { context })
     return conversationView(p.repo, p.repo.require('conversations', c.id))
   })
+}
+
+interface BrokerDiscovery {
+  business_name: string
+  intake: CommercialIntakeState
+}
+
+/** A broker interviewed by the Business Discovery Agent about a business with no profile yet, inside the Commercial Copilot chat. */
+function brokerDiscoveryTurn(p: Principal, c: Conversation, text: string): ConversationView {
+  const discovery = c.context.broker_discovery as unknown as BrokerDiscovery
+  const { broker_discovery: _ended, ...rest } = c.context
+  const reply = (content: string, quick_replies: string[], view: CopilotView, context: Record<string, Json>) =>
+    db.transaction(() => {
+      p.repo.insert('conversation_messages', { conversation_id: c.id, role: 'assistant', content, structured: { quick_replies, view } as unknown as Json })
+      p.repo.update('conversations', c.id, { context })
+      return conversationView(p.repo, p.repo.require('conversations', c.id))
+    })
+
+  if (/^\s*(cancel|stop|exit|quit)\b/i.test(text)) {
+    return reply(`Discovery for ${discovery.business_name} cancelled. Nothing was saved.`, COMMERCIAL_COPILOT_SUGGESTIONS, { kind: 'none' }, rest)
+  }
+  const out = commercialTurn(discovery.intake, text, p.repo.list('industry_risk_templates', (t) => t.is_active))
+  if (!out.submit) {
+    return reply(out.reply, out.quick_replies, { kind: 'none' }, { ...c.context, broker_discovery: { ...discovery, intake: out.state } as unknown as Json })
+  }
+  const job = startCommercialReview(
+    p.repo,
+    p.actor,
+    {
+      source: 'broker_copilot',
+      facts: out.state.facts,
+      contact: out.state.contact,
+      consent: {
+        processing: Boolean(out.state.consent.processing),
+        marketing: Boolean(out.state.consent.marketing),
+        notice_version: PRIVACY_NOTICE_VERSION,
+      },
+    },
+    `conversation:${c.id}:broker_discovery:${discovery.business_name.toLowerCase()}`,
+  )
+  return reply(
+    `Discovery for ${discovery.business_name} is complete. The agents are now creating the business profile, building its Risk Twin, identifying ` +
+      'potential exposures, requesting missing documents and drafting a submission pack for your approval. Nothing is sent to an insurer.',
+    ['Show running jobs', 'Which Risk Twins need attention?'],
+    { kind: 'job', title: `Risk Twin: ${discovery.business_name}`, job_id: job.id },
+    { ...rest, job_id: job.id },
+  )
 }
 
 // ---------------------------------------------------------------- jobs
@@ -554,13 +610,46 @@ export interface ApprovalSubmissionView {
   current_pack_matches: boolean
 }
 
+export interface ApprovalRiskView {
+  kind: 'assessment' | 'investigation'
+  profile_id: string
+  business_name: string
+  /** For sign-offs: whether the findings on screen still match what the request was raised for. */
+  current_matches: boolean
+  assessment_id: string | null
+}
+
 export interface ApprovalView {
   approval: ApprovalRequest
   customer: Customer | null
   quote: QuoteDetail | null
   submission: ApprovalSubmissionView | null
+  risk: ApprovalRiskView | null
   job: JobSummary | null
   requested_by_label: string
+}
+
+function approvalRisk(repo: Repo, a: ApprovalRequest): ApprovalRiskView | null {
+  const profileOf = (id: string | undefined) => (id ? repo.get('business_profiles', id) : undefined)
+  if (a.subject_table === 'risk_assessments') {
+    const assessment = repo.get('risk_assessments', a.subject_id)
+    const profile = profileOf(assessment?.business_profile_id)
+    if (!assessment || !profile) return null
+    return {
+      kind: 'assessment',
+      profile_id: profile.id,
+      business_name: profile.trading_name ?? profile.registered_name,
+      current_matches: hashPayload(assessmentReviewPayload(repo, assessment.id)) === a.payload_hash,
+      assessment_id: assessment.id,
+    }
+  }
+  if (a.subject_table === 'jobs' && a.approval_type === 'risk_investigation_review') {
+    const job = repo.get('jobs', a.subject_id)
+    const profile = profileOf((job?.inputs as { business_profile_id?: string } | undefined)?.business_profile_id)
+    if (!profile) return null
+    return { kind: 'investigation', profile_id: profile.id, business_name: profile.trading_name ?? profile.registered_name, current_matches: true, assessment_id: null }
+  }
+  return null
 }
 
 function approvalSubmission(repo: Repo, a: ApprovalRequest): ApprovalSubmissionView | null {
@@ -585,12 +674,17 @@ export function listApprovals(auth: Auth, body: { status?: ApprovalRequest['stat
     .map((a) => {
       const quote = a.subject_table === 'quotes' ? quoteDetail(p.repo, a.subject_id) : null
       const submission = approvalSubmission(p.repo, a)
+      const risk = approvalRisk(p.repo, a)
       const job = a.job_id ? p.repo.get('jobs', a.job_id) : undefined
+      const riskCustomer = risk ? p.repo.get('business_profiles', risk.profile_id)?.customer_id : undefined
       return {
         approval: a,
         quote,
         submission,
-        customer: quote?.customer ?? (submission ? (p.repo.get('customers', submission.submission.customer_id) ?? null) : null),
+        risk,
+        customer:
+          quote?.customer ??
+          (submission ? (p.repo.get('customers', submission.submission.customer_id) ?? null) : riskCustomer ? (p.repo.get('customers', riskCustomer) ?? null) : null),
         job: job ? summariseJob(p.repo, job) : null,
         requested_by_label: p.repo.get('app_users', a.requested_by_agent)?.full_name ?? agentLabel(a.requested_by_agent),
       }

@@ -47,6 +47,22 @@ Guardrails: exposures are “potential” and never confirmed as covered without
 inputs; agents cannot overwrite verified values or approve; any pack change makes a pending approval stale; nothing is sent to an
 insurer. New tables mirror `supabase/migrations/20261106_0002_commercial_core.sql` (not yet applied).
 
+## Systems section (managers and admins)
+
+Database, frontend, backend and APIs, integrations, agents and copilots, workflows and jobs, and audit, with a Systems Copilot
+(≈40%) beside the editor (≈60%). Sign in as Naledi Mokoena (manager) to see it.
+
+| Where | What to check |
+| --- | --- |
+| `/broker/systems` | Components and status, next steps |
+| `/broker/systems/database` | Normalised target schema: ERD per area, tables, screens → tables, plan and instance steps |
+| `/broker/systems/agents` | Agents, copilots, tools and usage in this browser |
+
+The target schema lives in `src/server/systems/plannedSchema.ts` and the route map in `src/server/systems/screens.ts`;
+`src/server/__tests__/systems.test.ts` fails if a route, table or demo table falls out of alignment. Nothing is applied until the
+dedicated `insureflow-dev` project exists. Decision recorded: the frontend will read Supabase directly under row-level security,
+with consequential writes in database functions and agents in Edge Functions, replacing the FastAPI plan below.
+
 ## Demo mode architecture (no database yet)
 
 ```

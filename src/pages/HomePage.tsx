@@ -39,7 +39,8 @@ const CATEGORY_CARDS = [
     chips: personalProducts.map((p) => p.label),
     cta: 'Explore personal cover',
     image: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=1200&q=70',
-    overlay: 'bg-gradient-to-t from-brand-900/95 via-brand-900/70 to-brand-900/20',
+    overlay: 'bg-gradient-to-t from-personal-900/95 via-personal-800/70 to-personal-700/20',
+    badge: 'bg-personal-500',
   },
   {
     to: '/business',
@@ -50,7 +51,8 @@ const CATEGORY_CARDS = [
     chips: ['Sole traders', 'SMEs', 'Multi-site groups', '14 industries', '25 cover sections'],
     cta: 'Explore business cover',
     image: 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=70',
-    overlay: 'bg-gradient-to-t from-navy-900/95 via-navy-900/70 to-navy-900/20',
+    overlay: 'bg-gradient-to-t from-business-900/95 via-business-800/70 to-business-700/20',
+    badge: 'bg-business-500',
   },
 ]
 
@@ -116,7 +118,7 @@ export default function HomePage() {
               <a href="#how-it-works" className="btn-ghost">See How It Works</a>
             </div>
 
-            <div className="card max-w-xl p-3 shadow-lg">
+            <div data-identity={segment} className="card max-w-xl border-t-4 border-t-brand-500 p-3 shadow-lg transition-colors">
               <div className="grid grid-cols-2 gap-1 rounded-2xl bg-sand p-1" role="tablist" aria-label="Who is the cover for?">
                 {SEGMENTS.map((s) => (
                   <button
@@ -125,13 +127,14 @@ export default function HomePage() {
                     role="tab"
                     aria-selected={segment === s.key}
                     onClick={() => setSegment(s.key)}
+                    data-identity={s.key}
                     className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                      segment === s.key ? 'bg-white text-brand-900 shadow-sm' : 'text-ink/60 hover:text-brand-800'
+                      segment === s.key ? 'bg-brand-500 text-white shadow-sm' : 'text-ink/60 hover:bg-brand-50 hover:text-brand-800'
                     }`}
                   >
                     <s.icon className="h-4 w-4" />
                     {s.label}
-                    <span className="hidden text-[11px] font-normal text-ink/50 sm:inline">· {s.hint}</span>
+                    <span className={`hidden text-[11px] font-normal sm:inline ${segment === s.key ? 'text-white/80' : 'text-ink/50'}`}>· {s.hint}</span>
                   </button>
                 ))}
               </div>
@@ -258,7 +261,7 @@ export default function HomePage() {
               <img src={c.image} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" />
               <div className={`absolute inset-0 ${c.overlay}`} aria-hidden />
               <div className="relative">
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
+                <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shadow-sm ${c.badge}`}>
                   <c.icon className="h-4 w-4" /> {c.eyebrow}
                 </span>
                 <h3 className="mt-3 font-display text-3xl font-bold">{c.title}</h3>
@@ -278,7 +281,7 @@ export default function HomePage() {
       </section>
 
       {/* Personal products */}
-      <section id="personal" className="container-x scroll-mt-24 py-16">
+      <section id="personal" data-identity="personal" className="container-x scroll-mt-24 py-16">
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <p className="eyebrow mb-2 flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Personal</p>
@@ -308,7 +311,7 @@ export default function HomePage() {
       </section>
 
       {/* Business */}
-      <section className="bg-brand-900 py-16 text-white">
+      <section data-identity="business" className="bg-brand-900 py-16 text-white">
         <div className="container-x">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>

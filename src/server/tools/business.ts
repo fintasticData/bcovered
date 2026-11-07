@@ -5,7 +5,7 @@ import type { ProfileSnapshot } from '../domain/commercial/exposureRules'
 import { ToolError } from '../lib/errors'
 import { defineTool, STAFF, type ToolDef } from './registry'
 
-const source = z.enum(['verified', 'declared', 'inferred', 'missing'])
+const source = z.enum(['verified', 'declared', 'extracted', 'inferred', 'missing'])
 
 const profileDraft = z.object({
   customer_id: z.uuid(),
@@ -192,6 +192,30 @@ export const businessTools = [
       })
     },
     auditEntity: (r) => ({ table: 'business_profiles', id: r.id }),
+  }),
+
+  defineTool({
+    name: 'business.update_asset',
+    description: 'Change an asset’s quantity, value or valuation basis, recording the source. Agents cannot overwrite verified values.',
+    allow: ['agent', ...STAFF],
+    sideEffect: true,
+    input: z.object({
+      asset_id: z.uuid(),
+      quantity: z.number().int().min(1).max(10_000).optional(),
+      declared_value: z.number().nonnegative().nullable().optional(),
+      value_basis: z.enum(['replacement', 'market', 'book', 'unknown']).optional(),
+      source: z.enum(['verified', 'declared', 'extracted', 'inferred']),
+    }),
+    run: ({ repo, actor }, { asset_id, source: src, ...changes }) => {
+      const asset = repo.require('commercial_assets', asset_id)
+      if (!Object.keys(changes).length) throw new ToolError('validation', 'No changes supplied')
+      if (actor.type === 'agent') {
+        if (asset.source === 'verified') throw new ToolError('approval_required', 'Verified asset values can only be changed by a broker')
+        if (src === 'verified') throw new ToolError('forbidden', 'Agents cannot mark a value as verified')
+      }
+      return repo.update('commercial_assets', asset_id, { ...changes, source: src })
+    },
+    auditEntity: (r) => ({ table: 'commercial_assets', id: r.id }),
   }),
 
   defineTool({

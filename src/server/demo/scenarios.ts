@@ -114,5 +114,12 @@ export const PLANNED_COMMERCIAL_SCENARIOS: Array<Pick<DemoScenario, 'code' | 'ti
   { code: 'F', title: 'Complex claim', summary: 'Warehouse fire: affected assets, evidence requests, BI exposure and a draft claims pack.' },
 ]
 
+/** Synthetic businesses added by "Load demo businesses" on the Risk Twins page. Each gets a Twin built by the risk_twin_build job. */
+export const DEMO_BUSINESS_SUMMARIES: Array<{ name: string; industry: string; summary: string }> = [
+  { name: 'Thali House Restaurants', industry: 'Restaurants and hospitality', summary: 'Two Cape Town restaurants; one kitchen without suppression or backup power.' },
+  { name: 'Swift Freight Logistics', industry: 'Transport and logistics', summary: 'Depot, 14 trucks and trailers, cargo hijacking history and one client at 55% of revenue.' },
+  { name: 'Mokoena & Partners', industry: 'Professional services', summary: 'Law firm with client trust accounts and no recorded current insurer.' },
+]
+
 export const SCENARIOS = [NEW_MOTOR_LEAD, RESTAURANT_GROUP]
 export const getScenario = (id: string | null) => SCENARIOS.find((s) => s.id === id)

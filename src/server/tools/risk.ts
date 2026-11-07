@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import type { IndustryRiskTemplate, RiskDependency, TwinTable } from '../db/commercialSchema'
+import type { BusinessDependencyLink, IndustryRiskTemplate, OperationalRelation, RiskDependency, TwinTable } from '../db/commercialSchema'
 import type { Repo } from '../db/store'
+import { twinSnapshot } from '../domain/commercial/changes'
 import { assessExposures, identifyGaps } from '../domain/commercial/exposureRules'
 import { FALLBACK_TEMPLATE_KEY } from '../domain/commercial/industryTemplates'
 import { ToolError } from '../lib/errors'
@@ -24,6 +25,8 @@ function addEdge(
   from: { table: TwinTable; id: string },
   to: { table: TwinTable; id: string },
   relation: RiskDependency['relation'],
+  source: RiskDependency['source'] = 'declared',
+  note: string | null = null,
 ) {
   return repo.insert('risk_dependencies', {
     business_profile_id: rp.business_profile_id,
@@ -33,8 +36,61 @@ function addEdge(
     to_table: to.table,
     to_id: to.id,
     relation,
-    note: null,
+    note,
+    source,
   })
+}
+
+const INFERRED_NOTE = 'Inferred from a shared location. Confirm or reject.'
+
+/**
+ * Suggests operational links where none are recorded: key assets support operations at the same site, operations feed
+ * revenue streams at the same site, single suppliers supply operations. Suggestions stay "inferred" until a broker confirms,
+ * and a rejected suggestion is never proposed again.
+ */
+export function proposeInferredLinks(repo: Repo, profileId: string): BusinessDependencyLink[] {
+  const s = profileSnapshot(repo, profileId)
+  const links = repo.list('business_dependency_links', (l) => l.business_profile_id === profileId)
+  const has = (fromId: string, toId: string) => links.some((l) => l.from_id === fromId && l.to_id === toId)
+  const hasFrom = (fromId: string) => links.some((l) => l.from_id === fromId)
+  const hasTo = (toId: string, rel: OperationalRelation) => links.some((l) => l.to_id === toId && l.relation === rel && l.status === 'active')
+  const ops = s.activities.filter((a) => a.kind === 'operation')
+  const streams = s.activities.filter((a) => a.kind === 'revenue_stream')
+  const created: BusinessDependencyLink[] = []
+  const add = (from: { table: TwinTable; id: string }, to: { table: TwinTable; id: string }, relation: OperationalRelation) => {
+    if (has(from.id, to.id)) return
+    const row = repo.insert('business_dependency_links', {
+      business_profile_id: profileId,
+      from_table: from.table,
+      from_id: from.id,
+      to_table: to.table,
+      to_id: to.id,
+      relation,
+      note: INFERRED_NOTE,
+      source: 'inferred',
+      status: 'active',
+      confirmed_by: null,
+    })
+    links.push(row)
+    created.push(row)
+  }
+  s.assets
+    .filter((a) => ['machinery', 'vehicle', 'electronic_equipment', 'mobile_plant'].includes(a.asset_class) && !hasFrom(a.id))
+    .forEach((a) => ops.filter((o) => o.location_id && o.location_id === a.location_id).forEach((o) => add({ table: 'commercial_assets', id: a.id }, { table: 'business_activities', id: o.id }, 'supports')))
+  ops
+    .filter((o) => !hasFrom(o.id))
+    .forEach((o) =>
+      streams
+        .filter((r) => r.location_id === null || r.location_id === o.location_id)
+        .forEach((r) => add({ table: 'business_activities', id: o.id }, { table: 'business_activities', id: r.id }, 'feeds')),
+    )
+  s.activities
+    .filter((a) => a.kind === 'supplier_dependency' && !hasFrom(a.id))
+    .forEach((sup) => ops.forEach((o) => add({ table: 'business_activities', id: sup.id }, { table: 'business_activities', id: o.id }, 'supplies')))
+  s.activities
+    .filter((a) => a.kind === 'customer_dependency' && !hasTo(a.id, 'serves'))
+    .forEach((c) => streams.slice(0, 1).forEach((r) => add({ table: 'business_activities', id: r.id }, { table: 'business_activities', id: c.id }, 'serves')))
+  return created
 }
 
 function recount(repo: Repo, riskProfileId: string) {
@@ -69,6 +125,7 @@ export const riskTools = [
         edge_count: 0,
         summary: null,
         job_id: jobId ?? null,
+        snapshot: twinSnapshot(repo, profile_id),
       })
     },
     auditEntity: (r) => ({ table: 'business_risk_profiles', id: r.id }),
@@ -95,6 +152,10 @@ export const riskTools = [
         const relation = a.kind === 'operation' ? 'operates_at' : a.kind === 'revenue_stream' ? 'generates_revenue_at' : 'depends_on'
         addEdge(repo, rp, from, { table: 'business_activities', id: a.id }, relation)
       })
+      proposeInferredLinks(repo, rp.business_profile_id)
+      repo
+        .list('business_dependency_links', (l) => l.business_profile_id === rp.business_profile_id && l.status === 'active')
+        .forEach((l) => addEdge(repo, rp, { table: l.from_table, id: l.from_id }, { table: l.to_table, id: l.to_id }, l.relation, l.source, l.note))
       return recount(repo, rp.id)
     },
     auditEntity: (r) => ({ table: 'business_risk_profiles', id: r.id }),
@@ -122,6 +183,10 @@ export const riskTools = [
           risk_profile_id: rp.id,
           assigned_broker_id: s.profile.assigned_broker_id,
           review_date: review,
+          priority_override: null,
+          override_reason: null,
+          overridden_by: null,
+          overridden_at: null,
         })
         const targets = links.length ? links : [{ table: 'business_profiles' as const, id: s.profile.id }]
         targets.forEach((l) => addEdge(repo, rp, l, { table: 'risk_exposures', id: row.id }, 'exposes'))
@@ -138,10 +203,19 @@ export const riskTools = [
         high_priority_count: high.length,
         findings: exposures.map((e) => `${e.priority.toUpperCase()}: ${e.title}`),
         gaps: [],
+        assessment_type: 'initial',
+        status: 'draft',
+        scope: ['Exposure screening from the industry template'],
+        assessor_id: null,
+        approval_id: null,
+        completeness: [],
+        summary: `Exposure screening: ${exposures.length} potential exposures, ${high.length} high advisory priority.`,
+        next_review_date: null,
       })
       recount(repo, rp.id)
       repo.update('business_risk_profiles', rp.id, {
         summary: `${exposures.length} potential exposures from the ${template.name} template (v${template.version}); ${high.length} high advisory priority.`,
+        snapshot: rp.snapshot ? { ...rp.snapshot, exposure_count: exposures.length } : null,
       })
       if (s.profile.status === 'discovery') repo.update('business_profiles', s.profile.id, { status: 'in_review' })
       return { assessment, exposures }

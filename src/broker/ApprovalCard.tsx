@@ -21,9 +21,13 @@ export function ApprovalCard({
   compact?: boolean
   onDecided?: (view: ApprovalView, decision: Decision) => void
 }) {
-  const { approval, quote, customer, job, submission } = view
+  const { approval, quote, customer, job, submission, risk } = view
   const pack = submission?.submission.pack
-  const stale = submission ? !submission.current_pack_matches : false
+  const stale = submission ? !submission.current_pack_matches : risk ? !risk.current_matches : false
+  const reviewed = (approval.proposed_changes ?? {}) as {
+    findings?: Array<{ rank?: number; title: string; priority?: string; priority_area?: boolean; coverage_status?: string; status?: string; detail?: string }>
+    actions?: Array<{ title: string; audience: string }>
+  }
   const decide = useDecideApproval()
   const [note, setNote] = useState('')
   const [noteError, setNoteError] = useState<string | null>(null)
@@ -55,7 +59,7 @@ export function ApprovalCard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SimulatedBadge label={submission ? 'Not sent to any insurer' : 'Simulated'} />
+          <SimulatedBadge label={submission ? 'Not sent to any insurer' : risk ? 'Illustrative data' : 'Simulated'} />
           <StatusBadge status={approval.status} />
         </div>
       </header>
@@ -97,6 +101,50 @@ export function ApprovalCard({
             {stale && pending && (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                 The pack changed after this request was raised. Re-request approval from the submission editor so you approve what you see.
+              </p>
+            )}
+          </>
+        )}
+        {risk && (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-navy-800/10 bg-mist p-3">
+                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Current</p>
+                <p className="mt-1 text-sm text-navy-800">
+                  {risk.kind === 'assessment'
+                    ? approval.status === 'approved'
+                      ? 'Signed off. The findings are recorded as broker-approved conclusions.'
+                      : 'Findings held as preliminary. Nothing is presented to the client as a conclusion.'
+                    : approval.status === 'approved'
+                      ? 'Investigation reviewed.'
+                      : 'Investigation findings held for your review. The proposed actions are open tasks.'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-brand-500/30 bg-brand-50/60 p-3">
+                <p className="text-[11px] font-semibold tracking-wide text-brand-700 uppercase">Suggested</p>
+                <p className="mt-1 text-sm text-navy-800">
+                  {risk.kind === 'assessment'
+                    ? `Sign off ${reviewed.findings?.length ?? 0} findings for ${risk.business_name}, with the ${reviewed.findings?.filter((f) => f.priority_area).length ?? 0} priority areas for review.`
+                    : `Accept the investigation findings for ${risk.business_name} and keep ${reviewed.actions?.length ?? 0} proposed actions open.`}
+                </p>
+              </div>
+            </div>
+            {!compact && reviewed.findings && reviewed.findings.length > 0 && (
+              <ol className="space-y-1 text-xs text-navy-700">
+                {reviewed.findings.slice(0, 8).map((f, i) => (
+                  <li key={`${f.title}-${i}`}>
+                    {f.rank ? `${f.rank}. ` : ''}
+                    <strong className="text-navy-900">{f.title}</strong>
+                    {f.priority ? ` · ${f.priority}` : ''}
+                    {f.coverage_status ? ` · ${f.coverage_status.replace(/_/g, ' ')}` : ''}
+                    {f.detail ? `: ${f.detail}` : ''}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {stale && pending && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                The findings changed after this request was raised. Reload to review the latest version before deciding.
               </p>
             )}
           </>
@@ -162,7 +210,7 @@ export function ApprovalCard({
             </ul>
           ) : (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-700">
-              <ShieldCheck className="h-3.5 w-3.5" /> {submission ? 'No high advisory priority exposures' : 'No referral triggers found by the Risk Agent'}
+              <ShieldCheck className="h-3.5 w-3.5" /> {submission ? 'No high advisory priority exposures' : risk ? 'No critical or high findings' : 'No referral triggers found by the Risk Agent'}
             </p>
           )}
         </div>
@@ -177,6 +225,16 @@ export function ApprovalCard({
                 Client and Risk Twin <ExternalLink className="h-3 w-3" />
               </Link>
             </>
+          )}
+          {risk && (
+            <Link to={`/broker/commercial/risk-twins/${risk.profile_id}?tab=${risk.kind === 'assessment' ? 'assessment' : 'actions'}`} className="inline-flex items-center gap-1 font-semibold text-brand-600">
+              Open the Twin workspace <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {risk?.assessment_id && (
+            <Link to={`/broker/commercial/assessments/${risk.assessment_id}/report`} className="inline-flex items-center gap-1 font-semibold text-brand-600">
+              Business Risk Review report <ExternalLink className="h-3 w-3" />
+            </Link>
           )}
           {quote && (
             <Link to={`/broker/quotes/${quote.quote.id}`} className="inline-flex items-center gap-1 font-semibold text-brand-600">
@@ -208,13 +266,19 @@ export function ApprovalCard({
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               className="field py-2"
-              placeholder={submission ? 'e.g. Add the landlord liability limit before we approach insurers' : 'e.g. Mention the courtesy car difference in the summary'}
+              placeholder={
+                submission
+                  ? 'e.g. Add the landlord liability limit before we approach insurers'
+                  : risk
+                    ? 'e.g. Re-check the stock deterioration wording before sign-off'
+                    : 'e.g. Mention the courtesy car difference in the summary'
+              }
             />
           </label>
           {(noteError || decide.error) && <p className="text-xs font-medium text-red-600">{noteError ?? decide.error?.message}</p>}
           <div className="flex flex-wrap gap-2">
             <Button variant="accent" onClick={() => submit('approved')} disabled={decide.isPending || stale}>
-              {decide.isPending ? <Loader2 className="animate-spin" /> : <Check />} {submission ? 'Approve pack' : 'Approve and release'}
+              {decide.isPending ? <Loader2 className="animate-spin" /> : <Check />} {submission ? 'Approve pack' : risk?.kind === 'assessment' ? 'Sign off assessment' : risk ? 'Accept findings' : 'Approve and release'}
             </Button>
             <Button variant="outline" onClick={() => submit('changes_requested')} disabled={decide.isPending}>
               <MessageSquareWarning /> Request changes
@@ -226,7 +290,9 @@ export function ApprovalCard({
           <p className="text-[11px] text-navy-600">
             {submission
               ? 'Your decision is recorded with your identity and time. Approving marks the pack ready for market; it does not send anything to an insurer.'
-              : 'Your decision is recorded with your identity and time. The release tool re-checks this approval and the payload hash before anything reaches the customer.'}
+              : risk
+                ? 'Your decision is recorded with your identity and time. Signing off makes these findings broker-approved conclusions in the report; it does not confirm any cover.'
+                : 'Your decision is recorded with your identity and time. The release tool re-checks this approval and the payload hash before anything reaches the customer.'}
           </p>
         </footer>
       ) : (

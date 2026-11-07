@@ -76,6 +76,13 @@ interface RuleContext {
 const REFRIGERATION = /cold|perishable|frozen|fridge|refrigerat|freezer/i
 const BREAKDOWN_CLAIM = /cold room|fridge|refrigerat|compressor|freezer|breakdown/i
 
+/** Only the claim entries relevant to a rule, so unrelated claims are not cited as its evidence. */
+const matchingClaims = (notes: string, re: RegExp) =>
+  notes
+    .split(/;\s*|\.\s+/)
+    .filter((part) => re.test(part))
+    .join('; ') || notes
+
 const RULES: Record<string, Rule> = {
   fire_property: (s, c) => {
     if (!s.locations.length) return null
@@ -151,7 +158,7 @@ const RULES: Record<string, Rule> = {
     const noBackup = s.locations.filter((l) => l.backup_power === false && refrigerated.some((a) => a.location_id === l.id))
     const inputs: Input[] = [{ text: `Refrigerated or perishable stock of ${millions(total)} declared`, weight: total >= 500_000 ? 2 : 1 }]
     if (noBackup.length) inputs.push({ text: `No backup power at ${list(noBackup.map(locName))}`, weight: 2 })
-    if (BREAKDOWN_CLAIM.test(c.claimNotes)) inputs.push({ text: `Prior claim: ${c.claimNotes}`, weight: 2 })
+    if (BREAKDOWN_CLAIM.test(c.claimNotes)) inputs.push({ text: `Prior claim: ${matchingClaims(c.claimNotes, BREAKDOWN_CLAIM)}`, weight: 2 })
     const power = s.activities.find((a) => a.kind === 'supplier_dependency' && /electric/i.test(a.name))
     return {
       title: 'Spoilage of perishable stock after breakdown or power failure',
@@ -175,7 +182,7 @@ const RULES: Record<string, Rule> = {
     if (!machines.length) return null
     const total = sum(machines)
     const inputs: Input[] = [{ text: `Machinery and equipment of ${millions(total)} declared`, weight: total > 2_000_000 ? 1.5 : 1 }]
-    if (BREAKDOWN_CLAIM.test(c.claimNotes)) inputs.push({ text: `Prior breakdown claim: ${c.claimNotes}`, weight: 1.5 })
+    if (BREAKDOWN_CLAIM.test(c.claimNotes)) inputs.push({ text: `Prior breakdown claim: ${matchingClaims(c.claimNotes, BREAKDOWN_CLAIM)}`, weight: 1.5 })
     if (machines.some((m) => m.value_basis === 'book')) inputs.push({ text: 'Some machinery declared at book value', weight: 1 })
     if (c.kitchen) inputs.push({ text: 'Trading stops if cooking or refrigeration equipment fails', weight: 1 })
     return {

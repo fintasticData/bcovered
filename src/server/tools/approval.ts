@@ -1,7 +1,9 @@
 import { z } from 'zod'
-import type { Json } from '../db/schema'
+import type { ApprovalRequest, ApprovalType, Json } from '../db/schema'
+import type { Repo } from '../db/store'
 import { ToolError } from '../lib/errors'
 import { hashPayload } from '../lib/hash'
+import { assessmentReviewPayload } from './assessmentPayload'
 import { defineTool, STAFF, type ToolDef } from './registry'
 
 const APPROVAL_TYPES = [
@@ -13,7 +15,48 @@ const APPROVAL_TYPES = [
   'bulk_campaign',
   'renewal_recommendation',
   'underwriting_submission',
+  'risk_assessment_signoff',
+  'risk_investigation_review',
 ] as const
+
+export interface ApprovalInput {
+  approval_type: ApprovalType
+  subject_table: string
+  subject_id: string
+  summary: string
+  proposed_changes: unknown
+  risk_flags?: string[]
+  evidence?: Array<{ label: string; ref: string }>
+}
+
+/** Raises (or reuses) a pending approval pinned to the payload hash. A changed payload supersedes the older request. */
+export function requestApproval(repo: Repo, requestedBy: string, jobId: string | null, input: ApprovalInput): ApprovalRequest {
+  const payload_hash = hashPayload(input.proposed_changes)
+  const open = repo.find('approval_requests', (a) => a.subject_id === input.subject_id && a.approval_type === input.approval_type && a.status === 'pending')
+  if (open && open.payload_hash === payload_hash) return open
+  if (open) repo.update('approval_requests', open.id, { status: 'cancelled', decision_note: 'Superseded by a newer request' })
+
+  if (input.subject_table === 'quotes') repo.update('quotes', input.subject_id, { status: 'awaiting_approval' })
+  if (input.subject_table === 'commercial_submissions') repo.update('commercial_submissions', input.subject_id, { status: 'awaiting_approval' })
+  const approval = repo.insert('approval_requests', {
+    job_id: jobId ?? open?.job_id ?? null,
+    approval_type: input.approval_type,
+    subject_table: input.subject_table,
+    subject_id: input.subject_id,
+    requested_by_agent: requestedBy,
+    summary: input.summary,
+    proposed_changes: structuredClone(input.proposed_changes ?? null) as Json,
+    payload_hash,
+    risk_flags: input.risk_flags ?? [],
+    evidence: input.evidence ?? [],
+    status: 'pending',
+    decided_by: null,
+    decided_at: null,
+    decision_note: null,
+  })
+  if (input.subject_table === 'risk_assessments') repo.update('risk_assessments', input.subject_id, { status: 'awaiting_review', approval_id: approval.id })
+  return approval
+}
 
 export const approvalTools = [
   defineTool({
@@ -30,36 +73,7 @@ export const approvalTools = [
       risk_flags: z.array(z.string()).default([]),
       evidence: z.array(z.object({ label: z.string(), ref: z.string() })).default([]),
     }),
-    run: ({ repo, actor, jobId }, input) => {
-      const payload_hash = hashPayload(input.proposed_changes)
-      const open = repo.find(
-        'approval_requests',
-        (a) => a.subject_id === input.subject_id && a.approval_type === input.approval_type && a.status === 'pending',
-      )
-      if (open && open.payload_hash === payload_hash) return open
-      if (open) repo.update('approval_requests', open.id, { status: 'cancelled', decision_note: 'Superseded by a newer request' })
-
-      if (input.subject_table === 'quotes') repo.update('quotes', input.subject_id, { status: 'awaiting_approval' })
-      if (input.subject_table === 'commercial_submissions') {
-        repo.update('commercial_submissions', input.subject_id, { status: 'awaiting_approval' })
-      }
-      return repo.insert('approval_requests', {
-        job_id: jobId ?? null,
-        approval_type: input.approval_type,
-        subject_table: input.subject_table,
-        subject_id: input.subject_id,
-        requested_by_agent: actor.id,
-        summary: input.summary,
-        proposed_changes: structuredClone(input.proposed_changes ?? null) as Json,
-        payload_hash,
-        risk_flags: input.risk_flags,
-        evidence: input.evidence,
-        status: 'pending',
-        decided_by: null,
-        decided_at: null,
-        decision_note: null,
-      })
-    },
+    run: ({ repo, actor, jobId }, input) => requestApproval(repo, actor.id, jobId ?? null, input),
     auditEntity: (r) => ({ table: 'approval_requests', id: r.id }),
   }),
 
@@ -93,6 +107,9 @@ export const approvalTools = [
           throw new ToolError('approval_stale', 'The submission pack changed after this request was raised; request approval again')
         }
       }
+      if (approval.subject_table === 'risk_assessments' && hashPayload(assessmentReviewPayload(repo, approval.subject_id)) !== approval.payload_hash) {
+        throw new ToolError('approval_stale', 'The assessment findings changed after this request was raised; review the latest version')
+      }
       if (decision !== 'approved' && !note?.trim()) {
         throw new ToolError('validation', 'Add a note explaining the rejection or the changes needed')
       }
@@ -111,6 +128,18 @@ export const approvalTools = [
       if (approval.subject_table === 'commercial_submissions') {
         const status = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'draft'
         repo.update('commercial_submissions', approval.subject_id, { status })
+      }
+      if (approval.subject_table === 'risk_assessments') {
+        repo.update('risk_assessments', approval.subject_id, {
+          status: decision === 'approved' ? 'approved' : decision === 'rejected' ? 'superseded' : 'in_progress',
+          assessor_id: actor.id,
+          next_review_date: decision === 'approved' ? new Date(Date.now() + 365 * 86_400_000).toISOString() : null,
+        })
+        if (decision === 'approved') {
+          repo
+            .list('risk_assessment_findings', (f) => f.assessment_id === approval.subject_id && f.status === 'proposed')
+            .forEach((f) => repo.update('risk_assessment_findings', f.id, { status: 'accepted' }))
+        }
       }
       return updated
     },

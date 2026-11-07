@@ -1,8 +1,11 @@
-import type { BusinessProfile } from '../db/commercialSchema'
+import type { AssessmentType, BusinessProfile, TwinTable } from '../db/commercialSchema'
 import type { Customer, Job, LeadStatus } from '../db/schema'
 import type { Repo } from '../db/store'
+import { compactRand } from '../domain/commercial/format'
+import type { ImpactReport } from '../domain/commercial/graph'
 import { invokeTool, type Actor } from '../tools/registry'
-import { COMMERCIAL_REVIEW, startCommercialReview } from './commercialOrchestrator'
+import type { ChangeReport } from '../tools/twin'
+import { activeCommercialJob, startAssessment, startCommercialReview, startInvestigation, startTwinBuild } from './commercialOrchestrator'
 import { startMotorLeadWorkflow } from './orchestrator'
 
 export type CopilotView =
@@ -13,12 +16,22 @@ export type CopilotView =
   | { kind: 'business'; title: string; profile_id: string; job_id: string | null }
   | { kind: 'businesses'; title: string; profile_ids: string[] }
   | { kind: 'submissions'; title: string; submission_ids: string[] }
+  | {
+      kind: 'twin'
+      title: string
+      profile_id: string
+      job_id: string | null
+      focus: 'assessment' | 'graph' | 'actions' | 'insurance' | 'changes'
+      impact?: { risk_profile_id: string; table: TwinTable; id: string }
+    }
   | { kind: 'none' }
 
 export interface CopilotTurn {
   reply: string
   view: CopilotView
   suggestions: string[]
+  /** Set when the broker should be interviewed about a business that has no profile yet. */
+  discovery?: { business_name: string }
 }
 
 export const COPILOT_SUGGESTIONS = [
@@ -29,6 +42,9 @@ export const COPILOT_SUGGESTIONS = [
 ]
 
 export const COMMERCIAL_COPILOT_SUGGESTIONS = [
+  'Assess Ubuntu Foods and identify the five most important risk areas requiring review',
+  'Create a Risk Twin for Ubuntu Foods',
+  'Which Risk Twins need attention?',
   'Review Ubuntu Foods and identify outstanding insurance questions',
   'Show commercial clients',
   'Show draft submissions',
@@ -37,9 +53,322 @@ export const COMMERCIAL_COPILOT_SUGGESTIONS = [
 
 const OPEN_SUBMISSION = ['draft', 'awaiting_approval', 'approved']
 
+const nameOf = (p: BusinessProfile) => p.trading_name ?? p.registered_name
+const currentTwin = (repo: Repo, profileId: string) =>
+  repo.find('business_risk_profiles', (r) => r.business_profile_id === profileId && r.status === 'current')
+
+const TWIN_SUGGESTIONS = ['Which Risk Twins need attention?', 'Show running jobs', 'Show commercial clients']
+
+/** "Create / build / rebuild a Risk Twin for X": reuse what exists, build what is missing, interview for what is new. */
+function twinCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
+  const m = raw.match(/^\s*(?:please\s+)?(create|build|make|set\s+up|start|rebuild|refresh)\b.*?\brisk[\s-]?twins?\b(?:\s+(?:for|of)(?:\s+(.*))?)?\s*$/i)
+  if (!m) return null
+  const rebuild = /rebuild|refresh/i.test(m[1])
+  const name = (m[2] ?? '')
+    .replace(/^(?:a|an|the)\s+/i, '')
+    .replace(/^(?:new\s+)?(?:company|business|client)\s+(?:called|named)\s+/i, '')
+    .replace(/^(?:called|named)\s+/i, '')
+    .replace(/[“”"'.?!]+/g, '')
+    .trim()
+  if (name.length < 2) {
+    return {
+      reply: 'Which business should I build a Risk Twin for? Give me its registered or trading name, for example “Create a Risk Twin for Ubuntu Foods”.',
+      view: { kind: 'none' },
+      suggestions: ['Create a Risk Twin for Ubuntu Foods', 'Show commercial clients'],
+    }
+  }
+
+  const matches = invokeTool<Array<{ profile: BusinessProfile; customer: Customer }>>('business.discover', { query: name }, { repo, actor })
+  if (!matches.length) {
+    return {
+      reply:
+        `I couldn’t find “${name}” among your commercial clients, so I’ll treat it as a new business. ` +
+        'Describe what it does and where it operates in a sentence, and I’ll run a short discovery interview. Answer on the client’s behalf; ' +
+        'I only ask what the industry template needs. Say “cancel” at any point to stop without saving.',
+      view: { kind: 'none' },
+      suggestions: [],
+      discovery: { business_name: name },
+    }
+  }
+  const exact = matches.filter((x) => [x.profile.registered_name, x.profile.trading_name].some((n) => n?.toLowerCase() === name.toLowerCase()))
+  if (matches.length > 1 && exact.length !== 1) {
+    return {
+      reply: `“${name}” matches ${matches.length} clients: ${matches.map((x) => nameOf(x.profile)).join(', ')}. Which one did you mean?`,
+      view: { kind: 'businesses', title: `Matches for “${name}”`, profile_ids: matches.map((x) => x.profile.id) },
+      suggestions: matches.slice(0, 3).map((x) => `Create a Risk Twin for ${nameOf(x.profile)}`),
+    }
+  }
+  const profile = (exact[0] ?? matches[0]).profile
+  const label = nameOf(profile)
+  const twin = currentTwin(repo, profile.id)
+  const active = activeCommercialJob(repo, profile.customer_id)
+  if (active) {
+    return {
+      reply: `${label} already has a job ${active.status.replace(/_/g, ' ')}. Opening it instead of starting a duplicate.`,
+      view: { kind: 'business', title: `Risk Twin: ${label}`, profile_id: profile.id, job_id: active.id },
+      suggestions: TWIN_SUGGESTIONS,
+    }
+  }
+  if (twin && !rebuild) {
+    return {
+      reply:
+        `${label} is an existing client and already has Risk Twin v${twin.version} (${twin.node_count} records, ${twin.edge_count} relationships). ` +
+        `Opening it instead of creating a duplicate. Say “Rebuild the Risk Twin for ${label}” to build a new version from the current records.`,
+      view: { kind: 'business', title: `Risk Twin: ${label}`, profile_id: profile.id, job_id: null },
+      suggestions: [`Rebuild the Risk Twin for ${label}`, `Review ${label} and identify outstanding insurance questions`],
+    }
+  }
+  const { job } = startTwinBuild(repo, actor, profile.id)
+  return {
+    reply:
+      `${label} is an existing client, so I’m building ${twin ? `version ${twin.version + 1} of its Risk Twin` : 'its Risk Twin'} from the records you already hold. ` +
+      'Plan: 1) retrieve the business profile, 2) link its entities, locations, activities and assets, 3) identify potential exposures from the ' +
+      'industry template, 4) list missing information and create document requests. No submission pack is drafted and nothing is sent to an insurer.',
+    view: { kind: 'business', title: `Risk Twin: ${label}`, profile_id: profile.id, job_id: job.id },
+    suggestions: [`Review ${label} and identify outstanding insurance questions`, ...TWIN_SUGGESTIONS.slice(0, 2)],
+  }
+}
+
+/** Clients whose Twin is missing or has open high-priority work, with the reason for each. */
+function attentionCommand(repo: Repo): CopilotTurn {
+  const rows = repo
+    .list('business_profiles', (p) => p.status !== 'archived')
+    .map((p) => {
+      const twin = currentTwin(repo, p.id)
+      const high = twin ? repo.list('risk_exposures', (e) => e.risk_profile_id === twin.id && e.priority === 'high').length : 0
+      const brokerTasks = repo.list('tasks', (t) => t.subject_id === p.id && t.status === 'open' && t.audience === 'broker').length
+      const reasons = [
+        !twin && 'no Risk Twin yet',
+        high && `${high} high advisory priority exposure${high === 1 ? '' : 's'}`,
+        brokerTasks && `${brokerTasks} open broker task${brokerTasks === 1 ? '' : 's'}`,
+      ].filter(Boolean) as string[]
+      return { p, reasons, score: (twin ? 0 : 100) + high * 10 + brokerTasks }
+    })
+    .filter((r) => r.reasons.length)
+    .sort((a, b) => b.score - a.score)
+  if (!rows.length) {
+    return { reply: 'Every commercial client has a Risk Twin with no high-priority exposures or open broker tasks.', view: { kind: 'none' }, suggestions: COMMERCIAL_COPILOT_SUGGESTIONS }
+  }
+  const lines = rows.slice(0, 6).map((r) => `• ${nameOf(r.p)}: ${r.reasons.join('; ')}`)
+  const first = rows[0].p
+  return {
+    reply: `${rows.length} client${rows.length === 1 ? ' needs' : 's need'} attention:\n${lines.join('\n')}${rows.length > 6 ? `\n…and ${rows.length - 6} more.` : ''}`,
+    view: { kind: 'businesses', title: 'Risk Twins needing attention', profile_ids: rows.map((r) => r.p.id) },
+    suggestions: [currentTwin(repo, first.id) ? `Review ${nameOf(first)} and identify outstanding insurance questions` : `Create a Risk Twin for ${nameOf(first)}`, 'Show running jobs'],
+  }
+}
+
+const STOP = new Set(['the', 'a', 'an', 'our', 'their', 'its', 'of', 'and', 'at', 'for', 'in', 'on', 'main', 'whole'])
+const tokens = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/[\s-]+/)
+    .filter((w) => w.length > 1 && !STOP.has(w))
+    .map((w) => w.replace(/(?:es|s)$/, ''))
+
+/** Share of the query's words found in the label; 0 when nothing matches. */
+function matchScore(query: string, label: string) {
+  const q = tokens(query)
+  const l = new Set(tokens(label))
+  return q.length ? q.filter((w) => l.has(w) || [...l].some((x) => x.startsWith(w) || w.startsWith(x))).length / q.length : 0
+}
+
+type Found = { profile: BusinessProfile } | { reply: CopilotTurn }
+
+/** Resolves a business by name, asking which one when several match. */
+function findBusiness(repo: Repo, actor: Actor, name: string): Found {
+  const matches = invokeTool<Array<{ profile: BusinessProfile }>>('business.discover', { query: name }, { repo, actor })
+  if (!matches.length) {
+    return { reply: { reply: `I couldn’t find a commercial client called “${name}”.`, view: { kind: 'none' }, suggestions: COMMERCIAL_COPILOT_SUGGESTIONS } }
+  }
+  const exact = matches.filter((x) => [x.profile.registered_name, x.profile.trading_name].some((n) => n?.toLowerCase() === name.toLowerCase()))
+  if (matches.length > 1 && exact.length !== 1) {
+    return {
+      reply: {
+        reply: `“${name}” matches ${matches.length} clients: ${matches.map((x) => nameOf(x.profile)).join(', ')}. Which one did you mean?`,
+        view: { kind: 'businesses', title: `Matches for “${name}”`, profile_ids: matches.map((x) => x.profile.id) },
+        suggestions: [],
+      },
+    }
+  }
+  return { profile: (exact[0] ?? matches[0]).profile }
+}
+
+const needTwin = (profile: BusinessProfile): CopilotTurn => ({
+  reply: `${nameOf(profile)} has no Risk Twin yet, so there is nothing to trace or compare. Build it first.`,
+  view: { kind: 'none' },
+  suggestions: [`Create a Risk Twin for ${nameOf(profile)}`],
+})
+
+const assessmentTypeFrom = (t: string): AssessmentType =>
+  /renewal/.test(t)
+    ? 'annual_renewal'
+    : /new (location|site|premises)/.test(t)
+      ? 'new_location'
+      : /new asset/.test(t)
+        ? 'new_asset'
+        : /change/.test(t)
+          ? 'business_change'
+          : /incident|claim|loss/.test(t)
+            ? 'incident_triggered'
+            : 'initial'
+
+/** "What happens if the blast freezer fails?": explicit graph traversal, recorded values only. */
+function impactCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
+  const m = raw.match(
+    /what\s+(?:happens|would happen|is the impact|happens to the business)\s+if\s+(.+?)\s+(?:fails?|breaks?(?:\s+down)?|goes?\s+down|stops?(?:\s+working)?|is\s+(?:lost|damaged|destroyed|unavailable|down))(?:\s+(?:at|for)\s+(.+?))?\s*[?.!]*$/i,
+  )
+  if (!m) return null
+  const item = m[1].replace(/^(?:the|our|their)\s+/i, '').trim()
+  const profiles: BusinessProfile[] = []
+  if (m[2]) {
+    const found = findBusiness(repo, actor, m[2].trim())
+    if ('reply' in found) return found.reply
+    profiles.push(found.profile)
+  } else {
+    profiles.push(...repo.list('business_profiles', (p) => p.status !== 'archived' && Boolean(currentTwin(repo, p.id))))
+  }
+  const candidates = profiles.flatMap((p) => {
+    const rows: Array<{ profile: BusinessProfile; table: TwinTable; id: string; label: string; score: number }> = [
+      ...repo.list('commercial_assets', (a) => a.business_profile_id === p.id).map((a) => ({ profile: p, table: 'commercial_assets' as const, id: a.id, label: a.description, score: 0 })),
+      ...repo.list('business_activities', (a) => a.business_profile_id === p.id).map((a) => ({ profile: p, table: 'business_activities' as const, id: a.id, label: a.name, score: 0 })),
+      ...repo.list('business_locations', (l) => l.business_profile_id === p.id).map((l) => ({ profile: p, table: 'business_locations' as const, id: l.id, label: l.name, score: 0 })),
+    ]
+    return rows.map((r) => ({ ...r, score: matchScore(item, r.label) })).filter((r) => r.score >= 0.5)
+  })
+  if (!candidates.length) {
+    return {
+      reply: `I couldn’t find “${item}” among the recorded assets, operations or locations${profiles.length === 1 ? ` of ${nameOf(profiles[0])}` : ''}. Name it as it appears in the Risk Twin, for example “What happens if the blast freezers fail at Ubuntu Foods?”`,
+      view: { kind: 'none' },
+      suggestions: ['What happens if the blast freezers fail at Ubuntu Foods?'],
+    }
+  }
+  const best = Math.max(...candidates.map((c) => c.score))
+  const top = candidates.filter((c) => c.score === best)
+  const businesses = [...new Set(top.map((c) => c.profile.id))]
+  if (businesses.length > 1) {
+    return {
+      reply: `“${item}” appears at ${businesses.length} businesses. Which one? For example “What happens if the ${item} fails at ${nameOf(top[0].profile)}?”`,
+      view: { kind: 'businesses', title: `Businesses with “${item}”`, profile_ids: businesses },
+      suggestions: top.slice(0, 2).map((c) => `What happens if the ${item} fails at ${nameOf(c.profile)}?`),
+    }
+  }
+  const target = top[0]
+  const rp = currentTwin(repo, target.profile.id)
+  if (!rp) return needTwin(target.profile)
+  const impact = invokeTool<ImpactReport>('risk.trace_impact', { risk_profile_id: rp.id, table: target.table, id: target.id }, { repo, actor })
+  const values = impact.known_values.slice(0, 4).map((v) => `• ${v.label}: ${compactRand(v.value)} (${v.basis}, ${v.source})`)
+  const missing = impact.missing.slice(0, 4).map((x) => `• ${x}`)
+  const paths = impact.paths.slice(0, 4).map((p) => `• ${p.labels.join(' → ')}${p.inferred ? ' (includes AI-inferred links)' : ''}`)
+  return {
+    reply: [
+      impact.summary,
+      paths.length ? `\nAffected paths:\n${paths.join('\n')}` : '',
+      values.length ? `\nKnown values (not a loss estimate):\n${values.join('\n')}` : '',
+      missing.length ? `\nMissing information:\n${missing.join('\n')}` : '',
+      '\nThe paths are highlighted on the Risk Twin graph.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    view: { kind: 'twin', title: `Impact: ${target.label}`, profile_id: target.profile.id, job_id: null, focus: 'graph', impact: { risk_profile_id: rp.id, table: target.table, id: target.id } },
+    suggestions: [`Investigate possible underinsurance at ${nameOf(target.profile)}`, `Assess ${nameOf(target.profile)} and identify the five most important risk areas requiring review`],
+  }
+}
+
+/** "Investigate possible underinsurance at X" or "Investigate <exposure> at X". */
+function investigateCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
+  const m = raw.match(/^\s*(?:please\s+)?investigate\s+(?:the\s+)?(?:possible\s+|potential\s+)?(.+?)\s+(?:at|for|of)\s+(.+?)\s*[?.!]*$/i)
+  if (!m) return null
+  const found = findBusiness(repo, actor, m[2].trim())
+  if ('reply' in found) return found.reply
+  const profile = found.profile
+  const label = nameOf(profile)
+  const subject = m[1].trim()
+  if (/under[\s-]?insur|sums? insured|valuation/i.test(subject)) {
+    const { job, reused } = startInvestigation(repo, actor, profile.id, 'underinsurance', { request: raw })
+    return {
+      reply: reused
+        ? `A job for ${label} is already ${job.status.replace(/_/g, ' ')}. Opening it instead of starting a duplicate.`
+        : `Investigating possible underinsurance at ${label}. Plan: 1) retrieve the business and asset records, 2) retrieve the policy schedules on file, ` +
+          '3) compare declared values with sums insured group by group, 4) identify missing valuations, 5) prepare findings, 6) create proposed actions, ' +
+          '7) hold the findings for your review. Only recorded values are compared; no loss or premium is estimated.',
+      view: { kind: 'twin', title: `Investigation: ${label}`, profile_id: profile.id, job_id: job.id, focus: 'actions' },
+      suggestions: ['Show pending approvals', `Compare ${label} with its last assessment`],
+    }
+  }
+  const rp = currentTwin(repo, profile.id)
+  if (!rp) return needTwin(profile)
+  const exposures = repo.list('risk_exposures', (e) => e.risk_profile_id === rp.id).map((e) => ({ e, score: matchScore(subject, e.title) }))
+  const best = exposures.sort((a, b) => b.score - a.score)[0]
+  if (!best || best.score < 0.5) {
+    return {
+      reply: `I couldn’t match “${subject}” to an exposure at ${label}. Try “Investigate possible underinsurance at ${label}”, or open the Twin and use Investigate on a finding.`,
+      view: { kind: 'twin', title: `Risk Twin: ${label}`, profile_id: profile.id, job_id: null, focus: 'assessment' },
+      suggestions: [`Investigate possible underinsurance at ${label}`],
+    }
+  }
+  const { job, reused } = startInvestigation(repo, actor, profile.id, 'exposure', { exposure_id: best.e.id, request: raw })
+  return {
+    reply: reused
+      ? `An investigation of “${best.e.title}” is already ${job.status.replace(/_/g, ' ')}. Opening it.`
+      : `Investigating “${best.e.title}” at ${label}: linked records, impact paths, policy evidence and open questions. Findings wait for your review.`,
+    view: { kind: 'twin', title: `Investigation: ${best.e.title}`, profile_id: profile.id, job_id: job.id, focus: 'actions' },
+    suggestions: ['Show pending approvals'],
+  }
+}
+
+/** "Compare X with its last renewal assessment". */
+function compareCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
+  const m = raw.match(/^\s*(?:please\s+)?compare\s+(.+?)\s+(?:with|to|against)\s+(?:its|the|their)\s+(?:last|previous|latest|most recent)\s+(?:renewal\s+)?(?:assessment|version|twin|risk twin)\s*[?.!]*$/i)
+  if (!m) return null
+  const found = findBusiness(repo, actor, m[1].replace(/['’]s$/, '').trim())
+  if ('reply' in found) return found.reply
+  const profile = found.profile
+  if (!currentTwin(repo, profile.id)) return needTwin(profile)
+  const report = invokeTool<ChangeReport>('risk.compare_versions', { profile_id: profile.id }, { repo, actor })
+  const lines = report.changes.slice(0, 6).map((c) => `• ${c.label}: ${c.finding}`)
+  return {
+    reply: report.changes.length
+      ? `Compared ${nameOf(profile)} with the ${report.baseline.label}. ${report.changes.length} change${report.changes.length === 1 ? '' : 's'}:\n${lines.join('\n')}${
+          report.changes.length > 6 ? `\n…and ${report.changes.length - 6} more.` : ''
+        }\n${report.tasks_created} broker review task${report.tasks_created === 1 ? '' : 's'} created.`
+      : `No changes in the recorded business since the ${report.baseline.label}.`,
+    view: { kind: 'twin', title: `Changes: ${nameOf(profile)}`, profile_id: profile.id, job_id: null, focus: 'changes' },
+    suggestions: [`Assess ${nameOf(profile)} and identify the five most important risk areas requiring review`],
+  }
+}
+
+/** "Assess X and identify the five most important risk areas requiring review". */
+function assessCommand(repo: Repo, actor: Actor, raw: string, t: string): CopilotTurn | null {
+  const m = raw.match(/^\s*(?:please\s+)?(?:assess|analy[sz]e|run\s+(?:an?\s+)?(?:\w+\s+)?(?:risk\s+)?assessment\s+(?:for|of|on))\s+(.+?)(?:\s+and\s+.*|\s+for\s+(?:its\s+)?(?:renewal|new\s+\w+).*|[.?!])?$/i)
+  if (!m || /\b(renewals?|claims?|approvals?|leads?|jobs?)\b/i.test(m[1])) return null
+  const found = findBusiness(repo, actor, m[1].replace(/['’]s$/, '').trim())
+  if ('reply' in found) return found.reply
+  const profile = found.profile
+  const label = nameOf(profile)
+  const { job, reused } = startAssessment(repo, actor, profile.id, assessmentTypeFrom(t), raw)
+  return {
+    reply: reused
+      ? `${label} already has a job ${job.status.replace(/_/g, ' ')}. Opening it instead of starting a duplicate.`
+      : `Assessing ${label}. Plan: 1) retrieve the business profile, 2) load the Risk Twin, 3) apply the industry template, 4) analyse recorded assets and dependencies, ` +
+        '5) identify exposures, 6) check the insurance evidence on file, 7) prioritise findings with explanations and mark the five most important areas, ' +
+        '8) request missing information and create broker review tasks, 9) hold the assessment for your sign-off, 10) save it. ' +
+        'No coverage is assumed and no loss is estimated.',
+    view: { kind: 'twin', title: `Assessment: ${label}`, profile_id: profile.id, job_id: job.id, focus: 'assessment' },
+    suggestions: ['Show pending approvals', `What happens if the blast freezers fail at ${label}?`],
+  }
+}
+
 function commercialCommand(repo: Repo, actor: Actor, raw: string, t: string): CopilotTurn | null {
   const ctx = { repo, actor }
-  const review = raw.match(/^\s*(?:please\s+)?(?:review|assess|analy[sz]e|risk[\s-]review)\s+(.+?)(?:\s+and\s+.*|[.?!])?$/i)
+  const twin = twinCommand(repo, actor, raw)
+  if (twin) return twin
+  const special = impactCommand(repo, actor, raw) ?? investigateCommand(repo, actor, raw) ?? compareCommand(repo, actor, raw) ?? assessCommand(repo, actor, raw, t)
+  if (special) return special
+  if (/\b(need|needs|needing|require|requires)\s+(attention|review|action)\b|\battention\b/.test(t)) return attentionCommand(repo)
+
+  const review = raw.match(/^\s*(?:please\s+)?(?:review|risk[\s-]review)\s+(.+?)(?:\s+and\s+.*|[.?!])?$/i)
   if (review && !/\b(renewals?|claims?|approvals?|leads?|jobs?)\b/i.test(review[1])) {
     const name = review[1].replace(/['’]s$/, '').trim()
     const matches = invokeTool<Array<{ profile: BusinessProfile; customer: Customer }>>('business.discover', { query: name }, ctx)
@@ -52,9 +381,7 @@ function commercialCommand(repo: Repo, actor: Actor, raw: string, t: string): Co
     }
     const { profile } = matches[0]
     const label = profile.trading_name ?? profile.registered_name
-    const open = repo
-      .list('jobs', (j: Job) => j.workflow_type === COMMERCIAL_REVIEW && j.customer_id === profile.customer_id && !TERMINAL.includes(j.status))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    const open = activeCommercialJob(repo, profile.customer_id)
     if (open) {
       return {
         reply: `A review for ${label} is already ${open.status.replace(/_/g, ' ')}. Opening it instead of starting a duplicate.`,

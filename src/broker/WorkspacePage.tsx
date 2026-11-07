@@ -36,7 +36,7 @@ export default function WorkspacePage() {
   const view: CopilotView = current?.view ?? { kind: 'none' }
 
   const focusJobId =
-    (view.kind === 'job' || view.kind === 'business' ? view.job_id : null) ?? conversation?.job_id ?? jobs.find((j) => ACTIVE.includes(j.status))?.id ?? jobs[0]?.id ?? null
+    (view.kind === 'job' || view.kind === 'business' || view.kind === 'twin' ? view.job_id : null) ?? conversation?.job_id ?? jobs.find((j) => ACTIVE.includes(j.status))?.id ?? jobs[0]?.id ?? null
   const { data: job } = useJob(focusJobId)
   const pendingApproval = job?.approvals.find((a) => a.status === 'pending')
 

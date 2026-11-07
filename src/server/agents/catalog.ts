@@ -9,6 +9,9 @@ export const AGENTS = {
   business_discovery: { label: 'Business Discovery Agent', role: 'Builds the business profile from the conversation' },
   industry_risk_analyst: { label: 'Industry Risk Analyst', role: 'Builds the Risk Twin and identifies potential exposures' },
   commercial_underwriting: { label: 'Commercial Underwriting Agent', role: 'Prepares the draft insurer-ready submission pack' },
+  coverage_analyst: { label: 'Coverage Analyst', role: 'Matches exposures to policy evidence; proposes, never confirms, cover' },
+  risk_investigator: { label: 'Risk Investigation Agent', role: 'Investigates exposures and underinsurance against recorded values and policy evidence' },
+  systems_copilot: { label: 'Systems Copilot', role: 'Explains the platform: database plan, screens, agents, jobs and integrations' },
 } as const
 
 export type AgentName = keyof typeof AGENTS

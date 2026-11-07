@@ -4,7 +4,10 @@ import {
   Briefcase,
   Building2,
   CheckSquare,
+  Database,
   FileStack,
+  ServerCog,
+  Bot,
   Network,
   ChevronsLeft,
   ChevronsRight,
@@ -19,7 +22,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useApprovals } from '@/api/hooks'
+import { useApprovals, useMe } from '@/api/hooks'
 import { RoleSwitcher } from '@/components/RoleSwitcher'
 import { cn } from '@/lib/utils'
 import { LoadingState } from './PageHeader'
@@ -32,7 +35,7 @@ interface NavItem {
   badge?: boolean
 }
 
-const NAV: Array<{ group: string | null; items: NavItem[] }> = [
+const NAV: Array<{ group: string | null; business?: boolean; roles?: string[]; items: NavItem[] }> = [
   {
     group: null,
     items: [
@@ -45,11 +48,21 @@ const NAV: Array<{ group: string | null; items: NavItem[] }> = [
   },
   {
     group: 'Commercial',
+    business: true,
     items: [
       { to: '/broker/commercial', label: 'Commercial workspace', icon: Briefcase, end: true },
       { to: '/broker/commercial/clients', label: 'Business clients', icon: Building2 },
       { to: '/broker/commercial/risk-twins', label: 'Risk Twins', icon: Network },
       { to: '/broker/commercial/submissions', label: 'Submissions', icon: FileStack },
+    ],
+  },
+  {
+    group: 'Systems',
+    roles: ['manager', 'admin'],
+    items: [
+      { to: '/broker/systems', label: 'Systems overview', icon: ServerCog, end: true },
+      { to: '/broker/systems/database', label: 'Database & ERD', icon: Database },
+      { to: '/broker/systems/agents', label: 'Agents & copilots', icon: Bot },
     ],
   },
 ]
@@ -71,15 +84,20 @@ function Brand({ collapsed = false }: { collapsed?: boolean }) {
 }
 
 function NavLinks({ collapsed, pending }: { collapsed: boolean; pending: number }) {
+  const { data: me } = useMe()
+  const sections = NAV.filter((s) => !s.roles || (me?.role && s.roles.includes(me.role)))
   return (
     <nav className="scroll-area flex-1 space-y-1 px-2 py-3">
-      {NAV.map((section) => (
+      {sections.map((section) => (
         <div key={section.group ?? 'main'} className={cn('space-y-1', section.group && 'pt-3')}>
           {section.group &&
             (collapsed ? (
               <div className="mx-3 border-t border-white/10" aria-hidden />
             ) : (
-              <p className="px-3 pb-1 text-[10px] font-semibold tracking-[0.18em] text-navy-300 uppercase">{section.group}</p>
+              <p className="flex items-center gap-1.5 px-3 pb-1 text-[10px] font-semibold tracking-[0.18em] text-navy-300 uppercase">
+                {section.business && <span className="h-1.5 w-1.5 rounded-full bg-business-200" aria-hidden />}
+                {section.group}
+              </p>
             ))}
           {section.items.map((n) => (
             <NavLink
@@ -90,7 +108,11 @@ function NavLinks({ collapsed, pending }: { collapsed: boolean; pending: number 
               className={({ isActive }) =>
                 cn(
                   'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition lg:py-2',
-                  isActive ? 'bg-white/10 text-white' : 'text-navy-200 hover:bg-white/5 hover:text-white',
+                  isActive
+                    ? section.business
+                      ? 'bg-business-500/40 text-white'
+                      : 'bg-white/10 text-white'
+                    : 'text-navy-200 hover:bg-white/5 hover:text-white',
                 )
               }
             >
@@ -213,7 +235,7 @@ export default function BrokerLayout() {
           </p>
           <RoleSwitcher />
         </header>
-        <main className="scroll-area flex-1">
+        <main className="scroll-area flex-1" data-identity={pathname.startsWith('/broker/commercial') ? 'business' : undefined}>
           <Suspense fallback={<div className="p-6"><LoadingState /></div>}>
             <Outlet />
           </Suspense>

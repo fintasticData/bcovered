@@ -1,21 +1,55 @@
 import { Link } from 'react-router-dom'
-import { useSubmissions } from '@/api/hooks'
+import { Database, Loader2 } from 'lucide-react'
+import { useLoadCompletedSubmissions, useSubmissions } from '@/api/hooks'
 import { SimulatedBadge } from '@/components/SimulatedBadge'
 import { StatusBadge } from '@/components/StatusBadge'
+import { Button } from '@/components/ui/button'
 import { formatDateTime } from '@/lib/utils'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
+import { Notice } from './RiskTwinsPage'
 
 export default function SubmissionsPage() {
   const { data, isLoading, error } = useSubmissions()
+  const load = useLoadCompletedSubmissions()
+  const loadButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => load.mutate()}
+      disabled={load.isPending}
+      title="Runs three fictional businesses through the full review: Risk Twin, draft pack, broker decisions, approval and ready for market. Loading again adds nothing; Demo Studio reset removes them."
+    >
+      {load.isPending ? <Loader2 className="animate-spin" /> : <Database />} {load.isPending ? 'Agents preparing packs…' : 'Load completed demo submissions'}
+    </Button>
+  )
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <PageHeader
         title="Underwriting submissions"
         description="Draft insurer-ready packs prepared by the Commercial Underwriting Agent. Every pack needs broker approval, and nothing is sent to an insurer from this demo."
+        actions={loadButton}
       />
+      {load.data && (
+        <Notice onClose={() => load.reset()}>
+          {load.data.completed
+            ? `${load.data.completed} submission pack${load.data.completed === 1 ? '' : 's'} prepared, approved by you and marked ready for market. Nothing was sent to an insurer.`
+            : 'The completed demo submissions are already loaded. Nothing was added.'}
+          {load.data.failed.map((f) => (
+            <span key={f.business_name} className="mt-1 block text-red-700">
+              {f.business_name}: {f.reason}
+            </span>
+          ))}
+        </Notice>
+      )}
+      {load.error && <ErrorState message={load.error.message} />}
       {isLoading && <LoadingState />}
       {error && <ErrorState message={error.message} />}
-      {data?.length === 0 && <EmptyState title="No submission packs yet">Ask the Commercial Copilot to review a business.</EmptyState>}
+      {data?.length === 0 && (
+        <EmptyState title="No submission packs yet">
+          Ask the Commercial Copilot to review a business, or load three completed demo packs.
+          <div className="mt-3 flex justify-center">{loadButton}</div>
+        </EmptyState>
+      )}
       {data && data.length > 0 && (
         <ul className="space-y-2 md:hidden">
           {data.map((r) => (

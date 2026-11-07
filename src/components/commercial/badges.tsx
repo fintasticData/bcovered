@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
-import { AlertCircle, CircleHelp, MessageSquareQuote, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, CircleHelp, FileText, MessageSquareQuote, ShieldCheck, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { CoverageStatus, FieldSource, RiskPriority } from '@/server/db/commercialSchema'
+import type { AssessmentPriority, CoverageStatus, FactBasis, FieldSource, RiskPriority } from '@/server/db/commercialSchema'
 import { cn } from '@/lib/utils'
 
 const SOURCE: Record<FieldSource, { label: string; tone: 'success' | 'info' | 'accent' | 'danger'; icon: typeof ShieldCheck; title: string }> = {
   verified: { label: 'Verified', tone: 'success', icon: ShieldCheck, title: 'Checked against a document or record' },
   declared: { label: 'Declared', tone: 'info', icon: MessageSquareQuote, title: 'Stated by the customer, not yet verified' },
+  extracted: { label: 'From document', tone: 'info', icon: FileText, title: 'Read from an uploaded document by an agent; a broker has not yet confirmed it' },
   inferred: { label: 'AI inferred', tone: 'accent', icon: Sparkles, title: 'Inferred by an agent from other information; needs confirmation' },
   missing: { label: 'Missing', tone: 'danger', icon: CircleHelp, title: 'Not provided yet' },
 }
@@ -59,6 +60,34 @@ export function PriorityBadge({ priority, className }: { priority: RiskPriority;
       {priority} priority
     </Badge>
   )
+}
+
+const ASSESSMENT_TONE: Record<AssessmentPriority, 'danger' | 'warning' | 'info' | 'neutral' | 'accent'> = {
+  critical: 'danger',
+  high: 'danger',
+  medium: 'warning',
+  low: 'neutral',
+  unassessed: 'info',
+}
+
+export function AssessmentPriorityBadge({ priority, className }: { priority: AssessmentPriority; className?: string }) {
+  return (
+    <Badge
+      tone={ASSESSMENT_TONE[priority]}
+      className={cn('capitalize', priority === 'critical' && 'ring-1 ring-red-500', className)}
+      title="Qualitative priority explained by its listed factors. Not actuarially validated."
+    >
+      {priority === 'unassessed' ? 'Unassessed' : priority}
+    </Badge>
+  )
+}
+
+export const FACT_BASIS_LABEL: Record<FactBasis, string> = {
+  verified: 'Verified fact',
+  declared: 'Customer declaration',
+  extracted: 'From a document',
+  inferred: 'AI inferred',
+  unknown: 'Unknown',
 }
 
 export function AdviceNotice({ className, children }: { className?: string; children?: ReactNode }) {

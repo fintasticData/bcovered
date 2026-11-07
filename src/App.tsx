@@ -34,8 +34,11 @@ const CommercialWorkspacePage = lazy(() => import('./broker/commercial/Commercia
 const ClientsPage = lazy(() => import('./broker/commercial/ClientsPage'))
 const ClientDetailPage = lazy(() => import('./broker/commercial/ClientDetailPage'))
 const RiskTwinsPage = lazy(() => import('./broker/commercial/RiskTwinsPage'))
+const TwinWorkspacePage = lazy(() => import('./broker/commercial/twin/TwinWorkspacePage'))
+const AssessmentReportPage = lazy(() => import('./broker/commercial/twin/AssessmentReportPage'))
 const SubmissionsPage = lazy(() => import('./broker/commercial/SubmissionsPage'))
 const SubmissionPage = lazy(() => import('./broker/commercial/SubmissionPage'))
+const SystemsPage = lazy(() => import('./broker/systems/SystemsPage'))
 const BusinessHomePage = lazy(() => import('./pages/business/BusinessHomePage'))
 const BusinessIndustriesPage = lazy(() => import('./pages/business/BusinessIndustriesPage'))
 const BusinessCoverPage = lazy(() => import('./pages/business/BusinessCoverPage'))
@@ -64,7 +67,14 @@ function ScrollToTop() {
   return null
 }
 
+function routeIdentity(pathname: string): 'personal' | 'business' | undefined {
+  if (pathname.startsWith('/business') || pathname.startsWith('/portal/business')) return 'business'
+  if (pathname.startsWith('/insurance/') || pathname === '/quote' || pathname.startsWith('/portal')) return 'personal'
+  return undefined
+}
+
 function PublicLayout() {
+  const { pathname } = useLocation()
   return (
     <div className="flex min-h-screen flex-col">
       <div className="bg-brand-900 px-4 py-1.5 text-center text-xs text-brand-100">
@@ -75,7 +85,7 @@ function PublicLayout() {
         </Link>
       </div>
       <Header />
-      <main className="flex-1">
+      <main className="flex-1" data-identity={routeIdentity(pathname)}>
         <Suspense fallback={<div className="container-x min-h-[60vh]"><LoadingState /></div>}>
           <Outlet />
         </Suspense>
@@ -94,6 +104,12 @@ function AppLoading() {
 }
 
 const STAFF = ['broker', 'manager', 'admin'] as const
+
+const systems = (
+  <RequireRole roles={['manager', 'admin']} area="Systems">
+    <SystemsPage />
+  </RequireRole>
+)
 
 export default function App() {
   return (
@@ -171,8 +187,18 @@ export default function App() {
           <Route path="commercial/clients" element={<ClientsPage />} />
           <Route path="commercial/clients/:profileId" element={<ClientDetailPage />} />
           <Route path="commercial/risk-twins" element={<RiskTwinsPage />} />
+          <Route path="commercial/risk-twins/:profileId" element={<TwinWorkspacePage />} />
+          <Route path="commercial/assessments/:assessmentId/report" element={<AssessmentReportPage />} />
           <Route path="commercial/submissions" element={<SubmissionsPage />} />
           <Route path="commercial/submissions/:submissionId" element={<SubmissionPage />} />
+          <Route path="systems" element={systems} />
+          <Route path="systems/database" element={systems} />
+          <Route path="systems/frontend" element={systems} />
+          <Route path="systems/backend" element={systems} />
+          <Route path="systems/integrations" element={systems} />
+          <Route path="systems/agents" element={systems} />
+          <Route path="systems/workflows" element={systems} />
+          <Route path="systems/audit" element={systems} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

@@ -3,7 +3,7 @@ import { Bot, Building2, Database, FlaskConical, Loader2, Play, RotateCcw, Shiel
 import { session } from '@/api/client'
 import { useIdentities, usePlatform, useResetDemo } from '@/api/hooks'
 import { Button } from '@/components/ui/button'
-import { NEW_MOTOR_LEAD, PLANNED_COMMERCIAL_SCENARIOS, PLANNED_SCENARIOS, RESTAURANT_GROUP, type DemoScenario } from '@/server/demo/scenarios'
+import { DEMO_BUSINESS_SUMMARIES, NEW_MOTOR_LEAD, PLANNED_COMMERCIAL_SCENARIOS, PLANNED_SCENARIOS, RESTAURANT_GROUP, type DemoScenario } from '@/server/demo/scenarios'
 
 export default function DemoStudioPage() {
   const navigate = useNavigate()
@@ -86,6 +86,27 @@ export default function DemoStudioPage() {
             'Optional: in the commercial workspace, ask “Review Ubuntu Foods and identify outstanding insurance questions”.',
           ]}
         />
+
+        <section className="mt-6">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Risk Twin demo businesses (synthetic)</h3>
+            <Button size="sm" variant="outline" onClick={() => asBroker('/broker/commercial/risk-twins')} disabled={!broker}>
+              Open Risk Twins as broker
+            </Button>
+          </div>
+          <p className="mb-3 text-xs text-navy-600">
+            Added with “Load demo businesses” on the Risk Twins page. Fixed records, so loading again adds nothing; Reset removes them.
+          </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {DEMO_BUSINESS_SUMMARIES.map((b) => (
+              <div key={b.name} className="panel p-5">
+                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">{b.industry}</p>
+                <h4 className="mt-1 font-semibold text-navy-900">{b.name}</h4>
+                <p className="mt-1 text-xs text-navy-600">{b.summary}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section className="mt-6">
           <h3 className="mb-3 text-xs font-semibold tracking-wide text-navy-500 uppercase">Planned commercial scenarios</h3>

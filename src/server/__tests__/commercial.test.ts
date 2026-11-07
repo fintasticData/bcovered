@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { decideApproval, getOverview, listApprovals, listIdentities, sendMessage, startConversation, type Auth } from '../api'
 import { handleCopilotCommand } from '../agents/copilotCommands'
+import { getRiskTwinPortfolio, loadCompletedSubmissions, loadDemoBusinesses, startTwinBuildForProfile } from '../commercialApi'
 import { RESTAURANT_GROUP } from '../demo/scenarios'
 import { SEED_IDS, TENANT_ID } from '../db/seed'
 import { db, Repo } from '../db/store'
@@ -235,5 +236,125 @@ describe('Broker Copilot commercial review', () => {
 
     const again = handleCopilotCommand(r, brokerActor, 'Review Ubuntu Foods', 'commercial')
     expect(again.view.kind === 'business' && again.view.job_id).toBe(jobId)
+  })
+})
+
+describe('Risk Twin portfolio', () => {
+  const ubuntu = SEED_IDS.business.ubuntu
+  const viewJob = (out: ReturnType<typeof handleCopilotCommand>) => (out.view.kind === 'business' ? out.view.job_id : null)
+
+  it('lists Ubuntu Foods without a Twin until one is built, then with its exposures and no submission', async () => {
+    const before = getRiskTwinPortfolio(broker)
+    expect(before.twins).toHaveLength(0)
+    expect(before.without_twin.map((r) => r.profile.id)).toContain(ubuntu)
+
+    const { job_id } = startTwinBuildForProfile(broker, { profile_id: ubuntu })
+    await kick(TENANT_ID, job_id)
+    const r = repo()
+    expect(r.require('jobs', job_id).status).toBe('completed')
+
+    const after = getRiskTwinPortfolio(broker)
+    expect(after.without_twin.map((x) => x.profile.id)).not.toContain(ubuntu)
+    const row = after.twins.find((x) => x.profile.id === ubuntu)!
+    expect(row.exposure_count).toBeGreaterThan(0)
+    expect(row.priority_counts.high + row.priority_counts.medium + row.priority_counts.low).toBe(row.exposure_count)
+    expect(row.assessment_status).toBe('screened')
+    expect(row.last_assessed_at).toBeTruthy()
+    expect(row.open_broker_tasks + row.open_customer_tasks).toBeGreaterThan(0)
+    expect(row.asset_count).toBe(5)
+    expect(row.assigned_broker).toBe('Thabo Nkosi')
+    expect(row.renewal_month).toBe('January')
+    expect(r.list('commercial_submissions', (s) => s.business_profile_id === ubuntu)).toHaveLength(0)
+    expect(r.list('approval_requests', (a) => a.status === 'pending')).toHaveLength(0)
+  })
+
+  it('never starts a second commercial job for a client while one is active', async () => {
+    const first = startTwinBuildForProfile(broker, { profile_id: ubuntu })
+    const second = startTwinBuildForProfile(broker, { profile_id: ubuntu })
+    expect(second).toEqual({ job_id: first.job_id, reused: true })
+    const viaCopilot = handleCopilotCommand(repo(), brokerActor, 'Create a Risk Twin for Ubuntu Foods', 'commercial')
+    expect(viewJob(viaCopilot)).toBe(first.job_id)
+    await kick(TENANT_ID, first.job_id)
+    expect(repo().list('business_risk_profiles', (p) => p.business_profile_id === ubuntu)).toHaveLength(1)
+  })
+
+  it('loads the demo businesses once, deterministically, and reset removes them', async () => {
+    const first = loadDemoBusinesses(broker)
+    expect(first.inserted).toBe(3)
+    expect(first.builds_started).toBe(3)
+    await Promise.all(repo().list('jobs', (j) => j.status === 'queued' || j.status === 'running').map((j) => kick(TENANT_ID, j.id)))
+    const count = () => {
+      const r = repo()
+      return (['customers', 'business_profiles', 'business_locations', 'commercial_assets', 'business_risk_profiles', 'jobs'] as const).map((t) => r.list(t).length)
+    }
+    const snapshot = count()
+    expect(getRiskTwinPortfolio(broker).twins.map((t) => t.profile.trading_name).sort()).toEqual(['Mokoena & Partners', 'Swift Freight', 'Thali House'])
+
+    const again = loadDemoBusinesses(broker)
+    expect(again).toMatchObject({ inserted: 0, builds_started: 0 })
+    expect(count()).toEqual(snapshot)
+
+    db.reset()
+    expect(repo().list('business_profiles', (p) => first.profile_ids.includes(p.id))).toHaveLength(0)
+  })
+
+  it('loads three completed submission packs through the real workflow, once', async () => {
+    const manager: Auth = { userId: SEED_IDS.users.manager }
+    const first = await loadCompletedSubmissions(manager)
+    expect(first).toEqual({ completed: 3, already_completed: 0, failed: [] })
+
+    const r = repo()
+    const subs = r.list('commercial_submissions')
+    expect(subs).toHaveLength(3)
+    expect(subs.every((s) => s.status === 'ready_for_market' && s.approved_at && s.pack?.broker_summary)).toBe(true)
+    expect(r.list('submission_sections', (x) => x.status === 'proposed')).toHaveLength(0)
+    expect(r.list('approval_requests', (a) => a.status === 'approved' && a.decided_by === SEED_IDS.users.manager)).toHaveLength(3)
+    expect(r.list('approval_requests', (a) => a.status === 'pending')).toHaveLength(0)
+    const pl = r.find('submission_sections', (x) => x.cover_class === 'professional_indemnity')
+    expect(pl?.limit_of_indemnity).toBe(20_000_000)
+    expect(r.list('jobs', (j) => j.workflow_type === 'commercial_discovery_review').every((j) => j.status === 'completed')).toBe(true)
+
+    const again = await loadCompletedSubmissions(manager)
+    expect(again).toEqual({ completed: 0, already_completed: 3, failed: [] })
+    expect(repo().list('commercial_submissions')).toHaveLength(3)
+  })
+
+  it('opens an existing Twin instead of duplicating it, and rebuilds only when asked', async () => {
+    const r = repo()
+    const created = handleCopilotCommand(r, brokerActor, 'Create a Risk Twin for a company called Ubuntu Foods.', 'commercial')
+    await kick(TENANT_ID, viewJob(created)!)
+    const opened = handleCopilotCommand(r, brokerActor, 'Create a Risk Twin for Ubuntu Foods', 'commercial')
+    expect(opened.view.kind).toBe('business')
+    expect(viewJob(opened)).toBeNull()
+    expect(opened.reply).toMatch(/instead of creating a duplicate/)
+
+    const rebuilt = handleCopilotCommand(r, brokerActor, 'Rebuild the Risk Twin for Ubuntu Foods', 'commercial')
+    await kick(TENANT_ID, viewJob(rebuilt)!)
+    expect(r.list('business_risk_profiles', (p) => p.business_profile_id === ubuntu && p.status === 'current').map((p) => p.version)).toEqual([2])
+    expect(r.list('business_profiles', (p) => p.registered_name === 'Ubuntu Foods (Pty) Ltd')).toHaveLength(1)
+  })
+
+  it('interviews the broker about a business with no profile, and cancel saves nothing', async () => {
+    let view = startConversation(broker, { channel: 'broker', assistant: 'commercial_copilot' })
+    const id = view.conversation.id
+    view = await sendMessage(broker, { conversation_id: id, text: 'Create a Risk Twin for Acme Bakery' })
+    const discovery = () => repo().require('conversations', id).context.broker_discovery as { business_name: string; intake: { facts: { registered_name?: string } } } | undefined
+    expect(discovery()?.business_name).toBe('Acme Bakery')
+    expect(discovery()?.intake.facts.registered_name).toBe('Acme Bakery')
+
+    view = await sendMessage(broker, { conversation_id: id, text: 'We run restaurants in Durban' })
+    const reply = view.messages[view.messages.length - 1].content
+    expect(reply).not.toMatch(/^In this build/)
+    expect(discovery()).toBeTruthy()
+
+    view = await sendMessage(broker, { conversation_id: id, text: 'cancel' })
+    expect(discovery()).toBeUndefined()
+    expect(repo().list('business_profiles', (p) => p.registered_name === 'Acme Bakery')).toHaveLength(0)
+  })
+
+  it('explains which clients need attention', () => {
+    const out = handleCopilotCommand(repo(), brokerActor, 'Which Risk Twins need attention?', 'commercial')
+    expect(out.view.kind).toBe('businesses')
+    expect(out.reply).toMatch(/Ubuntu Foods: no Risk Twin yet/)
   })
 })

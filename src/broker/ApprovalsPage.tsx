@@ -23,6 +23,19 @@ function describeOutcome(view: ApprovalView, decision: Decision): Outcome {
       link: view.job ? { to: `/broker/jobs/${view.job.id}`, label: 'Open the job' } : undefined,
     }
   }
+  if (view.risk) {
+    return view.risk.kind === 'assessment'
+      ? {
+          title: 'Assessment signed off',
+          detail: `The findings for ${view.risk.business_name} are now broker-approved conclusions and the baseline for the next comparison. No cover has been confirmed by this decision.`,
+          link: view.risk.assessment_id ? { to: `/broker/commercial/assessments/${view.risk.assessment_id}/report`, label: 'Open the Business Risk Review report' } : undefined,
+        }
+      : {
+          title: 'Investigation reviewed',
+          detail: `The findings for ${view.risk.business_name} are recorded. The proposed actions stay open as tasks.`,
+          link: { to: `/broker/commercial/risk-twins/${view.risk.profile_id}?tab=actions`, label: 'Open the Twin workspace' },
+        }
+  }
   if (view.approval.approval_type === 'underwriting_submission') {
     return {
       title: 'Pack approved and marked ready for market',

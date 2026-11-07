@@ -17,6 +17,8 @@ interface Props {
   renderExtra?: (m: MessageView) => ReactNode
   headerAction?: ReactNode
   footerNote?: ReactNode
+  /** Prompts offered when the assistant has no quick replies of its own. */
+  starters?: string[]
 }
 
 export function ChatPanel({
@@ -32,11 +34,13 @@ export function ChatPanel({
   renderExtra,
   headerAction,
   footerNote,
+  starters,
 }: Props) {
   const [text, setText] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
   const last = messages[messages.length - 1]
-  const quick = !sending && last?.role === 'assistant' ? last.quick_replies : []
+  const offered = !sending && last?.role === 'assistant' ? last.quick_replies : []
+  const quick = sending ? [] : starters?.length ? [...new Set([...starters, ...offered])].slice(0, 6) : offered
 
   useEffect(() => {
     const el = listRef.current
@@ -113,7 +117,7 @@ export function ChatPanel({
               type="button"
               onClick={() => onSend(q)}
               disabled={disabled}
-              className="shrink-0 cursor-pointer rounded-full border border-brand-500/30 bg-brand-50 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-brand-700 transition hover:border-brand-500 disabled:opacity-50 sm:whitespace-normal"
+              className="shrink-0 cursor-pointer rounded-full border border-brand-500/30 bg-brand-50 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-brand-700 transition hover:border-brand-500 disabled:opacity-50 sm:max-w-full sm:shrink sm:text-left sm:whitespace-normal"
             >
               {q}
             </button>
