@@ -235,6 +235,8 @@ export default function Header() {
               ['/contact', 'Contact'],
               ['/demo', 'Demo Studio'],
               ['/help', 'Help and capabilities'],
+              ['/faq', 'FAQ'],
+              ['/updates', 'System updates'],
               ...(workspace ? [[workspace.to, workspace.label]] : []),
             ].map(([to, label]) => (
               <Link key={to} to={to} className="block rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-brand-50">

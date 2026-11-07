@@ -25,6 +25,7 @@ export const HELP_SECTIONS = [
   { id: 'statuses', label: 'Status reference' },
   { id: 'roadmap', label: 'Coming later' },
   { id: 'faq', label: 'Troubleshooting' },
+  { id: 'more', label: 'FAQ and updates' },
 ] as const
 
 export const STATUS_LABEL: Record<CapabilityStatus, string> = {
@@ -35,13 +36,18 @@ export const STATUS_LABEL: Record<CapabilityStatus, string> = {
 
 export const GETTING_STARTED = [
   {
+    title: 'Choose Personal or Business',
+    body: 'The two menus in the header and the picker on the home page split cover for people and households from cover for businesses in 14 industries.',
+    link: { to: '/', label: 'Go to the home page' },
+  },
+  {
     title: 'Open Demo Studio',
     body: 'Two guided scenarios are ready: a new motor lead (Scenario 1) and a restaurant group risk review (Scenario A). Each one is started by hand and plays a scripted conversation.',
     link: { to: '/demo', label: 'Go to Demo Studio' },
   },
   {
     title: 'Switch identity with “Demo as …”',
-    body: 'The identity button in the header switches between the public visitor, customers, the broker and the manager. No passwords exist; every identity is synthetic.',
+    body: 'The identity button in the header switches between the public visitor, customers, the broker and the manager, and opens each one’s home screen. No passwords exist; every identity is synthetic.',
     link: null,
   },
   {
@@ -67,7 +73,7 @@ export const ROLES = [
   {
     role: 'Business customer',
     who: 'Nomsa Dlamini (Kasi Kitchen Group) after Scenario A',
-    can: 'See the review status, the business risk profile with its provenance labels, and the documents or information the broker has asked for.',
+    can: 'Lands in the business portal: review status, the business risk profile with its provenance labels, and the documents or information the broker has asked for.',
     home: { to: '/portal/business', label: 'Business portal' },
   },
   {
@@ -85,6 +91,22 @@ export const ROLES = [
 ]
 
 export const CAPABILITIES: Capability[] = [
+  {
+    area: 'Public website: Personal and Business',
+    audience: 'Visitors',
+    summary: 'Two top-level categories of equal weight: cover for people and households, and cover for businesses.',
+    can: [
+      'Personal: car, buildings, contents, motorcycle and portable valuables, each with cover, extras and exclusions',
+      'Business: 14 industries in three families, 25 cover sections in six areas, and who we cover from sole traders to multi-site groups',
+      'Home page picker switches between personal products and business industries',
+      'Industry and cover-area links open the exact entry on the detail page',
+    ],
+    status: 'live',
+    links: [
+      { to: '/#personal', label: 'Personal cover' },
+      { to: '/business', label: 'Business insurance' },
+    ],
+  },
   {
     area: 'Ava: Find My Cover',
     audience: 'Visitors',
@@ -113,6 +135,18 @@ export const CAPABILITIES: Capability[] = [
       { to: '/business/industries', label: '14 industry templates' },
       { to: '/business/cover', label: '25 cover sections' },
     ],
+  },
+  {
+    area: 'Broker overview',
+    audience: 'Broker, manager',
+    summary: 'The landing screen of the broker workspace, with live counts from the demo tables.',
+    can: [
+      'Open leads, approvals awaiting a decision (personal and commercial), released proposals and job health',
+      'Lead pipeline by status, with each bar linking to Leads',
+      'Needs your decision and recent agent activity',
+    ],
+    status: 'live',
+    links: [{ to: '/broker', label: 'Broker overview' }],
   },
   {
     area: 'Broker AI Workspace',
@@ -164,6 +198,7 @@ export const CAPABILITIES: Capability[] = [
       'Approve and release a motor proposal to the customer portal',
       'Approve a commercial pack (marked ready for market, nothing sent)',
       'Request changes or reject, with the decision recorded',
+      'A confirmation after each decision says what happened and links to the job or submission',
       'Blocks approval when the pack changed after the request was raised',
     ],
     status: 'live',
@@ -203,6 +238,7 @@ export const CAPABILITIES: Capability[] = [
     can: [
       'Personal: released motor comparison with key differences, messages and work in progress',
       'Business: review status, risk profile with provenance labels, outstanding document requests',
+      'Business contacts open the business portal directly; customers without a business see how to start a review',
     ],
     status: 'live',
     links: [
@@ -226,6 +262,21 @@ export const CAPABILITIES: Capability[] = [
       { to: '/contact', label: 'Contact' },
     ],
   },
+  {
+    area: 'Help centre, FAQ and system updates',
+    audience: 'Everyone',
+    summary: 'Self-service guidance for visitors, customers and brokers.',
+    can: [
+      'This help centre: capabilities, walkthroughs, Copilot commands, agents and tools, guardrails and statuses',
+      'FAQ with searchable answers in eight topics',
+      'System updates: every release as a thread, plus a pinned overview of everything in the build',
+    ],
+    status: 'live',
+    links: [
+      { to: '/faq', label: 'FAQ' },
+      { to: '/updates', label: 'System updates' },
+    ],
+  },
 ]
 
 export const WALKTHROUGHS = [
@@ -236,7 +287,7 @@ export const WALKTHROUGHS = [
     steps: [
       { text: 'In Demo Studio, press “Start scenario” on New motor insurance lead, then press Play in the Ava chat.', link: { to: '/demo', label: 'Demo Studio' } },
       { text: 'Watch “What’s happening” and “Agent activity” as the Lead, Risk and Quote agents work.', link: { to: '/assist', label: 'Ava' } },
-      { text: 'Switch to Thabo Nkosi (broker). Open Approvals and choose “Approve and release”.', link: { to: '/broker/approvals', label: 'Approvals' } },
+      { text: 'Switch to Thabo Nkosi (broker). Open Approvals and choose “Approve and release”. A confirmation shows where the proposal went.', link: { to: '/broker/approvals', label: 'Approvals' } },
       { text: 'Optional: open Tasks & Jobs to see each step, agent run and tool call.', link: { to: '/broker/jobs', label: 'Tasks & Jobs' } },
       { text: 'Switch to Sarah Jacobs and open her portal to compare the three options.', link: { to: '/portal', label: 'My portal' } },
     ],
@@ -249,7 +300,7 @@ export const WALKTHROUGHS = [
       { text: 'In Demo Studio, start Restaurant group risk review and press Play. The fictional owner describes Kasi Kitchen Group.', link: { to: '/demo', label: 'Demo Studio' } },
       { text: 'Switch to Thabo Nkosi. Open Business clients to see the Risk Twin, exposures and requests.', link: { to: '/broker/commercial/clients', label: 'Business clients' } },
       { text: 'Open Submissions, review the pack, apply the suggested sections, then approve.', link: { to: '/broker/commercial/submissions', label: 'Submissions' } },
-      { text: 'Switch to Nomsa Dlamini and open the business portal and risk profile.', link: { to: '/portal/business', label: 'Business portal' } },
+      { text: 'Switch to Nomsa Dlamini: you land in her business portal. Open the risk profile from there.', link: { to: '/portal/business', label: 'Business portal' } },
       { text: 'Optional: in the Commercial workspace ask “Review Ubuntu Foods and identify outstanding insurance questions”.', link: { to: '/broker/commercial', label: 'Commercial workspace' } },
     ],
   },

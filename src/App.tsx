@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { LATEST_UPDATE_HEADLINE } from './data/latestUpdate'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import { RequireRole } from './components/RequireRole'
@@ -16,6 +17,8 @@ const LegalPage = lazy(() => import('./pages/LegalPage'))
 const AssistPage = lazy(() => import('./pages/AssistPage'))
 const DemoStudioPage = lazy(() => import('./pages/DemoStudioPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
+const FaqPage = lazy(() => import('./pages/FaqPage'))
+const UpdatesPage = lazy(() => import('./pages/UpdatesPage'))
 const PortalPage = lazy(() => import('./pages/portal/PortalPage'))
 const PortalProposalPage = lazy(() => import('./pages/portal/PortalProposalPage'))
 const BrokerLayout = lazy(() => import('./broker/BrokerLayout'))
@@ -64,8 +67,12 @@ function ScrollToTop() {
 function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="bg-brand-900 py-1.5 text-center text-xs text-brand-100">
-        InsureFlow AI demo · BCovered is a fictional brokerage. All people, insurers and figures are synthetic.
+      <div className="bg-brand-900 px-4 py-1.5 text-center text-xs text-brand-100">
+        <span className="hidden sm:inline">InsureFlow AI demo · BCovered is a fictional brokerage. All people, insurers and figures are synthetic. </span>
+        <span className="sm:hidden">Fictional demo brokerage · synthetic data. </span>
+        <Link to={`/updates#${LATEST_UPDATE_HEADLINE.id}`} className="ml-1 font-semibold text-gold-300 hover:text-gold-400">
+          What’s new<span className="hidden md:inline">: {LATEST_UPDATE_HEADLINE.title}</span> →
+        </Link>
       </div>
       <Header />
       <main className="flex-1">
@@ -103,6 +110,8 @@ export default function App() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo" element={<DemoStudioPage />} />
           <Route path="/help" element={<HelpPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/updates" element={<UpdatesPage />} />
           <Route path="/legal" element={<LegalPage />} />
           <Route path="/business" element={<BusinessHomePage />} />
           <Route path="/business/industries" element={<BusinessIndustriesPage />} />

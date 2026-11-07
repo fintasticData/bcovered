@@ -9,6 +9,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CircleHelp,
+  Newspaper,
   ExternalLink,
   FlaskConical,
   LayoutDashboard,
@@ -116,6 +117,9 @@ function FooterLinks({ collapsed }: { collapsed: boolean }) {
       </Link>
       <Link to="/help" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
         <CircleHelp className="h-4 w-4 shrink-0" /> {!collapsed && 'Help and capabilities'}
+      </Link>
+      <Link to="/updates" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
+        <Newspaper className="h-4 w-4 shrink-0" /> {!collapsed && 'System updates'}
       </Link>
       <Link to="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/5 hover:text-white">
         <ExternalLink className="h-4 w-4 shrink-0" /> {!collapsed && 'Public site'}

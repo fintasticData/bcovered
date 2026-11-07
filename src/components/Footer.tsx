@@ -57,6 +57,8 @@ export default function Footer() {
               ['/claims', 'Log a claim'],
               ['/demo', 'Demo Studio'],
               ['/help', 'Help and capabilities'],
+              ['/faq', 'FAQ'],
+              ['/updates', 'System updates'],
               ['/about', 'About us'],
               ['/contact', 'Contact'],
             ].map(([to, label]) => (

@@ -437,6 +437,7 @@ export default function HomePage() {
           <p className="eyebrow mb-2">FAQ</p>
           <h2 className="font-display text-4xl font-bold text-brand-900">Questions, answered</h2>
           <p className="mt-4 text-ink/70">Can’t find what you’re looking for? <Link to="/contact" className="font-semibold text-brand-600 underline">Talk to an adviser</Link>.</p>
+          <Link to="/faq" className="btn-ghost mt-6">See all questions <ArrowRight className="h-4 w-4" /></Link>
         </div>
         <div className="space-y-3">
           {faqs.map((f, i) => (

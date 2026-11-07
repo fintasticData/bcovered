@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { ArrowRight, Bot, CircleHelp, Search, ShieldCheck, Wrench } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, Bot, CircleHelp, MessageCircleQuestion, Newspaper, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { usePlatform } from '@/api/hooks'
+import { LATEST_UPDATE } from '@/data/updates'
 import { Badge } from '@/components/ui/badge'
 import {
   CAPABILITIES,
@@ -42,15 +43,9 @@ const TOOL_GROUPS: Record<string, string> = {
 const matches = (query: string, ...parts: string[]) => !query || parts.join(' ').toLowerCase().includes(query)
 
 export default function HelpPage() {
-  const { hash } = useLocation()
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
   const { data: platform } = usePlatform()
-
-  useEffect(() => {
-    if (!hash) return
-    document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [hash])
 
   const capabilities = CAPABILITIES.filter((c) => matches(q, c.area, c.audience, c.summary, ...c.can))
   const commands = COPILOT_COMMANDS.filter((c) => matches(q, c.workspace, c.command, c.does))
@@ -76,6 +71,11 @@ export default function HelpPage() {
           What InsureFlow AI can do for the BCovered demo brokerage, who can do it, where to find it, and the rules the agents follow. Everything
           here runs on synthetic data in your browser.
         </p>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold">
+          <Link to="/faq" className="text-brand-600 hover:text-brand-800">FAQ</Link>
+          <Link to="/updates" className="text-brand-600 hover:text-brand-800">System updates</Link>
+          <Link to="/demo" className="text-brand-600 hover:text-brand-800">Demo Studio</Link>
+        </div>
 
         <label className="mt-6 flex max-w-xl items-center gap-2 rounded-full bg-white px-4 py-2.5 ring-1 ring-navy-800/10 focus-within:ring-brand-500">
           <Search className="h-4 w-4 shrink-0 text-navy-500" />
@@ -100,7 +100,7 @@ export default function HelpPage() {
         <div className="mt-8 space-y-6">
           {!q && (
             <Section id="start" title="Getting started">
-              <ol className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED.map((s, i) => (
                   <li key={s.title} className="rounded-xl bg-mist p-4">
                     <span className="grid h-7 w-7 place-items-center rounded-full bg-brand-500 text-xs font-bold text-white">{i + 1}</span>
@@ -116,8 +116,18 @@ export default function HelpPage() {
           {!q && (
             <Section id="roles" title="Who can do what">
               <p>Switch between these identities with “Demo as …” in the header. Broker areas and portals check the role before they open.</p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+              <div className="mt-3 space-y-3 md:hidden">
+                {ROLES.map((r) => (
+                  <div key={r.role} className="rounded-xl bg-mist p-4">
+                    <p className="font-semibold text-navy-900">{r.role}</p>
+                    <p className="text-xs text-navy-500">{r.who}</p>
+                    <p className="mt-2">{r.can}</p>
+                    <InlineLink to={r.home.to}>{r.home.label}</InlineLink>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 hidden overflow-x-auto md:block">
+                <table className="w-full text-left text-sm">
                   <thead className="text-xs text-navy-500 uppercase">
                     <tr>
                       <th className="py-2 pr-4 font-semibold">Role</th>
@@ -208,9 +218,20 @@ export default function HelpPage() {
               Type these into the Broker Copilot in <Link to="/broker/workspace">AI Workspace</Link> or the Commercial Copilot in{' '}
               <Link to="/broker/commercial">Commercial workspace</Link>. Results open in the panel on the right.
             </p>
+            {commands.length > 0 && (
+              <div className="mt-3 space-y-3 md:hidden">
+                {commands.map((c) => (
+                  <div key={c.command} className="rounded-xl bg-mist p-4">
+                    <p className="font-medium text-navy-900">“{c.command}”</p>
+                    <p className="mt-1">{c.does}</p>
+                    <p className="mt-1 text-xs text-navy-500">{c.workspace}</p>
+                  </div>
+                ))}
+              </div>
+            )}
             {commands.length ? (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
+              <div className="mt-3 hidden overflow-x-auto md:block">
+                <table className="w-full text-left text-sm">
                   <thead className="text-xs text-navy-500 uppercase">
                     <tr>
                       <th className="py-2 pr-4 font-semibold">Ask</th>
@@ -356,7 +377,33 @@ export default function HelpPage() {
             ) : (
               <p>No answers match “{query}”.</p>
             )}
+            <p className="pt-2">
+              More answers for customers, business owners and brokers are in the <Link to="/faq">FAQ</Link>.
+            </p>
           </Section>
+
+          {!q && (
+            <Section id="more" title="FAQ and system updates">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Link to="/faq" className="flex gap-3 rounded-xl bg-mist p-4 transition hover:ring-1 hover:ring-brand-500/40">
+                  <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
+                  <span>
+                    <span className="block font-semibold text-navy-900">Frequently asked questions</span>
+                    <span className="block text-navy-700">Searchable answers about personal and business cover, the AI agents, approvals, portals and privacy.</span>
+                  </span>
+                </Link>
+                <Link to="/updates" className="flex gap-3 rounded-xl bg-mist p-4 transition hover:ring-1 hover:ring-brand-500/40">
+                  <Newspaper className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
+                  <span>
+                    <span className="block font-semibold text-navy-900">System updates</span>
+                    <span className="block text-navy-700">
+                      Latest: {LATEST_UPDATE.title} ({LATEST_UPDATE.version}). Every release as a thread, plus a pinned overview of the platform.
+                    </span>
+                  </span>
+                </Link>
+              </div>
+            </Section>
+          )}
         </div>
       </div>
     </div>

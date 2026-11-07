@@ -24,6 +24,7 @@ Visitor enquiry → Ava qualification → persisted lead → simulated compariso
 | `/broker/workspace` | Broker Copilot (≈40%) + result, execution plan and customer context (≈60%) |
 | `/broker/jobs` | Durable jobs with pause, resume, cancel, retry and archive |
 | `/portal` | Released proposal for the customer (role: Sarah Jacobs, after Scenario 1) |
+| `/help`, `/faq`, `/updates` | Help centre, FAQ by topic, and system updates as release threads (content in `src/data/`) |
 
 Switch identity with the **Demo as …** button in the header. No passwords or real credentials exist.
 
