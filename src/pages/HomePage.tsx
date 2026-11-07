@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   BadgeCheck,
+  Building2,
   ChevronDown,
   Clock,
   HandCoins,
@@ -11,9 +12,47 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  User,
 } from 'lucide-react'
-import { insurers, products, type ProductSlug } from '../data/products'
+import { insurers, personalProducts, type ProductSlug } from '../data/products'
+import { BUSINESS_COVER_AREAS, BUSINESS_INDUSTRIES, coverAreaHref, industryHref } from '../data/business'
 import { rand } from '../lib/quote'
+
+type Segment = 'personal' | 'business'
+
+const SEGMENTS = [
+  { key: 'personal' as const, label: 'Personal', hint: 'you and your family', icon: User },
+  { key: 'business' as const, label: 'Business', hint: 'your company', icon: Building2 },
+]
+
+const HERO_INDUSTRIES = BUSINESS_INDUSTRIES.filter((i) =>
+  ['restaurants_hospitality', 'retail', 'manufacturing', 'construction', 'transport_logistics', 'professional_services', 'agriculture'].includes(i.key),
+)
+
+const CATEGORY_CARDS = [
+  {
+    to: '/#personal',
+    icon: User,
+    eyebrow: 'Personal insurance',
+    title: 'For people',
+    body: 'Your car, home, contents, motorbike and the valuables you carry, compared across our insurer panel.',
+    chips: personalProducts.map((p) => p.label),
+    cta: 'Explore personal cover',
+    image: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=1200&q=70',
+    overlay: 'bg-gradient-to-t from-brand-900/95 via-brand-900/70 to-brand-900/20',
+  },
+  {
+    to: '/business',
+    icon: Building2,
+    eyebrow: 'Business insurance',
+    title: 'For businesses',
+    body: 'Property, interruption, liability, fleets, cyber and specialist cover for 14 industries, with a broker coordinating every section.',
+    chips: ['Sole traders', 'SMEs', 'Multi-site groups', '14 industries', '25 cover sections'],
+    cta: 'Explore business cover',
+    image: 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=70',
+    overlay: 'bg-gradient-to-t from-navy-900/95 via-navy-900/70 to-navy-900/20',
+  },
+]
 
 const steps = [
   { title: 'Tell Ava what you need', body: 'Describe it in your own words. Ava asks only for what’s missing and asks consent first.' },
@@ -44,7 +83,9 @@ const faqs = [
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const [segment, setSegment] = useState<Segment>('personal')
   const [pick, setPick] = useState<ProductSlug>('car')
+  const [industry, setIndustry] = useState(HERO_INDUSTRIES[0].key)
   const [openFaq, setOpenFaq] = useState<number | null>(0)
 
   return (
@@ -65,7 +106,8 @@ export default function HomePage() {
               <span className="text-brand-500">Intelligence that works behind the scenes.</span>
             </h1>
             <p className="max-w-lg text-lg leading-relaxed text-ink/70">
-              Compare cover, manage policies and get help when it matters – with intelligent assistance and experienced brokers.
+              Cover for you, your family and your business. Compare options, manage policies and get help when it matters – with intelligent
+              assistance and experienced brokers.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link to="/assist" className="btn-primary">
@@ -75,34 +117,88 @@ export default function HomePage() {
             </div>
 
             <div className="card max-w-xl p-3 shadow-lg">
-              <p className="px-2 pb-2 pt-1 text-sm font-medium text-ink/70">What would you like to insure?</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {products.map((p) => (
+              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-sand p-1" role="tablist" aria-label="Who is the cover for?">
+                {SEGMENTS.map((s) => (
                   <button
-                    key={p.slug}
-                    onClick={() => setPick(p.slug)}
-                    aria-pressed={pick === p.slug}
-                    className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-xs font-medium transition ${
-                      pick === p.slug
-                        ? 'border-brand-500 bg-brand-50 text-brand-800'
-                        : 'border-transparent text-ink/60 hover:bg-brand-50/60'
+                    key={s.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={segment === s.key}
+                    onClick={() => setSegment(s.key)}
+                    className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      segment === s.key ? 'bg-white text-brand-900 shadow-sm' : 'text-ink/60 hover:text-brand-800'
                     }`}
                   >
-                    <p.icon className="h-5 w-5" />
-                    {p.label}
+                    <s.icon className="h-4 w-4" />
+                    {s.label}
+                    <span className="hidden text-[11px] font-normal text-ink/50 sm:inline">· {s.hint}</span>
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => navigate(pick === 'car' ? '/assist' : pick === 'business' ? '/business/risk-review' : `/quote?product=${pick}`)}
-                className="btn-dark mt-3 w-full"
-              >
-                {pick === 'car' ? 'Start with Ava' : pick === 'business' ? 'Start a business risk review' : 'Compare quotes'}{' '}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
-                Motor and business cover run through AI-assisted assessments in this demo; other cover uses the quote form.
-              </p>
+
+              {segment === 'personal' ? (
+                <>
+                  <p className="px-2 pb-2 pt-3 text-sm font-medium text-ink/70">What would you like to insure?</p>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                    {personalProducts.map((p) => (
+                      <button
+                        key={p.slug}
+                        type="button"
+                        onClick={() => setPick(p.slug)}
+                        aria-pressed={pick === p.slug}
+                        className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-xs font-medium transition ${
+                          pick === p.slug ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-brand-50/60'
+                        }`}
+                      >
+                        <p.icon className="h-5 w-5" />
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => navigate(pick === 'car' ? '/assist' : `/quote?product=${pick}`)} className="btn-dark mt-3 w-full">
+                    {pick === 'car' ? 'Start with Ava' : 'Compare quotes'} <ArrowRight className="h-4 w-4" />
+                  </button>
+                  <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
+                    Motor runs through an AI-assisted assessment in this demo; other personal cover uses the quote form.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="px-2 pb-2 pt-3 text-sm font-medium text-ink/70">What kind of business do you run?</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {HERO_INDUSTRIES.map((i) => (
+                      <button
+                        key={i.key}
+                        type="button"
+                        onClick={() => setIndustry(i.key)}
+                        aria-pressed={industry === i.key}
+                        className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 text-center text-[11px] leading-tight font-medium transition sm:text-xs ${
+                          industry === i.key ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-brand-50/60'
+                        }`}
+                      >
+                        <i.icon className="h-5 w-5" />
+                        {i.short}
+                      </button>
+                    ))}
+                    <Link
+                      to="/business/industries"
+                      className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-brand-800/20 px-1 py-3 text-center text-[11px] leading-tight font-medium text-ink/60 transition hover:bg-brand-50/60 sm:text-xs"
+                    >
+                      <Building2 className="h-5 w-5" />
+                      {BUSINESS_INDUSTRIES.length - HERO_INDUSTRIES.length} more
+                    </Link>
+                  </div>
+                  <button onClick={() => navigate('/business/risk-review')} className="btn-dark mt-3 w-full">
+                    Start a business risk review <ArrowRight className="h-4 w-4" />
+                  </button>
+                  <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
+                    <Link to={industryHref(industry)} className="font-semibold text-brand-600 hover:underline">
+                      See what a broker looks at for {BUSINESS_INDUSTRIES.find((i) => i.key === industry)?.label.toLowerCase()}
+                    </Link>
+                    {' · '}from sole traders to multi-site groups
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -148,28 +244,61 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Products */}
-      <section className="container-x py-20">
-        <div className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      {/* Two categories */}
+      <section className="container-x pt-20">
+        <p className="eyebrow mb-2">Our cover</p>
+        <h2 className="max-w-2xl font-display text-4xl font-bold text-brand-900">Insurance for people and for businesses</h2>
+        <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {CATEGORY_CARDS.map((c) => (
+            <Link
+              key={c.to}
+              to={c.to}
+              className={`group relative flex min-h-[300px] flex-col justify-end overflow-hidden rounded-[2rem] p-7 text-white shadow-lg transition hover:-translate-y-1 hover:shadow-2xl sm:p-9`}
+            >
+              <img src={c.image} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+              <div className={`absolute inset-0 ${c.overlay}`} aria-hidden />
+              <div className="relative">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
+                  <c.icon className="h-4 w-4" /> {c.eyebrow}
+                </span>
+                <h3 className="mt-3 font-display text-3xl font-bold">{c.title}</h3>
+                <p className="mt-2 max-w-md text-sm text-white/80">{c.body}</p>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {c.chips.map((chip) => (
+                    <span key={chip} className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium backdrop-blur">{chip}</span>
+                  ))}
+                </div>
+                <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-gold-300">
+                  {c.cta} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Personal products */}
+      <section id="personal" className="container-x scroll-mt-24 py-16">
+        <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
-            <p className="eyebrow mb-2">Our cover</p>
-            <h2 className="font-display text-4xl font-bold text-brand-900">Insurance for everything that matters</h2>
+            <p className="eyebrow mb-2 flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Personal</p>
+            <h2 className="font-display text-3xl font-bold text-brand-900">For you, your family and your home</h2>
           </div>
           <Link to="/quote" className="btn-ghost self-start md:self-auto">Start a quote <ArrowRight className="h-4 w-4" /></Link>
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+          {personalProducts.map((p) => (
             <Link
               key={p.slug}
               to={`/insurance/${p.slug}`}
-              className="card group flex flex-col p-7 transition hover:-translate-y-1 hover:shadow-xl"
+              className="card group flex flex-col p-6 transition hover:-translate-y-1 hover:shadow-xl"
             >
-              <span className="mb-6 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-700 transition group-hover:bg-gold-400 group-hover:text-brand-900">
+              <span className="mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-700 transition group-hover:bg-gold-400 group-hover:text-brand-900">
                 <p.icon className="h-6 w-6" />
               </span>
-              <h3 className="text-lg font-semibold text-brand-900">{p.name}</h3>
+              <h3 className="text-base font-semibold text-brand-900">{p.name}</h3>
               <p className="mt-1 flex-1 text-sm text-ink/60">{p.short}</p>
-              <div className="mt-6 flex items-center justify-between border-t border-brand-800/10 pt-4">
+              <div className="mt-5 flex items-center justify-between border-t border-brand-800/10 pt-4">
                 <span className="text-sm text-ink/60">From <strong className="text-brand-800">{rand(p.fromPrice)}</strong> pm</span>
                 <ArrowRight className="h-4 w-4 text-brand-500 transition group-hover:translate-x-1" />
               </div>
@@ -178,22 +307,62 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how-it-works" className="scroll-mt-20 bg-navy-800 py-20 text-white">
+      {/* Business */}
+      <section className="bg-brand-900 py-16 text-white">
         <div className="container-x">
-          <p className="eyebrow mb-2 text-brand-200!">How it works</p>
-          <h2 className="mb-4 max-w-2xl font-display text-4xl font-bold">One conversation starts the whole brokerage</h2>
-          <p className="mb-12 max-w-2xl text-sm text-navy-100/80">
-            Agents do the administration. Licensed brokers make the decisions. Every step is recorded and visible.
-          </p>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {steps.map((s, i) => (
-              <div key={s.title} className="rounded-3xl border border-white/10 bg-white/5 p-7">
-                <span className="font-display text-5xl font-bold text-brand-200">0{i + 1}</span>
-                <h3 className="mt-4 text-lg font-semibold">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-brand-100/70">{s.body}</p>
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div>
+              <p className="eyebrow mb-2 flex items-center gap-1.5 text-gold-300!"><Building2 className="h-3.5 w-3.5" /> Business</p>
+              <h2 className="max-w-2xl font-display text-3xl font-bold">Every business is different. Your cover should be too.</h2>
+              <p className="mt-2 max-w-2xl text-sm text-brand-100/80">
+                From a sole trader to a multi-site group: premises, fleets, stock, staff, contracts and liabilities. Agents map how you operate into a
+                Risk Twin, and a licensed broker coordinates cover across insurers.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/business/risk-review" className="btn-primary">Start a business risk review <ArrowRight className="h-4 w-4" /></Link>
+              <Link to="/business" className="btn border border-white/20 text-white hover:bg-white/10">Explore business insurance</Link>
+            </div>
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[1.6fr_1fr]">
+            <div>
+              <h3 className="mb-3 text-xs font-semibold tracking-[0.18em] text-brand-200 uppercase">Industries we cover</h3>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                {BUSINESS_INDUSTRIES.map((i) => (
+                  <Link
+                    key={i.key}
+                    to={industryHref(i.key)}
+                    className="group flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:border-gold-400/60 hover:bg-white/10"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 text-gold-300">
+                      <i.icon className="h-4 w-4" />
+                    </span>
+                    <span className="leading-tight font-medium">{i.label}</span>
+                  </Link>
+                ))}
               </div>
-            ))}
+            </div>
+            <div>
+              <h3 className="mb-3 text-xs font-semibold tracking-[0.18em] text-brand-200 uppercase">Cover areas</h3>
+              <ul className="space-y-2">
+                {BUSINESS_COVER_AREAS.map((c) => (
+                  <li key={c.group}>
+                    <Link
+                      to={coverAreaHref(c.group)}
+                      className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-gold-400/60 hover:bg-white/10"
+                    >
+                      <c.icon className="h-5 w-5 shrink-0 text-gold-300" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">{c.title}</span>
+                        <span className="block text-xs text-brand-100/70">{c.short}</span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-brand-200 transition group-hover:translate-x-1" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
@@ -216,6 +385,26 @@ export default function HomePage() {
               <p className="mt-1 text-sm text-ink/60">{r.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how-it-works" className="scroll-mt-20 bg-navy-800 py-20 text-white">
+        <div className="container-x">
+          <p className="eyebrow mb-2 text-brand-200!">How it works</p>
+          <h2 className="mb-4 max-w-2xl font-display text-4xl font-bold">One conversation starts the whole brokerage</h2>
+          <p className="mb-12 max-w-2xl text-sm text-navy-100/80">
+            Agents do the administration. Licensed brokers make the decisions. Every step is recorded and visible.
+          </p>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {steps.map((s, i) => (
+              <div key={s.title} className="rounded-3xl border border-white/10 bg-white/5 p-7">
+                <span className="font-display text-5xl font-bold text-brand-200">0{i + 1}</span>
+                <h3 className="mt-4 text-lg font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-brand-100/70">{s.body}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

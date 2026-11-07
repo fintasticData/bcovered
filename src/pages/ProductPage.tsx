@@ -1,15 +1,16 @@
-import { Link, useParams } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, PlusCircle, XCircle } from 'lucide-react'
-import { getProduct, products } from '../data/products'
+import { Link, Navigate, useParams } from 'react-router-dom'
+import { ArrowRight, Building2, CheckCircle2, PlusCircle, XCircle } from 'lucide-react'
+import { getProduct, personalProducts } from '../data/products'
 import { rand } from '../lib/quote'
 import NotFound from './NotFound'
 
 export default function ProductPage() {
   const { slug } = useParams()
+  if (slug === 'business') return <Navigate to="/business" replace />
   const product = getProduct(slug)
   if (!product) return <NotFound />
 
-  const others = products.filter((p) => p.slug !== product.slug).slice(0, 3)
+  const others = personalProducts.filter((p) => p.slug !== product.slug).slice(0, 3)
 
   return (
     <>
@@ -30,13 +31,6 @@ export default function ProductPage() {
                   Start an AI-assisted assessment <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link to={`/quote?product=${product.slug}`} className="btn-ghost">Prefer a form?</Link>
-              </>
-            ) : product.slug === 'business' ? (
-              <>
-                <Link to="/business/risk-review" className="btn-primary">
-                  Start a business risk review <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link to="/business" className="btn-ghost">Explore business insurance</Link>
               </>
             ) : (
               <Link to={`/quote?product=${product.slug}`} className="btn-primary">
@@ -101,6 +95,19 @@ export default function ProductPage() {
             </Link>
           ))}
         </div>
+        <Link
+          to="/business"
+          className="group mt-5 flex flex-col gap-3 rounded-3xl bg-brand-900 p-6 text-white transition hover:bg-brand-800 sm:flex-row sm:items-center"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/10 text-gold-300"><Building2 className="h-6 w-6" /></span>
+          <span className="flex-1">
+            <span className="block font-semibold">Insuring a business?</span>
+            <span className="text-sm text-brand-100/80">Business cover for 14 industries, from sole traders to multi-site groups, coordinated by a broker.</span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-gold-300">
+            Explore business insurance <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+          </span>
+        </Link>
       </section>
     </>
   )

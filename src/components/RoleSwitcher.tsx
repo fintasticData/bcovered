@@ -6,7 +6,7 @@ import { useIdentities, useMe } from '@/api/hooks'
 import { humanise } from './StatusBadge'
 import { cn } from '@/lib/utils'
 
-export function RoleSwitcher({ dark = false, align = 'right' }: { dark?: boolean; align?: 'left' | 'right' }) {
+export function RoleSwitcher({ dark = false, align = 'right', compact = false }: { dark?: boolean; align?: 'left' | 'right'; compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const { data: identities = [] } = useIdentities()
@@ -37,13 +37,14 @@ export function RoleSwitcher({ dark = false, align = 'right' }: { dark?: boolean
         aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
-          'flex max-w-[11rem] cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition sm:max-w-[15rem] sm:py-1.5',
+          'flex max-w-[11rem] cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition sm:py-1.5',
+          compact ? 'xl:max-w-[15rem]' : 'sm:max-w-[15rem]',
           dark ? 'border-white/20 bg-white/10 text-white hover:bg-white/15' : 'border-navy-800/15 bg-white text-navy-800 hover:border-navy-800/40',
         )}
       >
         <UserCircle2 className="h-4 w-4 shrink-0" />
         <span className="truncate">
-          <span className="hidden opacity-60 sm:inline">Demo as </span>
+          <span className={cn('hidden opacity-60', compact ? 'xl:inline' : 'sm:inline')}>Demo as </span>
           {current}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />

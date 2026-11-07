@@ -143,6 +143,9 @@ export const products: Product[] = [
 
 export const getProduct = (slug?: string) => products.find((p) => p.slug === slug)
 
+/** Cover for people and households. Business cover has its own section under /business. */
+export const personalProducts = products.filter((p) => p.slug !== 'business')
+
 export const insurers = [
   'Protea Insure',
   'Karoo Mutual',

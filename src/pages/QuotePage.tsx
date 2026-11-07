@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Lock, ShieldCheck, Star } from 'lucide-react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Loader2, Lock, ShieldCheck, Star } from 'lucide-react'
 import Stepper from '../components/Stepper'
-import { getProduct, products, type ProductSlug } from '../data/products'
+import { getProduct, personalProducts, type ProductSlug } from '../data/products'
 import { calculateOffers, provinces, rand, reference, type InsurerOffer, type QuoteInput } from '../lib/quote'
 
 const STEPS = ['Cover', 'Details', 'Contact', 'Compare']
@@ -105,6 +105,8 @@ export default function QuotePage() {
     setChosen({ offer, ref })
   }
 
+  if (preselected === 'business') return <Navigate to="/business/risk-review" replace />
+
   if (chosen) {
     return (
       <section className="container-x max-w-2xl py-20">
@@ -161,7 +163,7 @@ export default function QuotePage() {
           <h2 className="mb-1 text-xl font-semibold text-brand-900">What would you like to insure?</h2>
           <p className="mb-6 text-sm text-ink/60">You can add more items with your adviser later.</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup">
-            {products.map((p) => {
+            {personalProducts.map((p) => {
               const active = quote.product === p.slug
               return (
                 <button
@@ -183,6 +185,18 @@ export default function QuotePage() {
                 </button>
               )
             })}
+            <Link
+              to="/business/risk-review"
+              className="flex items-start gap-3 rounded-2xl border-2 border-dashed border-brand-800/15 p-4 text-left transition hover:border-brand-500/40"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-900 text-gold-300">
+                <Building2 className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-brand-900">Business insurance</span>
+                <span className="block text-xs text-ink/60">Start a business risk review instead</span>
+              </span>
+            </Link>
           </div>
           <div className="mt-8 flex justify-end">
             <button onClick={() => next()} className="btn-primary">Continue <ArrowRight className="h-4 w-4" /></button>

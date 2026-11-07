@@ -31,7 +31,7 @@ export default function BusinessCoverPage() {
 
         <div className="mt-8 space-y-8">
           {GROUPS.map((g) => (
-            <section key={g.key}>
+            <section key={g.key} id={g.key} className="scroll-mt-28">
               <h2 className="mb-3 text-sm font-semibold text-navy-900">{g.title}</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {COVER_CLASSES.filter((c) => c.group === g.key).map((c) => (

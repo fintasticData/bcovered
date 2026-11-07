@@ -1,26 +1,49 @@
 import { Link } from 'react-router-dom'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import Logo from './Logo'
-import { products } from '../data/products'
+import { personalProducts } from '../data/products'
+import { industryHref } from '../data/business'
 import { LEGAL_SECTIONS } from '../data/legal'
 
 export default function Footer() {
   return (
     <footer className="bg-brand-900 text-brand-100">
-      <div className="container-x grid grid-cols-1 gap-10 py-16 md:grid-cols-2 lg:grid-cols-4">
+      <div className="container-x grid grid-cols-1 gap-10 py-16 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_1.2fr]">
         <div className="space-y-4">
           <Logo light />
           <p className="max-w-xs text-sm leading-relaxed text-brand-100/70">
-            Independent short-term insurance brokers. We compare, advise and fight your corner at claim time.
+            Independent short-term insurance brokers for people and businesses. We compare, advise and fight your corner at claim time.
           </p>
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-white">Insurance</h3>
+          <h3 className="mb-4 text-sm font-semibold text-white">Personal</h3>
           <ul className="space-y-2 text-sm">
-            {products.map((p) => (
+            {personalProducts.map((p) => (
               <li key={p.slug}>
                 <Link to={`/insurance/${p.slug}`} className="text-brand-100/70 hover:text-gold-300">{p.name}</Link>
+              </li>
+            ))}
+            <li>
+              <Link to="/assist" className="text-brand-100/70 hover:text-gold-300">Find my cover with Ava</Link>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 className="mb-4 text-sm font-semibold text-white">Business</h3>
+          <ul className="space-y-2 text-sm">
+            {[
+              ['/business', 'Business insurance'],
+              ['/business/industries', 'Industries we cover'],
+              ['/business/cover', 'Cover areas'],
+              ['/business/risk-review', 'Business risk review'],
+              [industryHref('restaurants_hospitality'), 'Restaurants and hospitality'],
+              [industryHref('manufacturing'), 'Manufacturing'],
+              [industryHref('transport_logistics'), 'Transport and logistics'],
+            ].map(([to, label]) => (
+              <li key={to}>
+                <Link to={to} className="text-brand-100/70 hover:text-gold-300">{label}</Link>
               </li>
             ))}
           </ul>
@@ -30,10 +53,8 @@ export default function Footer() {
           <h3 className="mb-4 text-sm font-semibold text-white">Company</h3>
           <ul className="space-y-2 text-sm">
             {[
-              ['/assist', 'Find my cover with Ava'],
               ['/quote', 'Quote form'],
               ['/claims', 'Log a claim'],
-              ['/business', 'Business insurance'],
               ['/demo', 'Demo Studio'],
               ['/help', 'Help and capabilities'],
               ['/about', 'About us'],

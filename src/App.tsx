@@ -41,8 +41,23 @@ const PortalBusinessPage = lazy(() => import('./pages/portal/PortalBusinessPage'
 const PortalRiskProfilePage = lazy(() => import('./pages/portal/PortalRiskProfilePage'))
 
 function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(() => window.scrollTo(0, 0), [pathname])
+  const { pathname, hash } = useLocation()
+  useEffect(() => {
+    if (!hash) {
+      window.scrollTo(0, 0)
+      return
+    }
+    // Targets on lazy or data-driven pages render after navigation, so wait briefly for them.
+    let tries = 0
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(decodeURIComponent(hash.slice(1)))
+      if (el || ++tries > 40) {
+        window.clearInterval(timer)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 50)
+    return () => window.clearInterval(timer)
+  }, [pathname, hash])
   return null
 }
 

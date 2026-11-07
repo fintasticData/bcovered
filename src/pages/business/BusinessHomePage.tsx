@@ -1,8 +1,16 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Building2, ClipboardCheck, FileStack, Network, ShieldCheck, Sparkles, UserCheck } from 'lucide-react'
+import { ArrowRight, Building, Building2, ClipboardCheck, FileStack, Landmark, Network, ShieldCheck, Sparkles, Store, User, UserCheck } from 'lucide-react'
 import { useIndustries } from '@/api/hooks'
 import { AdviceNotice } from '@/components/commercial/badges'
+import { BUSINESS_COVER_AREAS, BUSINESS_INDUSTRIES, coverAreaHref, industryHref } from '@/data/business'
 import { BusinessSubnav } from './BusinessSubnav'
+
+const BUSINESS_SIZES = [
+  { icon: User, title: 'Sole traders and freelancers', body: 'Tools, equipment, a vehicle and professional or public liability for one-person businesses.' },
+  { icon: Store, title: 'Small and medium businesses', body: 'Premises, stock, staff and trading income, often under one commercial package with several sections.' },
+  { icon: Building, title: 'Multi-site groups', body: 'Several locations, entities and fleets, with dependencies between sites mapped in one Risk Twin.' },
+  { icon: Landmark, title: 'Property owners and specialist risks', body: 'Let property, contract works, cyber, directors and officers, and other specialist placements.' },
+]
 
 const STEPS = [
   { icon: Sparkles, title: 'Describe your business', body: 'Tell our Business Discovery Agent how you operate, in your own words. It only asks what your industry needs.' },
@@ -75,6 +83,20 @@ export default function BusinessHomePage() {
         </div>
       </section>
 
+      <section className="container-x pb-4">
+        <p className="eyebrow">Who we cover</p>
+        <h2 className="mt-1 font-display text-3xl font-bold text-navy-900">Business insurance is broad. We start with how you operate.</h2>
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {BUSINESS_SIZES.map((s) => (
+            <div key={s.title} className="card p-5">
+              <s.icon className="h-6 w-6 text-brand-500" />
+              <h3 className="mt-3 font-semibold text-navy-900">{s.title}</h3>
+              <p className="mt-1 text-sm text-ink/70">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="bg-white py-16">
         <div className="container-x">
           <p className="eyebrow">How it works</p>
@@ -106,10 +128,46 @@ export default function BusinessHomePage() {
             </Link>
           </div>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {industries.slice(0, 8).map((t) => (
-              <Link key={t.key} to={`/business/industries#${t.key}`} className="card p-4 transition hover:border-brand-500/40">
-                <p className="font-semibold text-navy-900">{t.name}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-ink/60">{t.summary}</p>
+            {industries.map((t) => {
+              const Icon = BUSINESS_INDUSTRIES.find((i) => i.key === t.key)?.icon ?? Building2
+              return (
+                <Link key={t.key} to={industryHref(t.key)} className="card group flex gap-3 p-4 transition hover:border-brand-500/40">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700 transition group-hover:bg-gold-400 group-hover:text-brand-900">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-navy-900">{t.name}</span>
+                    <span className="mt-1 line-clamp-2 block text-xs text-ink/60">{t.summary}</span>
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white py-16">
+        <div className="container-x">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div>
+              <p className="eyebrow">Cover areas</p>
+              <h2 className="mt-1 font-display text-3xl font-bold text-navy-900">A portfolio of sections, not one policy</h2>
+            </div>
+            <Link to="/business/cover" className="text-sm font-semibold text-brand-600">
+              All 25 sections <ArrowRight className="inline h-4 w-4" />
+            </Link>
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BUSINESS_COVER_AREAS.map((c) => (
+              <Link key={c.group} to={coverAreaHref(c.group)} className="card group flex items-center gap-3 p-4 transition hover:border-brand-500/40">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold-300/30 text-brand-900">
+                  <c.icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-navy-900">{c.title}</span>
+                  <span className="block text-xs text-ink/60">{c.short}</span>
+                </span>
+                <ArrowRight className="h-4 w-4 text-brand-500 transition group-hover:translate-x-1" />
               </Link>
             ))}
           </div>

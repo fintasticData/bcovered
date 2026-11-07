@@ -1,21 +1,125 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { ChevronDown, Menu, Phone, Sparkles, X } from 'lucide-react'
+import { ArrowRight, Building2, ChevronDown, Menu, Phone, Sparkles, User, X } from 'lucide-react'
 import Logo from './Logo'
 import { RoleSwitcher } from './RoleSwitcher'
-import { products } from '../data/products'
+import { personalProducts } from '../data/products'
+import { BUSINESS_COVER_AREAS, BUSINESS_INDUSTRY_GROUPS, coverAreaHref, industryHref } from '../data/business'
 import { useMe } from '@/api/hooks'
 
-const navLink = ({ isActive }: { isActive: boolean }) =>
-  `rounded-full px-3 py-2 text-sm font-medium transition ${
-    isActive ? 'text-brand-800 bg-brand-50' : 'text-ink/70 hover:text-brand-800'
-  }`
+const navLink =
+  (extra = '') =>
+  ({ isActive }: { isActive: boolean }) =>
+    `whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium transition ${extra} ${
+      isActive ? 'text-brand-800 bg-brand-50' : 'text-ink/70 hover:text-brand-800'
+    }`
+
+type MenuKey = 'personal' | 'business'
+
+function MenuButton({ label, active, open, onClick }: { label: string; active: boolean; open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={open}
+      aria-haspopup="true"
+      className={`flex cursor-pointer items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
+        active || open ? 'bg-brand-50 text-brand-800' : 'text-ink/80 hover:text-brand-800'
+      }`}
+    >
+      {label} <ChevronDown className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`} />
+    </button>
+  )
+}
+
+function PersonalMenu() {
+  return (
+    <div className="card absolute left-0 top-12 w-[600px] p-4 shadow-xl animate-rise">
+      <div className="mb-2 flex items-center justify-between px-2">
+        <p className="eyebrow flex items-center gap-1.5">
+          <User className="h-3.5 w-3.5" /> Personal insurance
+        </p>
+        <span className="text-[11px] text-ink/50">For you, your family and your home</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {personalProducts.map((p) => (
+          <Link key={p.slug} to={`/insurance/${p.slug}`} className="flex gap-3 rounded-2xl p-3 transition hover:bg-brand-50">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
+              <p.icon className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-brand-900">{p.name}</span>
+              <span className="block text-xs text-ink/60">{p.short}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-sand px-4 py-3">
+        <span className="text-xs text-ink/70">Not sure what you need? Ava asks only what’s missing.</span>
+        <Link to="/assist" className="btn-dark shrink-0 px-4 py-2 text-xs">
+          Find my cover with Ava <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function BusinessMenu() {
+  return (
+    <div className="card absolute top-full left-1/2 mt-1 w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 p-5 shadow-xl animate-rise">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="eyebrow flex items-center gap-1.5">
+          <Building2 className="h-3.5 w-3.5" /> Business insurance
+        </p>
+        <Link to="/business" className="text-xs font-semibold text-brand-600 hover:text-brand-800">
+          Business overview <ArrowRight className="inline h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-[1fr_1fr_1fr_1.1fr] gap-5">
+        {BUSINESS_INDUSTRY_GROUPS.map((g) => (
+          <div key={g.title}>
+            <p className="mb-1.5 px-2 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">{g.title}</p>
+            <ul>
+              {g.industries.map((i) => (
+                <li key={i.key}>
+                  <Link to={industryHref(i.key)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm text-brand-900 transition hover:bg-brand-50">
+                    <i.icon className="h-4 w-4 shrink-0 text-brand-600" /> {i.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <div className="rounded-2xl bg-sand p-3">
+          <p className="mb-1.5 px-1 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Cover areas</p>
+          <ul>
+            {BUSINESS_COVER_AREAS.map((c) => (
+              <li key={c.group}>
+                <Link to={coverAreaHref(c.group)} className="flex items-center gap-2 rounded-xl px-1 py-1.5 text-sm text-brand-900 transition hover:bg-white">
+                  <c.icon className="h-4 w-4 shrink-0 text-gold-500" /> {c.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-brand-900 px-4 py-3 text-white">
+        <span className="text-xs text-brand-100">
+          From sole traders to multi-site groups: describe how you operate and agents build your Risk Twin for a broker to review.
+        </span>
+        <Link to="/business/risk-review" className="btn-primary shrink-0 px-4 py-2 text-xs">
+          Start a business risk review <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </div>
+  )
+}
 
 export default function Header() {
   const [open, setOpen] = useState(false)
-  const [menu, setMenu] = useState(false)
+  const [menu, setMenu] = useState<MenuKey | null>(null)
   const { pathname } = useLocation()
-  const menuRef = useRef<HTMLDivElement>(null)
+  const navRef = useRef<HTMLElement>(null)
   const { data: me } = useMe()
   const workspace =
     me?.role === 'customer'
@@ -23,66 +127,53 @@ export default function Header() {
       : me && ['broker', 'manager', 'admin'].includes(me.role)
         ? { to: '/broker', label: 'Broker workspace' }
         : null
+  const inPersonal = pathname.startsWith('/insurance/')
+  const inBusiness = pathname.startsWith('/business')
 
   useEffect(() => {
     setOpen(false)
-    setMenu(false)
+    setMenu(null)
   }, [pathname])
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false)
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setMenu(null)
     }
+    const escape = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null)
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', escape)
+    }
   }, [])
+
+  const toggle = (key: MenuKey) => setMenu((m) => (m === key ? null : key))
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-800/10 bg-sand/90 backdrop-blur">
-      <div className="container-x flex h-18 items-center justify-between gap-6 py-3">
+      <div className="container-x flex h-18 items-center justify-between gap-4 py-3">
         <Logo />
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenu((m) => !m)}
-              aria-expanded={menu}
-              className="flex cursor-pointer items-center gap-1 rounded-full px-3 py-2 text-sm font-medium text-ink/70 hover:text-brand-800"
-            >
-              Insurance <ChevronDown className={`h-4 w-4 transition ${menu ? 'rotate-180' : ''}`} />
-            </button>
-            {menu && (
-              <div className="card absolute left-0 top-12 grid w-[560px] grid-cols-2 gap-1 p-3 shadow-xl animate-rise">
-                {products.map((p) => (
-                  <Link
-                    key={p.slug}
-                    to={`/insurance/${p.slug}`}
-                    className="flex gap-3 rounded-2xl p-3 transition hover:bg-brand-50"
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
-                      <p.icon className="h-5 w-5" />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold text-brand-900">{p.name}</span>
-                      <span className="block text-xs text-ink/60">{p.short}</span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
+        <nav ref={navRef} className="hidden min-w-0 items-center gap-0.5 lg:flex xl:gap-1" aria-label="Main">
+          <div className="relative">
+            <MenuButton label="Personal" active={inPersonal} open={menu === 'personal'} onClick={() => toggle('personal')} />
+            {menu === 'personal' && <PersonalMenu />}
           </div>
-          <NavLink to="/business" className={navLink}>Business</NavLink>
-          <NavLink to="/claims" className={navLink}>Claims</NavLink>
-          <NavLink to="/about" className={navLink}>About us</NavLink>
-          <NavLink to="/demo" className={navLink}>Demo Studio</NavLink>
-          <NavLink to="/help" className={navLink}>Help</NavLink>
-          {workspace && <NavLink to={workspace.to} className={navLink}>{workspace.label}</NavLink>}
+          <MenuButton label="Business" active={inBusiness} open={menu === 'business'} onClick={() => toggle('business')} />
+          {menu === 'business' && <BusinessMenu />}
+          <span className="mx-1 h-5 w-px bg-brand-800/15" aria-hidden />
+          <NavLink to="/claims" className={navLink()}>Claims</NavLink>
+          <NavLink to="/about" className={navLink('hidden xl:inline-block')}>About us</NavLink>
+          <NavLink to="/demo" className={navLink()}>Demo Studio</NavLink>
+          <NavLink to="/help" className={navLink('hidden 2xl:inline-block')}>Help</NavLink>
+          {workspace && <NavLink to={workspace.to} className={navLink()}>{workspace.label}</NavLink>}
         </nav>
 
-        <div className="hidden items-center gap-3 lg:flex">
-          <RoleSwitcher />
-          <Link to="/assist" className="btn-primary">
-            <Sparkles className="h-4 w-4" /> Find My Cover
+        <div className="hidden shrink-0 items-center gap-3 lg:flex">
+          <RoleSwitcher compact />
+          <Link to="/assist" className="btn-primary whitespace-nowrap px-4 xl:px-6" aria-label="Find My Cover">
+            <Sparkles className="h-4 w-4" /> <span className="hidden xl:inline">Find My Cover</span>
           </Link>
         </div>
 
@@ -97,18 +188,48 @@ export default function Header() {
       </div>
 
       {open && (
-        <div className="max-h-[calc(100vh-5rem)] overflow-y-auto border-t border-brand-800/10 bg-white lg:hidden">
+        <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-brand-800/10 bg-white lg:hidden">
           <div className="container-x space-y-1 py-4">
-            <p className="eyebrow px-3 pb-1">Insurance</p>
-            {products.map((p) => (
+            <p className="eyebrow flex items-center gap-1.5 px-3 pb-1">
+              <User className="h-3.5 w-3.5" /> Personal
+            </p>
+            {personalProducts.map((p) => (
               <Link key={p.slug} to={`/insurance/${p.slug}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-brand-50">
                 <p.icon className="h-5 w-5 text-brand-600" />
                 <span className="text-sm font-medium">{p.name}</span>
               </Link>
             ))}
+
+            <div className="my-3 border-t border-brand-800/10" />
+            <p className="eyebrow flex items-center gap-1.5 px-3 pb-1">
+              <Building2 className="h-3.5 w-3.5" /> Business
+            </p>
+            {[
+              ['/business', 'Business insurance overview'],
+              ['/business/industries', 'Industries we cover (14)'],
+              ['/business/cover', 'Cover areas and sections (25)'],
+            ].map(([to, label]) => (
+              <Link key={to} to={to} className="block rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-brand-50">
+                {label}
+              </Link>
+            ))}
+            <div className="scroll-x -mx-1 flex gap-2 px-3 py-1.5">
+              {BUSINESS_INDUSTRY_GROUPS.flatMap((g) => g.industries).map((i) => (
+                <Link
+                  key={i.key}
+                  to={industryHref(i.key)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-brand-800/10 bg-sand px-3 py-1.5 text-xs font-medium text-brand-900"
+                >
+                  <i.icon className="h-3.5 w-3.5 text-brand-600" /> {i.label}
+                </Link>
+              ))}
+            </div>
+            <Link to="/business/risk-review" className="btn-dark mx-3 mt-1 flex">
+              Start a business risk review <ArrowRight className="h-4 w-4" />
+            </Link>
+
             <div className="my-3 border-t border-brand-800/10" />
             {[
-              ['/business', 'Business insurance'],
               ['/claims', 'Claims'],
               ['/about', 'About us'],
               ['/contact', 'Contact'],

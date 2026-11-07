@@ -9,6 +9,9 @@ import { ToolError } from '../lib/errors'
 import { commercialTurn, initialCommercialState } from '../llm/commercialIntake'
 import { configureRunner, kick } from '../jobs/runner'
 import { invokeTool, type Actor } from '../tools/registry'
+import { INDUSTRY_TEMPLATES } from '../domain/commercial/industryTemplates'
+import { COVER_CLASSES } from '../domain/commercial/coverClasses'
+import { BUSINESS_COVER_AREAS, BUSINESS_INDUSTRIES } from '@/data/business'
 
 const visitor: Auth = { userId: null }
 const broker: Auth = { userId: SEED_IDS.users.broker }
@@ -29,6 +32,15 @@ async function runRestaurantScenario() {
 beforeEach(() => {
   db.reset()
   configureRunner({ stepDelayMs: 0 })
+})
+
+describe('Public business catalogue', () => {
+  it('lists every industry template exactly once and only real cover groups', () => {
+    const templateKeys = INDUSTRY_TEMPLATES.map((t) => t.key).sort()
+    expect(BUSINESS_INDUSTRIES.map((i) => i.key).sort()).toEqual(templateKeys)
+    const groups = new Set(COVER_CLASSES.map((c) => c.group))
+    expect(BUSINESS_COVER_AREAS.map((a) => a.group).sort()).toEqual([...groups].sort())
+  })
 })
 
 describe('Business Discovery intake', () => {
