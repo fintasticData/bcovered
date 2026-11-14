@@ -98,6 +98,7 @@ async function hydrate() {
   const run = ++hydrateRun
   const category = dataCategory.get()
   set({ status: 'hydrating', category, lastError: null })
+  const own = await signedInTenant(true)
   const loaded: Record<string, Record<string, unknown>[]> = {}
   const errors: string[] = []
   await Promise.all(
@@ -110,7 +111,10 @@ async function hydrate() {
     }),
   )
   if (run !== hydrateRun) return
-  db.hydrate(loaded as Partial<Record<TableName, Record<string, unknown>[]>>)
+  db.hydrate(
+    loaded as Partial<Record<TableName, Record<string, unknown>[]>>,
+    own ? (row) => typeof row.tenant_id === 'string' && row.tenant_id !== own : undefined,
+  )
   set({
     status: errors.length ? 'error' : 'synced',
     rows: Object.values(loaded).reduce((n, r) => n + r.length, 0),
@@ -121,6 +125,18 @@ async function hydrate() {
 
 const queue: RowChange[] = []
 let draining = false
+
+let sessionTenant: { userId: string; tenantId: string | null; at: number } | null = null
+async function signedInTenant(fresh = false): Promise<string | null> {
+  const userId = supabaseAuth.get().userId
+  if (!userId) return null
+  if (sessionTenant?.userId !== userId || (fresh && Date.now() - sessionTenant.at > 30_000)) {
+    const { data, error } = await supabase!.rpc('copilot_whoami')
+    const tenantId = error ? null : ((data as { tenant_id?: string | null } | null)?.tenant_id ?? null)
+    sessionTenant = { userId, tenantId, at: Date.now() }
+  }
+  return sessionTenant.tenantId
+}
 
 function payloadFor(change: RowChange, category: DataCategory) {
   const cols = SUPABASE_COLUMNS[change.table] ?? []
@@ -137,6 +153,11 @@ async function drain() {
     while (queue.length) {
       const change = queue.shift()!
       set({ pending: queue.length })
+      // Rows of another tenant (such as the public site's customer chat while a broker is signed in) stay in browser
+      // storage: row-level security only accepts the signed-in brokerage's rows.
+      const rowTenant = typeof change.row.tenant_id === 'string' ? change.row.tenant_id : null
+      const own = await signedInTenant()
+      if (own && rowTenant && rowTenant !== own && (await signedInTenant(true)) !== rowTenant) continue
       const category = dataCategory.get()
       const t = change.table as string
       const req =

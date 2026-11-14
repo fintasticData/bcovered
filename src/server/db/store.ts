@@ -147,10 +147,14 @@ export const db = {
     }
   },
 
-  /** Replaces whole tables with rows loaded from the database, without reporting them as changes. */
-  hydrate(next: Partial<Record<TableName, Record<string, unknown>[]>>) {
+  /** Replaces whole tables with rows loaded from the database, without reporting them as changes. Existing rows that
+   *  `keep` accepts (rows the database never returns to this login) stay alongside the loaded ones. */
+  hydrate(next: Partial<Record<TableName, Record<string, unknown>[]>>, keep?: (row: Record<string, unknown>) => boolean) {
+    const all = tables as unknown as Record<string, Array<Record<string, unknown>>>
     for (const [table, rows] of Object.entries(next) as Array<[TableName, Record<string, unknown>[]]>) {
-      ;(tables as unknown as Record<string, unknown[]>)[table] = rows
+      const loaded = new Set(rows.map((r) => r.id))
+      const kept = keep ? (all[table] ?? []).filter((r) => !loaded.has(r.id) && keep(r)) : []
+      all[table] = [...rows, ...kept]
       markChanged(table)
     }
   },
