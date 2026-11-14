@@ -61,9 +61,9 @@ export function TableStatus({ status }: { status: keyof typeof TABLE_TONE }) {
   return <Badge tone={TABLE_TONE[status]}>{status === 'carried' ? 'Carried over' : status === 'new' ? 'New' : 'Reshaped'}</Badge>
 }
 
-export function Kpi({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: 'warning' | 'danger' }) {
+export function Kpi({ label, value, hint, tone, className }: { label: string; value: ReactNode; hint?: string; tone?: 'warning' | 'danger'; className?: string }) {
   return (
-    <div className="rounded-xl border border-navy-800/10 bg-white p-3">
+    <div className={cn('rounded-xl border border-navy-800/10 bg-white p-3', className)}>
       <p className="text-[11px] font-medium text-navy-500">{label}</p>
       <p className={cn('mt-0.5 text-xl font-semibold text-navy-900', tone === 'warning' && 'text-amber-700', tone === 'danger' && 'text-red-700')}>{value}</p>
       {hint && <p className="mt-0.5 text-[11px] text-navy-600">{hint}</p>}

@@ -85,7 +85,7 @@ export const ROLES = [
   {
     role: 'Manager',
     who: 'Naledi Mokoena',
-    can: 'Everything a broker can do, for oversight of the team’s pipeline, plus the Systems area: database and ERD, agents and copilots, workflows and the audit trail.',
+    can: 'Everything a broker can do, for oversight of the team’s pipeline, plus the Systems area: the live database ERD, Edge Functions, the target schema, agents and copilots, workflows and the audit trail.',
     home: { to: '/broker/systems', label: 'Systems overview' },
   },
   {
@@ -260,7 +260,7 @@ export const ACCESS_MATRIX: AccessRow[] = [
     },
   },
   {
-    area: 'Systems: database, agents, workflows and audit',
+    area: 'Systems: live database, Edge Functions, agents, workflows and audit',
     link: { to: '/broker/systems', label: 'Systems overview' },
     access: { visitor: NONE, customer: NONE, business: NONE, broker: NONE, manager: FULL, agent: NONE },
   },
@@ -516,6 +516,27 @@ export const CAPABILITIES: Capability[] = [
       { to: '/brokers/join', label: 'Join as a broker' },
       { to: '/platform/onboarding', label: 'Onboarding queue' },
       { to: '/broker/imports/client-book', label: 'Client-book import' },
+    ],
+  },
+  {
+    area: 'Systems: live database, ERD and Edge Functions',
+    audience: 'Manager, admin',
+    summary:
+      'How the platform is built: the tables in the bcovered Supabase project as an ERD by area, every Edge Function and what it reaches, and the normalised target schema it is moving towards.',
+    can: [
+      'Live ERD: 121 tables by area with their foreign keys; click a table for columns, keys, row-level security policies and row count',
+      'Show or hide the created_by / decided_by style links to app_users; copy the Mermaid source of any diagram',
+      'Live tables: search by table or column, filter by area or empty tables, jump between referencing tables',
+      'Edge Functions: copilot-agent, bcovered-mcp, fal-ai and the disabled seed-loader, with a flow diagram, routes, access, secret names, database functions, tables and the screens that call them',
+      'Target ERD and tables: the planned schema, which target tables are not created yet, and the tables behind every screen',
+      'Ask the Systems Copilot “Show the live database ERD” or “What does copilot-agent do?” to open the matching view',
+    ],
+    status: 'live',
+    links: [
+      { to: '/broker/systems/database', label: 'Live ERD' },
+      { to: '/broker/systems/database?view=live_tables', label: 'Live tables' },
+      { to: '/broker/systems/database?view=functions', label: 'Edge Functions' },
+      { to: '/broker/systems/database?view=erd', label: 'Target ERD' },
     ],
   },
   {

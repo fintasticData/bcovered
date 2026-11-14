@@ -46,6 +46,46 @@ export const KIND_LABEL: Record<UpdateKind, string> = {
 /** Newest first. The pinned thread is the standing overview of everything in the current build. */
 export const UPDATE_THREADS: UpdateThread[] = [
   {
+    id: 'systems-live-erd',
+    date: '2026-11-14T17:45:00+02:00',
+    version: 'v1.4',
+    title: 'Systems: live database ERD and Edge Functions',
+    summary:
+      'Systems > Database now opens on what is really in the bcovered Supabase project: an ERD of all 121 tables by area, every table’s columns and security, and the four deployed Edge Functions with how screens reach the database through them.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Live ERD and live tables',
+        body: 'The ERD is drawn from a snapshot of the bcovered database: 121 tables, 337 foreign keys and 520 row-level security policies. Pick an area, click a table to open its columns, keys, policies and row count, and see which target tables are not created yet.',
+        points: [
+          'Links to app_users (created by, decided by and similar) are hidden by default and can be shown',
+          'Live tables can be searched by table or column and filtered to empty tables',
+          'Target tables show whether they exist in bcovered and link to the live table',
+          'Refresh the snapshot after a migration with npm run db:schema',
+        ],
+        links: [
+          { to: '/broker/systems/database', label: 'Live ERD' },
+          { to: '/broker/systems/database?view=live_tables', label: 'Live tables' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Edge Functions in place',
+        body: 'copilot-agent, bcovered-mcp and fal-ai are active; seed-loader is deployed but disabled. Each has its routes, access, secret names, database functions, the tables it reaches and the screens that call it, with a flow diagram from screen to table.',
+        links: [{ to: '/broker/systems/database?view=functions', label: 'Edge Functions' }],
+      },
+      {
+        kind: 'improved',
+        area: 'platform',
+        title: 'Systems catalogue brought up to date',
+        body: 'The catalogue now reflects migrations up to 0024, the fal.ai key being set, and the disabled seed-loader. The Systems Copilot answers “Show the live database ERD” and “What does copilot-agent do?”.',
+        links: [{ to: '/broker/systems', label: 'Systems overview' }],
+      },
+    ],
+  },
+  {
     id: 'database-copilots',
     date: '2026-11-14T03:30:00+02:00',
     version: 'v1.3',

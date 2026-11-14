@@ -1,0 +1,121 @@
+// Writes src/server/systems/liveSchema.generated.ts: every public table in the bcovered project with its columns,
+// row-level security policy count and row count, the foreign keys between them and the recorded migrations.
+// The Systems > Database > Live ERD view draws from it.
+//   npm run db:schema
+// Uses SUPABASE_DB_URL (pg) when it is a valid connection string; otherwise the Supabase Management API with
+// SUPABASE_ACCESS_TOKEN (a personal access token from supabase.com/dashboard/account/tokens).
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const PROJECT = { project: 'bcovered', ref: 'cgwgmzpcrvimoqaxgoop', region: 'eu-west-1' }
+
+const TABLES_SQL = `with t as (select c.oid, c.relname from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r'),
+cols as (select t.relname, a.attnum, a.attname || ' ' || replace(regexp_replace(replace(replace(replace(replace(replace(replace(
+  format_type(a.atttypid,a.atttypmod),'timestamp with time zone','timestamptz'),'timestamp without time zone','timestamp'),
+  'character varying','varchar'),'double precision','float8'),'boolean','bool'),'integer','int'),'\\(.*?\\)','','g'),' ','_')
+  || case when exists(select 1 from pg_constraint p where p.conrelid=t.oid and p.contype='p' and a.attnum=any(p.conkey)) then ' PK' else '' end as d
+  from t join pg_attribute a on a.attrelid=t.oid where a.attnum>0 and not a.attisdropped)
+select t.relname as name,
+  (select count(*) from pg_policies p where p.schemaname='public' and p.tablename=t.relname)::int as policies,
+  (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from public.%I', t.relname), false, true, '')))[1]::text::int as rows,
+  (select string_agg(d, ',' order by attnum) from cols where cols.relname=t.relname) as columns
+from t order by t.relname`
+
+const FKS_SQL = `with fk as (select c.conrelid, c.confrelid,
+  (select string_agg(a.attname, '+' order by k.ord) from unnest(c.conkey) with ordinality k(attnum, ord)
+     join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum where a.attname not in ('tenant_id','data_category')) as cols,
+  (select bool_or(not a.attnotnull) from unnest(c.conkey) k(attnum)
+     join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum where a.attname not in ('tenant_id','data_category')) as opt
+  from pg_constraint c where c.contype='f' and c.connamespace='public'::regnamespace)
+select distinct format('%s.%s>%s%s', replace(conrelid::regclass::text,'public.',''), cols, replace(confrelid::regclass::text,'public.',''),
+  case when opt then '?' else '' end) as fk
+from fk where cols is not null order by 1`
+
+const MIGRATIONS_SQL = `select name from supabase_migrations.schema_migrations order by version`
+
+function envValue(name) {
+  if (process.env[name]) return process.env[name]
+  for (const file of ['.env.local', '.env']) {
+    const p = resolve(root, file)
+    if (!existsSync(p)) continue
+    const line = readFileSync(p, 'utf8').split(/\r?\n/).find((l) => l.startsWith(`${name}=`))
+    if (line) return line.slice(name.length + 1).trim()
+  }
+  return null
+}
+
+async function viaPg(url, queries) {
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
+  await client.connect()
+  try {
+    const out = []
+    for (const q of queries) out.push((await client.query(q)).rows)
+    return out
+  } finally {
+    await client.end()
+  }
+}
+
+async function viaManagementApi(token, queries) {
+  const out = []
+  for (const query of queries) {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT.ref}/database/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+    if (!res.ok) throw new Error(`Management API ${res.status}: ${await res.text()}`)
+    out.push(await res.json())
+  }
+  return out
+}
+
+const dbUrl = envValue('SUPABASE_DB_URL')
+const validUrl = (() => {
+  try {
+    return Boolean(dbUrl && new URL(dbUrl).hostname && !dbUrl.includes('<'))
+  } catch {
+    return false
+  }
+})()
+const token = envValue('SUPABASE_ACCESS_TOKEN')
+if (!validUrl && !token) {
+  console.error('Set SUPABASE_DB_URL (session pooler URI) or SUPABASE_ACCESS_TOKEN in .env.local, then run again.')
+  process.exit(1)
+}
+
+const queries = [TABLES_SQL, FKS_SQL, MIGRATIONS_SQL]
+const [tables, fks, migrations] = validUrl ? await viaPg(dbUrl, queries) : await viaManagementApi(token, queries)
+
+const quote = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+const fkLines = []
+for (let i = 0; i < fks.length; i += 3) fkLines.push(fks.slice(i, i + 3).map((r) => r.fk).join(' '))
+
+const body = [
+  '// Generated by scripts/gen-supabase-schema.mjs from the bcovered database (public schema). Do not edit by hand.',
+  `export const LIVE_SNAPSHOT = { project: ${quote(PROJECT.project)}, ref: ${quote(PROJECT.ref)}, region: ${quote(PROJECT.region)}, taken_at: ${quote(new Date().toISOString())} } as const`,
+  '',
+  "/** [table, row-level security policies, rows, 'column type[ PK],…'] */",
+  'export const LIVE_TABLE_ROWS: ReadonlyArray<readonly [string, number, number, string]> = [',
+  ...tables.map((t) => `  [${quote(t.name)},${Number(t.policies)},${Number(t.rows)},${quote(t.columns)}],`),
+  ']',
+  '',
+  "/** 'table.column>referenced_table', ? when the column is nullable. Tenant and Sample / Live key parts are left out. */",
+  'export const LIVE_FOREIGN_KEYS: readonly string[] = `',
+  ...fkLines,
+  '`',
+  '  .split(/\\s+/)',
+  '  .filter(Boolean)',
+  '',
+  '/** Migrations recorded in supabase_migrations.schema_migrations, oldest first. */',
+  'export const LIVE_MIGRATIONS: readonly string[] = [',
+  ...migrations.map((m) => `  ${quote(m.name)},`),
+  ']',
+  '',
+].join('\n')
+
+writeFileSync(resolve(root, 'src/server/systems/liveSchema.generated.ts'), body)
+console.log(`Wrote ${tables.length} tables, ${fks.length} foreign keys and ${migrations.length} migrations.`)

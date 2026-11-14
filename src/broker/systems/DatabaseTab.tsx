@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, Check, Copy, Database, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, Copy, Database } from 'lucide-react'
 import type { DatabaseView, SystemsCatalogue } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import type { DomainKey, PlannedTable } from '@/server/systems/plannedSchema'
 import { AREA_LABEL, type Screen, type ScreenArea } from '@/server/systems/screens'
 import { cn } from '@/lib/utils'
 import { ErdDiagram } from './ErdDiagram'
+import { FunctionsView, LiveErdView, LiveTablesView } from './LiveDatabaseViews'
 import { Chip, Kpi, SectionTitle, TableStatus, focusRing, hasParams, useFocusedItem } from './shared'
 
 const STORAGE_LABEL: Record<Screen['current'], { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -20,41 +21,57 @@ const STORAGE_LABEL: Record<Screen['current'], { label: string; tone: 'success' 
 
 export function DatabaseTab({ cat }: { cat: SystemsCatalogue }) {
   const [params, setParams] = useSearchParams()
-  const view = (params.get('view') as DatabaseView | null) ?? 'erd'
-  const domain = (params.get('domain') as DomainKey | 'all' | null) ?? 'twin'
+  const view = (params.get('view') as DatabaseView | null) ?? 'live'
+  const domain = (params.get('domain') as DomainKey | 'all' | null) ?? (view === 'live' ? 'crm' : 'twin')
+  const l = cat.live
 
-  const go = (next: Partial<{ view: DatabaseView; domain: string; item: string | null }>) => {
+  const go = (next: Partial<{ view: DatabaseView; domain: string | null; item: string | null }>) => {
     const p = new URLSearchParams(params)
     Object.entries(next).forEach(([k, v]) => (v ? p.set(k, v) : p.delete(k)))
     setParams(p, { replace: true })
   }
   const openTable = (name: string) => go({ view: 'tables', item: name })
+  const openLiveTable = (name: string) => go({ view: 'live_tables', item: name })
+  const openFunction = (slug: string) => go({ view: 'functions', item: slug })
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-brand-500/30 bg-brand-50 p-3 text-xs text-navy-800">
+        <Database className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
         <p className="min-w-0 flex-1">
-          <strong>Target schema, not applied.</strong> The dedicated insureflow-dev instance has not been created, so nothing here exists in a database yet.
-          The app still runs on the in-browser demo tables.{' '}
-          <button type="button" className="cursor-pointer font-semibold underline" onClick={() => go({ view: 'plan', item: null })}>
+          <strong>Live in Supabase:</strong> the {l.snapshot.project} project has {l.summary.tables} tables, {l.summary.relationships} foreign keys and{' '}
+          {l.edge_functions.filter((f) => f.status === 'active').length} active Edge Functions. Target ERD and Target tables show the normalised plan;{' '}
+          {l.summary.planned_not_live} of its tables are not created yet.{' '}
+          <button type="button" className="cursor-pointer font-semibold text-brand-700 underline" onClick={() => go({ view: 'plan', item: null })}>
             See the plan
           </button>
         </p>
       </div>
 
-      <Tabs value={view} onValueChange={(v) => go({ view: v as DatabaseView, item: null })}>
+      <Tabs value={view} onValueChange={(v) => go({ view: v as DatabaseView, item: null, domain: null })}>
         <TabsList>
-          <TabsTrigger value="erd">ERD</TabsTrigger>
-          <TabsTrigger value="tables">Tables ({cat.summary.planned_tables})</TabsTrigger>
+          <TabsTrigger value="live">Live ERD</TabsTrigger>
+          <TabsTrigger value="live_tables">Live tables ({l.summary.tables})</TabsTrigger>
+          <TabsTrigger value="functions">Edge Functions ({l.edge_functions.length})</TabsTrigger>
+          <TabsTrigger value="erd">Target ERD</TabsTrigger>
+          <TabsTrigger value="tables">Target tables ({cat.summary.planned_tables})</TabsTrigger>
           <TabsTrigger value="screens">Screens → tables</TabsTrigger>
           <TabsTrigger value="plan">Plan & instance</TabsTrigger>
         </TabsList>
+        <TabsContent value="live" className="mt-4">
+          <LiveErdView cat={cat} domain={domain} onDomain={(d) => go({ domain: d })} onTable={openLiveTable} onPlanned={openTable} />
+        </TabsContent>
+        <TabsContent value="live_tables" className="mt-4">
+          <LiveTablesView cat={cat} onTable={openLiveTable} onPlanned={openTable} onFunction={openFunction} />
+        </TabsContent>
+        <TabsContent value="functions" className="mt-4">
+          <FunctionsView cat={cat} onTable={openLiveTable} />
+        </TabsContent>
         <TabsContent value="erd" className="mt-4">
           <ErdView cat={cat} domain={domain} onDomain={(d) => go({ domain: d })} onTable={openTable} />
         </TabsContent>
         <TabsContent value="tables" className="mt-4">
-          <TablesView cat={cat} onTable={openTable} />
+          <TablesView cat={cat} onTable={openTable} onLive={openLiveTable} />
         </TabsContent>
         <TabsContent value="screens" className="mt-4">
           <ScreensView cat={cat} onTable={openTable} />
@@ -114,7 +131,7 @@ function ErdView({ cat, domain, onDomain, onTable }: { cat: SystemsCatalogue; do
 
 // ---------------------------------------------------------------- tables
 
-function TablesView({ cat, onTable }: { cat: SystemsCatalogue; onTable: (t: string) => void }) {
+function TablesView({ cat, onTable, onLive }: { cat: SystemsCatalogue; onTable: (t: string) => void; onLive: (t: string) => void }) {
   const [item, setItem] = useFocusedItem()
   const [domain, setDomain] = useState<DomainKey | 'all'>('all')
   const [status, setStatus] = useState<PlannedTable['status'] | 'all'>('all')
@@ -159,7 +176,7 @@ function TablesView({ cat, onTable }: { cat: SystemsCatalogue; onTable: (t: stri
       <p className="text-[11px] text-navy-600">{rows.length} tables</p>
       <ul className="space-y-2">
         {rows.map((t) => (
-          <TableCard key={t.name} table={t} cat={cat} open={item === t.name} onToggle={() => setItem(item === t.name ? null : t.name)} onTable={onTable} />
+          <TableCard key={t.name} table={t} cat={cat} open={item === t.name} onToggle={() => setItem(item === t.name ? null : t.name)} onTable={onTable} onLive={onLive} />
         ))}
       </ul>
     </div>
@@ -172,16 +189,19 @@ function TableCard({
   open,
   onToggle,
   onTable,
+  onLive,
 }: {
   table: PlannedTable
   cat: SystemsCatalogue
   open: boolean
   onToggle: () => void
   onTable: (t: string) => void
+  onLive: (t: string) => void
 }) {
   const incoming = [...new Set(cat.schema.relationships.filter((r) => r.to === table.name).map((r) => r.from))]
   const screens = cat.screens.filter((s) => s.tables.includes(table.name))
   const demo = cat.demo_tables.filter((d) => d.planned === table.name)
+  const live = cat.live.tables.find((t) => t.name === table.name)
   const domain = cat.schema.domains.find((d) => d.key === table.domain)
 
   return (
@@ -189,13 +209,14 @@ function TableCard({
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full cursor-pointer items-start justify-between gap-3 p-3 text-left">
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 font-mono text-sm font-semibold text-navy-900">
-            {table.name}
+            <span className="min-w-0 break-all">{table.name}</span>
             <TableStatus status={table.status} />
             <Badge tone="neutral">{table.scope === 'tenant' ? 'Per tenant' : 'Platform-wide'}</Badge>
           </p>
           <p className="mt-0.5 text-xs text-navy-600">{table.purpose}</p>
+          <p className="mt-0.5 text-[11px] text-navy-500 sm:hidden">{domain?.label}</p>
         </div>
-        <span className="shrink-0 text-[11px] text-navy-500">{domain?.label}</span>
+        <span className="hidden shrink-0 text-[11px] text-navy-500 sm:block">{domain?.label}</span>
       </button>
       {open && (
         <div className="space-y-4 border-t border-navy-800/10 p-3">
@@ -296,6 +317,16 @@ function TableCard({
           )}
 
           <p className="text-[11px] text-navy-600">
+            {live ? (
+              <>
+                In bcovered now: {live.rows} rows, {live.policies} row-level security policies.{' '}
+                <button type="button" onClick={() => onLive(table.name)} className="cursor-pointer font-semibold text-brand-600 hover:underline">
+                  Open the live table
+                </button>{' '}
+              </>
+            ) : (
+              'Not created in bcovered yet. '
+            )}
             {demo.length
               ? `In the demo today: ${demo.map((d) => `${d.name} (${d.rows === null ? 'restricted' : `${d.rows} rows`})`).join(', ')}.`
               : 'No demo table yet: this table arrives with the normalised baseline.'}
@@ -388,7 +419,9 @@ function PlanView({ cat, onTable }: { cat: SystemsCatalogue; onTable: (t: string
                 <Database className="h-4 w-4 text-navy-500" /> {c.name}
               </p>
               <p className="mt-1 text-xs text-navy-600">{c.summary}</p>
-              <p className="mt-2 text-[11px] font-semibold text-navy-700">{c.status === 'planned' ? 'Not created yet' : 'Running in this browser'}</p>
+              <p className="mt-2 text-[11px] font-semibold text-navy-700">
+                {c.status === 'planned' ? 'Not created yet' : c.key === 'demo_store' ? 'Running in this browser' : 'Live in Supabase'}
+              </p>
             </li>
           ))}
         </ul>
@@ -479,13 +512,16 @@ function PlanView({ cat, onTable }: { cat: SystemsCatalogue; onTable: (t: string
       </section>
 
       <section className="rounded-xl border border-navy-800/10 bg-mist p-3 text-xs text-navy-700">
-        <p className="font-semibold text-navy-900">Migration files today (not applied)</p>
-        <ul className="mt-1 list-disc pl-4 font-mono">
-          <li>supabase/migrations/20261106_0001_insureflow_core.sql</li>
-          <li>supabase/migrations/20261106_0002_commercial_core.sql</li>
-          <li>supabase/migrations/20261107_0003_risk_twin_v2.sql</li>
+        <p className="font-semibold text-navy-900">Migrations recorded in bcovered ({cat.live.migrations.length})</p>
+        <ul className="mt-1 grid list-disc gap-x-6 pl-4 font-mono break-all sm:grid-cols-2">
+          {cat.live.migrations.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
         </ul>
-        <p className="mt-1">These are archived and replaced by the normalised baseline once insureflow-dev exists.</p>
+        <p className="mt-1">
+          Files in supabase/migrations/ before 0005 are not in the recorded history, but their tables are present. The live ERD, tables and Edge Functions come from
+          the snapshot in src/server/systems/liveSchema.generated.ts.
+        </p>
       </section>
     </div>
   )

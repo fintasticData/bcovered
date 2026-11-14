@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:status": "node scripts/db-setup.mjs status"
+    "db:status": "node scripts/db-setup.mjs status",
+    "db:schema": "node scripts/gen-supabase-schema.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",

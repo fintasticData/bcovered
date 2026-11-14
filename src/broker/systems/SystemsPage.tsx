@@ -15,7 +15,7 @@ import { TABS, tabPath } from './shared'
 
 const DESCRIPTION: Record<SystemsTab, string> = {
   overview: 'What the platform is made of today and what it moves to on Supabase.',
-  database: 'Normalised target schema, ERD by area and the tables behind every screen.',
+  database: 'Live tables, ERD and Edge Functions in the bcovered project, the normalised target schema and the tables behind every screen.',
   frontend: 'Every route, who can open it and how it stores data today.',
   backend: 'Services and every endpoint the UI calls, with where each one moves.',
   integrations: 'External services, storage, database instances and assistant adapters.',
@@ -46,7 +46,7 @@ export default function SystemsPage() {
           <div className="flex items-start justify-between gap-3 border-b border-navy-800/10 px-4 py-3">
             <div className="min-w-0 flex-1">
               <h1 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-navy-900">
-                Systems · {title} <Badge tone="warning">Demo mode · nothing applied to a database</Badge>
+                Systems · {title} <Badge tone="success">Supabase bcovered live</Badge>
               </h1>
               <p className="text-xs text-navy-600">{DESCRIPTION[tab]}</p>
             </div>

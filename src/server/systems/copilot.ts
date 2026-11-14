@@ -4,7 +4,7 @@ import type { DomainKey } from './plannedSchema'
 import { AREA_LABEL } from './screens'
 
 export type SystemsTab = 'overview' | 'database' | 'frontend' | 'backend' | 'integrations' | 'agents' | 'workflows' | 'audit'
-export type DatabaseView = 'erd' | 'tables' | 'screens' | 'plan'
+export type DatabaseView = 'live' | 'live_tables' | 'functions' | 'erd' | 'tables' | 'screens' | 'plan'
 
 /** Where an answer opens in the editor pane. */
 export interface SystemsFocus {
@@ -22,6 +22,8 @@ export interface SystemsAnswer {
 }
 
 export const SYSTEMS_SUGGESTIONS = [
+  'Show the live database ERD',
+  'Which Edge Functions are deployed?',
   'Which screens are missing tables?',
   'What tables does /claims need?',
   'Show the Risk Twin ERD',
@@ -67,7 +69,7 @@ export function answerSystemsQuestion(cat: SystemsCatalogue, question: string): 
 
   if (!q || /^(hi|hello|hey|help|what can you do)\b/.test(q)) {
     return reply(
-      `I explain how InsureFlow is put together, from the Systems catalogue only. Ask about the planned database (${s.planned_tables} tables), which tables a screen needs, agents and copilots, tools, workflows and jobs, API endpoints or integrations. Each answer opens the matching item on the right.`,
+      `I explain how InsureFlow is put together, from the Systems catalogue only. Ask about the live database (${cat.live.summary.tables} tables in bcovered), its Edge Functions, the target schema (${s.planned_tables} tables), which tables a screen needs, agents and copilots, tools, workflows and jobs, API endpoints or integrations. Each answer opens the matching item on the right.`,
       { tab: 'overview', label: 'Systems overview' },
       SYSTEMS_SUGGESTIONS,
     )
@@ -81,9 +83,37 @@ export function answerSystemsQuestion(cat: SystemsCatalogue, question: string): 
     )
   }
 
+  const fn = cat.live.edge_functions.find((f) => q.includes(f.slug))
+  if (fn || /edge ?functions?|deno/.test(q)) {
+    if (fn) {
+      const touches = fn.tables.length ? ` It reaches ${fn.tables.length} tables through ${fn.db_functions.length} database functions.` : ''
+      return reply(
+        `${fn.slug} (version ${fn.version}, ${fn.status}${fn.verify_jwt ? ', JWT checked by Supabase' : ', checks the user itself'}): ${fn.summary}${touches}${fn.note ? `\n\n${fn.note}` : ''}`,
+        { tab: 'database', view: 'functions', item: fn.slug, label: fn.slug },
+      )
+    }
+    return reply(
+      `${cat.live.edge_functions.length} Edge Functions are deployed to bcovered:\n\n${cat.live.edge_functions.map((f) => `• ${f.slug} (v${f.version}, ${f.status}): ${f.summary}`).join('\n')}`,
+      { tab: 'database', view: 'functions', label: 'Edge Functions' },
+    )
+  }
+
+  if (/\b(live|deployed|actual|real|in supabase|bcovered)\b/.test(q) && /erd|diagram|schema|database|tables|data model/.test(q)) {
+    const l = cat.live.summary
+    const domain = DOMAIN_ALIASES.find(([re]) => re.test(q.replace(/\b(live|database|supabase)\b/g, '')))?.[1]
+    const d = domain ? cat.schema.domains.find((x) => x.key === domain) : undefined
+    const count = d ? cat.live.tables.filter((t) => t.domain === d.key).length : l.tables
+    return reply(
+      d
+        ? `${d.label} in the live database: ${count} tables. Lines are foreign keys; click a table to open its columns, policies and row count.`
+        : `The bcovered database has ${l.tables} tables, ${l.columns} columns and ${l.relationships} foreign keys, with ${l.policies} row-level security policies (every table has row-level security on). ${l.empty_tables} tables are still empty, ${l.legacy_tables} are legacy Risk Twin tables the target merges, and ${l.planned_not_live} target tables are not created yet.`,
+      { tab: 'database', view: 'live', domain: d?.key ?? 'all', label: d ? `${d.label} · live ERD` : 'Live ERD' },
+    )
+  }
+
   if (/instance|create (the )?(database|project)|supabase project|set ?up (the )?database|mcp|aivoortrekker|insureflow-dev/.test(q)) {
     return reply(
-      `The bcovered Supabase project (cgwgmzpcrvimoqaxgoop) is live: migrations 0001–0018 are applied, Sample data is loaded, and the bcovered-mcp and copilot-agent Edge Functions serve AR, Ava and Russ. Remaining steps for production:\n\n${cat.instance_steps.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\nNever use the aivoortrekker project for InsureFlow.`,
+      `The bcovered Supabase project (${cat.live.snapshot.ref}) is live: ${cat.live.summary.tables} tables, migrations up to ${cat.live.migrations.at(-1)} applied, Sample data loaded, and the bcovered-mcp and copilot-agent Edge Functions serve AR, Ava and Russ. Remaining steps for production:\n\n${cat.instance_steps.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\nNever use the aivoortrekker project for InsureFlow.`,
       { tab: 'database', view: 'plan', label: 'Database plan and instance' },
     )
   }
@@ -137,8 +167,10 @@ export function answerSystemsQuestion(cat: SystemsCatalogue, question: string): 
   if (table) {
     const incoming = cat.schema.relationships.filter((r) => r.to === table.name).map((r) => r.from)
     const used = cat.screens.filter((x) => x.tables.includes(table.name)).map((x) => x.route)
+    const live = cat.live.tables.find((t) => t.name === table.name)
+    const liveNote = live ? `In bcovered now: ${live.rows} rows, ${live.policies} row-level security policies.` : 'Not created in bcovered yet.'
     return reply(
-      `${table.name} (${humanise(table.status).toLowerCase()}, ${table.scope}): ${table.purpose}${table.changes?.length ? `\n\nChanges: ${table.changes.join('; ')}.` : ''}${table.replaces?.length ? `\n\nReplaces: ${table.replaces.join(', ')}.` : ''}\n\nReferenced by ${incoming.length ? list([...new Set(incoming)]) : 'no other table'}. Used on ${used.length ? list(used, 6) : 'no screen directly'}.`,
+      `${table.name} (${humanise(table.status).toLowerCase()}, ${table.scope}): ${table.purpose}${table.changes?.length ? `\n\nChanges: ${table.changes.join('; ')}.` : ''}${table.replaces?.length ? `\n\nReplaces: ${table.replaces.join(', ')}.` : ''}\n\nReferenced by ${incoming.length ? list([...new Set(incoming)]) : 'no other table'}. Used on ${used.length ? list(used, 6) : 'no screen directly'}. ${liveNote}`,
       { tab: 'database', view: 'tables', item: table.name, label: table.name },
     )
   }

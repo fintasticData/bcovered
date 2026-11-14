@@ -15,6 +15,8 @@ import {
   type Endpoint,
   type SystemComponent,
 } from './components'
+import { EDGE_FLOW_SOURCE, EDGE_FUNCTIONS, type EdgeFunctionInfo } from './edgeFunctions'
+import { LIVE_MIGRATIONS, LIVE_RELATIONSHIPS, LIVE_SNAPSHOT, LIVE_TABLES, PLANNED_NOT_LIVE, liveSummary, type LiveRelationship, type LiveTable } from './liveSchema'
 import { DOMAINS, PLANNED_TABLES, REMOVED_TABLES, erdSource, plannedFor, relationships, type Domain, type DomainKey, type PlannedTable, type Relationship } from './plannedSchema'
 import { SCREENS, type Screen } from './screens'
 
@@ -96,6 +98,17 @@ export interface SystemsCatalogue {
     removed: typeof REMOVED_TABLES
     relationships: Relationship[]
     erd: Record<DomainKey | 'all', string>
+  }
+  /** What exists in the bcovered Supabase project, from the generated snapshot. */
+  live: {
+    snapshot: typeof LIVE_SNAPSHOT
+    summary: ReturnType<typeof liveSummary>
+    tables: LiveTable[]
+    relationships: LiveRelationship[]
+    planned_not_live: typeof PLANNED_NOT_LIVE
+    migrations: readonly string[]
+    edge_functions: EdgeFunctionInfo[]
+    edge_flow: string
   }
   screens: Screen[]
   agents: AgentInfo[]
@@ -209,6 +222,16 @@ export function buildCatalogue(repo: Repo): SystemsCatalogue {
     decisions: DATABASE_DECISIONS,
     instance_steps: INSTANCE_STEPS,
     schema: { domains: DOMAINS, tables: PLANNED_TABLES, removed: REMOVED_TABLES, relationships: relationships(), erd },
+    live: {
+      snapshot: LIVE_SNAPSHOT,
+      summary: liveSummary(),
+      tables: LIVE_TABLES,
+      relationships: LIVE_RELATIONSHIPS,
+      planned_not_live: PLANNED_NOT_LIVE,
+      migrations: LIVE_MIGRATIONS,
+      edge_functions: EDGE_FUNCTIONS,
+      edge_flow: EDGE_FLOW_SOURCE,
+    },
     screens: SCREENS,
     agents,
     tools,

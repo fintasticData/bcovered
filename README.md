@@ -65,8 +65,9 @@ signed-in broker.
 
 **How it fits together**
 
-- `supabase/functions/bcovered-mcp`: the MCP server (Streamable HTTP, mcp-lite). It offers 16 jobs: shared, `ava.*` and `russ.*`.
-  Each job calls a `copilot_*` Postgres function as the caller. No service-role key is used.
+- `supabase/functions/bcovered-mcp`: the MCP server (Streamable HTTP, mcp-lite). It offers 44 jobs: shared, `ava.*`, `russ.*`,
+  the sales book and the franchise channel. Each job calls a `copilot_*`, `sales_*` or `franchise_*` Postgres function as the
+  caller. No service-role key is used.
 - `supabase/functions/copilot-agent`: `/turn`, `/search`, `/jobs` and `/health`. It discovers jobs with `tools/list` and calls
   them with `tools/call`. The rule planner is `supabase/functions/copilot-agent/planner.ts`, which is shared with the
   frontend types and tested in `src/server/__tests__/copilotPlanner.test.ts`.
@@ -89,7 +90,9 @@ signed-in broker.
 - `node scripts/seed-sample.mjs [--load]`: builds or loads `supabase/seed/sample_fixtures.sql` and the demo logins.
 - `node scripts/copilot-smoke.mjs all`: end-to-end checks through RPC, MCP and the agent.
 - `node scripts/verify-sync.mjs`: confirms every synced table can be read and written under row-level security.
-- `node scripts/gen-supabase-columns.mjs`: regenerates the column map used by the sync adapter.
+- `node scripts/gen-supabase-columns.mjs`: regenerates the column map used by the sync adapter. Needs `SUPABASE_DB_URL`
+  now that the `seed-loader` fallback is disabled.
+- `npm run db:schema`: regenerates the live schema snapshot behind Systems > Database (Live ERD, Live tables).
 
 **Still to configure for Live**
 
@@ -106,13 +109,28 @@ Database, frontend, backend and APIs, integrations, agents and copilots, workflo
 | Where | What to check |
 | --- | --- |
 | `/broker/systems` | Components and status, next steps |
-| `/broker/systems/database` | Normalised target schema: ERD per area, tables, screens → tables, plan and instance steps |
+| `/broker/systems/database` (Live ERD, default) | ERD of the tables in the `bcovered` project, by area, with foreign keys; click a table to open it |
+| `/broker/systems/database?view=live_tables` | Every live table: columns, types, keys, row-level security policy count, rows, referenced by, Edge Functions that reach it |
+| `/broker/systems/database?view=functions` | Edge Functions: flow diagram, routes, access, secrets (names only), database functions, tables, callers |
+| `/broker/systems/database?view=erd` | Normalised target schema: ERD per area, tables, screens → tables, plan and instance steps |
 | `/broker/systems/agents` | Agents, copilots, tools and usage in this browser |
 
+**Live database and Edge Functions.** The live views read a snapshot of the `bcovered` project in
+`src/server/systems/liveSchema.generated.ts` (121 tables, 337 foreign keys, 520 row-level security policies, 21 recorded
+migrations). Refresh it after a migration with `npm run db:schema` (needs `SUPABASE_DB_URL` or `SUPABASE_ACCESS_TOKEN` in
+`.env.local`). The Edge Function catalogue is `src/server/systems/edgeFunctions.ts`; update its version numbers after a deploy.
+
+| Edge Function | Status | What it does |
+| --- | --- | --- |
+| `copilot-agent` | Active, JWT checked | AR, Ava and Russ turns, @ search, / jobs menu, health. MCP client of `bcovered-mcp`; logs to `copilot_actions` |
+| `bcovered-mcp` | Active, JWT checked | MCP server with 44 jobs; each runs a `copilot_*`, `sales_*` or `franchise_*` Postgres function as the caller |
+| `fal-ai` | Active, checks the user itself | fal.ai chat, Ava’s public answers, intake wording, images, prices. `BCOVERED_FAL_API_KEY` is set |
+| `seed-loader` | Disabled (410) | Loaded the Sample seed; deployed only, no source here. Delete when no longer needed |
+
 The target schema lives in `src/server/systems/plannedSchema.ts` and the route map in `src/server/systems/screens.ts`;
-`src/server/__tests__/systems.test.ts` fails if a route, table or demo table falls out of alignment. Nothing is applied until the
-dedicated `insureflow-dev` project exists. Decision recorded: the frontend will read Supabase directly under row-level security,
-with consequential writes in database functions and agents in Edge Functions, replacing the FastAPI plan below.
+`src/server/__tests__/systems.test.ts` fails if a route, table, demo table, live table or Edge Function falls out of alignment.
+30 target tables are not created in `bcovered` yet (listed under each area of the Live ERD). Decision recorded: the frontend
+reads Supabase directly under row-level security, with consequential writes in database functions and agents in Edge Functions.
 
 ## Life, Benefits, Funds and Controls (Option A brief and Addendum 01)
 

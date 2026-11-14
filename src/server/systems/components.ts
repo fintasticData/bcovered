@@ -100,26 +100,23 @@ export const COMPONENTS: SystemComponent[] = [
     key: 'fal',
     name: 'fal.ai LLM',
     kind: 'external_api',
-    status: 'not_configured',
+    status: 'live',
     environment: 'dev',
-    summary: 'Language model provider for the agents. Must run server-side so the key never reaches the browser.',
+    summary: 'Language model adapter for Ava (VITE_ASSISTANT_ADAPTER=fal). Calls go through the fal-ai Edge Function, so the key never reaches the browser.',
     location: 'src/server/llm/fal.ts',
-    dependsOn: [],
-    secretRef: 'FAL_KEY',
-    nextStep: 'Set FAL_KEY as an Edge Function secret in insureflow-dev.',
+    dependsOn: ['fal_api'],
   },
   {
     key: 'fal_api',
     name: 'fal.ai API (BCovered key)',
     kind: 'external_api',
-    status: 'not_configured',
+    status: 'live',
     environment: 'dev',
     summary:
-      'fal-ai Edge Function: language model chat, intake reply wording, queued image generation and editing, and live prices. Signed-in users only; image models are allow-listed. Falls back to FAL_KEY when the BCovered key is not set.',
+      'fal-ai Edge Function: language model chat, Ava’s public answers, intake reply wording, queued image generation and editing, and live prices. BCOVERED_FAL_API_KEY is set; image models are allow-listed. Falls back to FAL_KEY when the BCovered key is not set.',
     location: 'supabase/functions/fal-ai, src/lib/fal/api.ts',
-    dependsOn: ['fal'],
+    dependsOn: ['supabase_functions'],
     secretRef: 'BCOVERED_FAL_API_KEY',
-    nextStep: 'Set BCOVERED_FAL_API_KEY (fal API preset) as an Edge Function secret in the bcovered project, then set VITE_ASSISTANT_ADAPTER=fal to let Ava use it.',
   },
   {
     key: 'demo_insurer_adapter',
@@ -181,7 +178,7 @@ export const COMPONENTS: SystemComponent[] = [
     status: 'live',
     environment: 'dev',
     summary:
-      'Migrations 0001–0018 applied. Sample data loaded from the demo seed; Live is empty until real clients are imported. Sample / Live, client, account, policy, note and task numbers, tenant and staff row-level security are enforced in the database. Never use the aivoortrekker project.',
+      '121 tables with row-level security on every one (520 policies), migrations up to 0024 (FAIS communication retention) applied, including the broker sales book and the franchise channel. Sample data loaded from the demo seed; Live is empty until real clients are imported. Sample / Live, client, account, policy, note and task numbers, tenant and staff row-level security are enforced in the database. Never use the aivoortrekker project.',
     location: 'Supabase dashboard · supabase/migrations/',
     dependsOn: [],
     secretRef: 'VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY',
@@ -194,9 +191,10 @@ export const COMPONENTS: SystemComponent[] = [
     status: 'live',
     environment: 'dev',
     summary:
-      'bcovered-mcp: MCP server exposing the AR, Ava and Russ jobs (44 tools: records and lines, the sales book and the franchise channel) as the signed-in broker. copilot-agent: rule planner and MCP client for copilot turns, typeahead search, the jobs menu and health. fal-ai: fal.ai language model and image calls with the fal key held server-side.',
+      'bcovered-mcp: MCP server exposing the AR, Ava and Russ jobs (44 tools: records and lines, the sales book and the franchise channel) as the signed-in broker. copilot-agent: rule planner and MCP client for copilot turns, typeahead search, the jobs menu and health. fal-ai: fal.ai language model and image calls with the fal key held server-side. seed-loader: deployed but disabled (returns 410). See Database > Edge Functions.',
     location: 'supabase/functions/bcovered-mcp, supabase/functions/copilot-agent, supabase/functions/fal-ai',
     dependsOn: ['supabase_dev'],
+    nextStep: 'Delete seed-loader once nothing needs it; scripts/gen-supabase-columns.mjs falls back to it and now needs SUPABASE_DB_URL instead.',
   },
   {
     key: 'supabase_storage',
@@ -379,7 +377,7 @@ export const AGENT_KIND: Record<string, AgentKind> = {
 
 /** Decisions recorded with the user that shape the database build. */
 export const DATABASE_DECISIONS: Array<{ title: string; detail: string }> = [
-  { title: 'Clean normalised baseline', detail: 'Migrations 0001–0003 are archived and replaced by one migration per area. None of them have been applied anywhere.' },
+  { title: 'Clean normalised baseline', detail: 'Migrations 0001–0003 are archived and replaced by one migration per area, starting with 0003b.' },
   { title: 'insureflow-dev first, insureflow-prod at cutover', detail: 'A dedicated Supabase project. The aivoortrekker project is never used for InsureFlow.' },
   {
     title: 'Frontend reads Supabase directly',
@@ -389,7 +387,7 @@ export const DATABASE_DECISIONS: Array<{ title: string; detail: string }> = [
   {
     title: 'bcovered project is live for the copilots and synced modules',
     detail:
-      'Migrations 0001–0018 are applied to bcovered. AR, Ava and Russ run MCP jobs against it; broker modules load and write through to it under row-level security. Onboarding and identity stay in the browser for now.',
+      'Migrations up to 0024 are applied to bcovered (121 tables). AR, Ava and Russ run MCP jobs against it; broker modules, the sales book and the franchise channel load and write through to it under row-level security. Onboarding and identity stay in the browser for now.',
   },
   {
     title: 'Sample and Live are separated by the database',
@@ -400,8 +398,8 @@ export const DATABASE_DECISIONS: Array<{ title: string; detail: string }> = [
 
 /** Steps to create the separate database instance. */
 export const INSTANCE_STEPS: string[] = [
-  'Done: bcovered project (eu-west-1) created; migrations 0001–0018 applied via the Supabase MCP; Sample data loaded with scripts/seed-sample.mjs; demo staff logins created.',
-  'Done: Edge Functions bcovered-mcp (MCP server) and copilot-agent (rule planner and MCP client) deployed with JWT verification.',
+  'Done: bcovered project (eu-west-1) created; migrations up to 0024 applied via the Supabase MCP; Sample data loaded with scripts/seed-sample.mjs; demo staff logins created.',
+  'Done: Edge Functions bcovered-mcp (MCP server) and copilot-agent (rule planner and MCP client) deployed with JWT verification; fal-ai deployed with BCOVERED_FAL_API_KEY set; seed-loader disabled.',
   'Register public.custom_access_token_hook under Authentication > Hooks. Until then app.tenant_id() and app.role() fall back to the active membership.',
   'Record the POPIA cross-border transfer basis for the EU region before Live client data is imported.',
   'Create Supabase Auth logins for real brokers, then import Live clients through the client-book import (Live category).',
