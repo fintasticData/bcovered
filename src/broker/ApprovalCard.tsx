@@ -21,9 +21,9 @@ export function ApprovalCard({
   compact?: boolean
   onDecided?: (view: ApprovalView, decision: Decision) => void
 }) {
-  const { approval, quote, customer, job, submission, risk } = view
+  const { approval, quote, customer, job, submission, risk, detail } = view
   const pack = submission?.submission.pack
-  const stale = submission ? !submission.current_pack_matches : risk ? !risk.current_matches : false
+  const stale = submission ? !submission.current_pack_matches : risk ? !risk.current_matches : detail ? !detail.current_matches : false
   const reviewed = (approval.proposed_changes ?? {}) as {
     findings?: Array<{ rank?: number; title: string; priority?: string; priority_area?: boolean; coverage_status?: string; status?: string; detail?: string }>
     actions?: Array<{ title: string; audience: string }>
@@ -94,7 +94,7 @@ export function ApprovalCard({
             </div>
             {!compact && pack.broker_summary && (
               <div>
-                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Broker Copilot summary</p>
+                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Russ summary</p>
                 <p className="mt-1 text-sm leading-relaxed text-navy-800">{pack.broker_summary}</p>
               </div>
             )}
@@ -149,6 +149,25 @@ export function ApprovalCard({
             )}
           </>
         )}
+        {detail && (
+          <>
+            <div className="rounded-xl border border-brand-500/30 bg-brand-50/60 p-3">
+              <p className="text-[11px] font-semibold tracking-wide text-brand-700 uppercase">What you are approving</p>
+              <ul className="mt-1 space-y-1 text-sm text-navy-800">
+                {(compact ? detail.lines.slice(0, 4) : detail.lines).map((l, i) => (
+                  <li key={i} className="whitespace-pre-line">
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {stale && pending && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                The record changed after this request was raised. Open it, review the latest version and request approval again.
+              </p>
+            )}
+          </>
+        )}
         {quote && (
           <p className="text-sm text-navy-800">
             <strong>{describeVehicle(vehicle)}</strong> · {formatMotorField('value', vehicle)} · {formatMotorField('cover_type', vehicle)} ·{' '}
@@ -191,7 +210,7 @@ export function ApprovalCard({
             </div>
             {!compact && (
               <div>
-                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Broker Copilot summary</p>
+                <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Russ summary</p>
                 <p className="mt-1 text-sm leading-relaxed text-navy-800">{proposal.broker_summary}</p>
               </div>
             )}
@@ -210,7 +229,7 @@ export function ApprovalCard({
             </ul>
           ) : (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-700">
-              <ShieldCheck className="h-3.5 w-3.5" /> {submission ? 'No high advisory priority exposures' : risk ? 'No critical or high findings' : 'No referral triggers found by the Risk Agent'}
+              <ShieldCheck className="h-3.5 w-3.5" /> {submission ? 'No high advisory priority exposures' : risk ? 'No critical or high findings' : detail ? 'No risk indicators raised' : 'No referral triggers found by the Risk Agent'}
             </p>
           )}
         </div>
@@ -226,6 +245,11 @@ export function ApprovalCard({
               </Link>
             </>
           )}
+          {detail?.links.map((l) => (
+            <Link key={l.to} to={l.to} className="inline-flex items-center gap-1 font-semibold text-brand-600">
+              {l.label} <ExternalLink className="h-3 w-3" />
+            </Link>
+          ))}
           {risk && (
             <Link to={`/broker/commercial/risk-twins/${risk.profile_id}?tab=${risk.kind === 'assessment' ? 'assessment' : 'actions'}`} className="inline-flex items-center gap-1 font-semibold text-brand-600">
               Open the Twin workspace <ExternalLink className="h-3 w-3" />
@@ -278,7 +302,8 @@ export function ApprovalCard({
           {(noteError || decide.error) && <p className="text-xs font-medium text-red-600">{noteError ?? decide.error?.message}</p>}
           <div className="flex flex-wrap gap-2">
             <Button variant="accent" onClick={() => submit('approved')} disabled={decide.isPending || stale}>
-              {decide.isPending ? <Loader2 className="animate-spin" /> : <Check />} {submission ? 'Approve pack' : risk?.kind === 'assessment' ? 'Sign off assessment' : risk ? 'Accept findings' : 'Approve and release'}
+              {decide.isPending ? <Loader2 className="animate-spin" /> : <Check />}{' '}
+              {submission ? 'Approve pack' : risk?.kind === 'assessment' ? 'Sign off assessment' : risk ? 'Accept findings' : detail ? (approval.approval_type === 'record_of_advice_signoff' ? 'Sign off advice' : 'Approve') : 'Approve and release'}
             </Button>
             <Button variant="outline" onClick={() => submit('changes_requested')} disabled={decide.isPending}>
               <MessageSquareWarning /> Request changes
@@ -292,7 +317,9 @@ export function ApprovalCard({
               ? 'Your decision is recorded with your identity and time. Approving marks the pack ready for market; it does not send anything to an insurer.'
               : risk
                 ? 'Your decision is recorded with your identity and time. Signing off makes these findings broker-approved conclusions in the report; it does not confirm any cover.'
-                : 'Your decision is recorded with your identity and time. The release tool re-checks this approval and the payload hash before anything reaches the customer.'}
+                : detail
+                  ? 'Your decision is recorded with your identity and time, pinned to this exact payload. Nothing is sent to an insurer, administrator or bank by approving.'
+                  : 'Your decision is recorded with your identity and time. The release tool re-checks this approval and the payload hash before anything reaches the customer.'}
           </p>
         </footer>
       ) : (

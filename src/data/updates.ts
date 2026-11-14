@@ -46,6 +46,45 @@ export const KIND_LABEL: Record<UpdateKind, string> = {
 /** Newest first. The pinned thread is the standing overview of everything in the current build. */
 export const UPDATE_THREADS: UpdateThread[] = [
   {
+    id: 'database-copilots',
+    date: '2026-11-14T03:30:00+02:00',
+    version: 'v1.3',
+    title: 'AR, Ava and Russ now work on the B-Covered database',
+    summary:
+      'The broker area runs on the bcovered Supabase project. Ava (people) and Russ (business) run MCP jobs against real tables, AR routes mixed requests, and Sample and Live records are kept apart by the database.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'agents',
+        title: 'Database copilots with MCP jobs',
+        body: 'Every copilot action is a named job on the bcovered-mcp server, run as the signed-in broker. There is no language model: fixed rules plan the work and ask with choices when a name or policy is ambiguous.',
+        points: [
+          '@ suggestions by name, partial name, similar spelling or client, account and policy number, each with a Sample or Live badge',
+          '/ opens the jobs the MCP server offers',
+          'Multi-part requests report each action separately; writes return a reference, client, account and policy numbers and Open record',
+          'Retried messages replay the saved receipt instead of writing again',
+        ],
+        links: [{ to: '/broker/workspace', label: 'AR · Ava · Russ' }],
+      },
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Client and account numbers, Sample and Live',
+        body: 'Clients get CL- numbers, accounts AC-, policies PL-, notes NT- and follow-ups TK-, allocated by the database (Sample numbers carry an S). The Sample / Live switch scopes every read and write; a Sample record can never link to a Live one.',
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Policy and account screens, Ask Ava and Ask Russ',
+        body: 'Personal policies and client accounts have their own screens with notes and history. Person 360, policies and business clients open Ava or Russ with the record already selected.',
+        links: [
+          { to: '/broker/personal', label: 'Personal lines' },
+          { to: '/broker/people', label: 'People' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'platform-overview',
     date: '2026-11-07T16:00:00+02:00',
     version: 'v0.6',
@@ -160,6 +199,191 @@ export const UPDATE_THREADS: UpdateThread[] = [
           { to: '/help', label: 'Help centre' },
           { to: '/faq', label: 'FAQ' },
         ],
+      },
+    ],
+  },
+  {
+    id: 'broker-navigation',
+    date: '2026-11-11T23:00:00+02:00',
+    version: 'v1.2',
+    title: 'Broker area by line of business, one Russ workspace with lenses',
+    summary:
+      'The broker navigation now follows how a brokerage’s book is organised: short-term and long-term, each split into personal and business lines, with a consistent colour key. The four Russ workspaces are one screen with lenses, and related list screens share tabs.',
+    posts: [
+      {
+        kind: 'improved',
+        area: 'broker',
+        title: 'Navigation by term and market',
+        body: 'The sidebar starts collapsed and remembers your choice. Short-term lines carry a gold rail and long-term lines a violet rail; personal lines are marked coral and business or group lines cobalt. Every colour is backed by a text label or tooltip.',
+        points: [
+          'Leads stay in the top group because they cover every line',
+          'Short-term · Personal: personal lines and motor quotes',
+          'Short-term · Business: commercial cover, business clients, Risk Twins, submissions and cell captives',
+          'Long-term · Personal: people, life policies and investments',
+          'Long-term · Business: employers and schemes, retirement funds, transfers, governance and trustees',
+          'Each screen shows its line as a chip next to the title',
+          'Demo Studio, Help, System updates and the public site sit in one Help & demo menu',
+        ],
+        links: [{ to: '/broker', label: 'Broker overview' }],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Personal lines and commercial cover views',
+        body: 'Personal lines shows the five personal products from the public site (car, buildings, home contents, motorcycle and portable valuables) with open leads, quotes and short-term personal policies for each. Commercial cover groups every client’s potential exposures into the six public-site cover areas and their cover classes, with coverage status, the clients involved and policy sections on record.',
+        links: [
+          { to: '/broker/personal', label: 'Personal lines' },
+          { to: '/broker/commercial/cover', label: 'Commercial cover' },
+        ],
+      },
+      {
+        kind: 'improved',
+        area: 'agents',
+        title: 'One Russ workspace with General, Commercial, Life & benefits and Controls lenses',
+        body: 'Switch lens from the chips above the conversation. Each lens keeps its own conversation and only brings its own jobs into focus, so the Controls lens no longer shows an unrelated commercial approval. The old workspace addresses open the matching lens.',
+        links: [
+          { to: '/broker/workspace', label: 'Russ' },
+          { to: '/broker/workspace?lens=commercial', label: 'Russ · Commercial' },
+        ],
+      },
+      {
+        kind: 'improved',
+        area: 'broker',
+        title: 'Tabbed Controls, Brokerage settings and Life policies',
+        body: 'Imports, reconciliations and financial exceptions are tabs under Controls. Team, insurer access and client-book import are tabs under Brokerage settings. Life servicing is a tab under Life policies. The invitation form and invitation list on the Team tab are one section.',
+        links: [
+          { to: '/broker/controls/imports', label: 'Controls' },
+          { to: '/broker/settings/team', label: 'Brokerage settings' },
+          { to: '/broker/life/policies', label: 'Life policies' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'broker-onboarding',
+    date: '2026-11-10T14:00:00+02:00',
+    version: 'v1.1',
+    title: 'External broker onboarding, multi-brokerage workspaces and client-book import',
+    summary:
+      'Independent brokerages can now join B-Covered by invitation or application, set up with Russ, be reviewed and activated by B-Covered staff, invite their team, import their client book and enable insurers one by one. Each brokerage has its own isolated workspace. Everything runs on local, in-browser tables; the matching Supabase migrations are written but not applied.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Brokerage workspaces with server-side isolation',
+        body: 'Every brokerage’s records, documents, search results and Russ context are scoped to that brokerage in the service layer. People in more than one brokerage switch workspace explicitly.',
+        points: [
+          'Roles: owner, administrator, broker/representative, operations administrator, compliance reviewer and read-only',
+          'Read-only and compliance roles cannot write; suspended or onboarding brokerages cannot reach operational records',
+          'Two fictional brokerages (Acacia Cover Brokers and Coastline Risk Partners) demonstrate isolation',
+        ],
+        links: [
+          { to: '/brokers/join', label: 'Join as a broker' },
+          { to: '/broker/settings/team', label: 'Team' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Guided setup with Russ, and a separate review and activation',
+        body: 'Nine sections save as you go and resume where you left off. Russ explains requirements, reads labelled details from documents and suggests values you confirm. B-Covered reviewers decide each item, ask for corrections, approve, and activate in a separate step.',
+        points: [
+          'Requirements depend on brokerage type and product modules, not one fixed checklist',
+          'Internal reviewer notes are stored apart from feedback the brokerage sees',
+          'Platform approval is not regulatory authorisation',
+        ],
+        links: [
+          { to: '/onboarding', label: 'Brokerage onboarding' },
+          { to: '/platform/onboarding', label: 'Onboarding queue' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Client-book import and insurer access',
+        body: 'CSV or XLSX imports with templates, column mapping, validation, duplicates found only inside the brokerage, a transfer confirmation, row-level retry and an error report. Insurer access is configured, tested and enabled per insurer; quoting only uses enabled insurers.',
+        points: ['Original references and the import batch are kept on every record', 'Credentials are stored server-side and shown only as a masked hint', 'Insurers without an integration are labelled unsupported'],
+        links: [
+          { to: '/broker/imports/client-book', label: 'Client-book import' },
+          { to: '/broker/settings/insurers', label: 'Insurer access' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'life-benefits-controls',
+    date: '2026-11-08T17:30:00+02:00',
+    version: 'v1.0',
+    title: 'Russ, Life & Benefits, financial controls, funds, investments and specialist reporting',
+    summary:
+      'B-Covered’s assistant is now Russ (Russell). This release adds individual life advice, group risk and retirement fund oversight, a shared financial controls engine, investment oversight, Section 14 transfers, cell captive reporting, trustee packs, forensic investigations and an executive dashboard. Everything runs on synthetic data in this browser; nothing is applied to a database and no insurer, administrator or bank is connected.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'agents',
+        title: 'Russ coordinates every specialist agent',
+        body: 'Russ is the single staff assistant. The commercial and systems copilots, and the new Life Sales, Underwriting, Servicing, Group Membership, Contribution, Investment, Transfer, Cell Reporting, Compliance and Growth agents, work under Russ through typed tools and approvals.',
+        points: ['Russ prepares; a licensed person approves', 'Russ never gives advice, authorises payments or sends anything to a provider', 'Ava stays the customer-facing assistant'],
+        links: [
+          { to: '/broker/workspace', label: 'Russ' },
+          { to: '/broker/life', label: 'Russ · Life & Benefits' },
+          { to: '/broker/controls', label: 'Russ · Controls' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Individual life: needs analysis to issued policy',
+        body: 'One person record across every role. An authorised adviser runs a needs analysis, simulated quotes, a draft Record of Advice with Russ’s suggested wording, sign-off, application approval and underwriting follow-up. The insurer’s decision is recorded by a person and labelled as insurer-reported.',
+        points: ['FAIS categories gate advice, sign-off and application approval', 'Editing advice re-raises the sign-off for the new wording', 'Servicing finds missing beneficiaries, anniversaries, outstanding underwriting, shortfalls and missing advice records'],
+        links: [
+          { to: '/broker/people', label: 'People' },
+          { to: '/broker/life/policies', label: 'Policies' },
+          { to: '/broker/life/servicing', label: 'Servicing' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Shared financial controls engine',
+        body: 'Imports keep each file as received, validate it, match members by ID, member or employee number, and reconcile to the cent. Exceptions are classified, deduplicated and tracked; correction schedules and write-offs wait for approval; evidence is append-only.',
+        points: ['The same file is never imported twice; corrections supersede', 'Payroll vs administrator contributions, holdings, roll-forward and transfer reconciliations', 'Member changes are committed with effective dates only after approval'],
+        links: [
+          { to: '/broker/controls/imports', label: 'Imports' },
+          { to: '/broker/controls/reconciliations', label: 'Reconciliations' },
+          { to: '/broker/controls/exceptions', label: 'Financial exceptions' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Group risk, retirement funds, investments and transfers',
+        body: 'Employer 360 with schemes and participations, cover recalculated from dated scheme rules, administrator-reported two-pot balances, benefit events with broker and provider status kept apart, investment reconciliation and calculated performance, and a Section 14 transfer workspace.',
+        links: [
+          { to: '/broker/benefits/employers', label: 'Employers & schemes' },
+          { to: '/broker/funds', label: 'Retirement funds' },
+          { to: '/broker/investments', label: 'Investments' },
+          { to: '/broker/transfers', label: 'Transfers' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Cell captives, governance, investigations and the executive view',
+        body: 'Cell results from the agreement’s own terms, trustee packs labelled reported or calculated, forensic investigations that separate record-supported findings from hypotheses, and an executive dashboard that never adds premiums, contributions, assets and revenue together.',
+        links: [
+          { to: '/broker/cells', label: 'Cell captives' },
+          { to: '/broker/governance', label: 'Governance' },
+          { to: '/broker/investigations', label: 'Investigations' },
+          { to: '/broker/compliance', label: 'Compliance register' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Life, employer and cell owner portals',
+        body: 'Customers see their life cover and beneficiaries; an employer’s HR contact sees only their own employees; a cell owner sees only their own cell. Access grants enforce the separation.',
+        links: [{ to: '/demo', label: 'Demo Studio' }],
       },
     ],
   },

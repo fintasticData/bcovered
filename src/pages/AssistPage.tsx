@@ -9,6 +9,7 @@ import { ChatPanel } from '@/components/ChatPanel'
 import { Button } from '@/components/ui/button'
 import { MOTOR_FIELDS, formatMotorField } from '@/server/domain/motor'
 import { getScenario } from '@/server/demo/scenarios'
+import { getAssistantAdapter } from '@/server/llm'
 import type { IntakeState } from '@/server/llm/adapter'
 import { cn } from '@/lib/utils'
 
@@ -136,7 +137,10 @@ export default function AssistPage() {
               placeholder="e.g. I’ve just bought a Toyota Corolla"
               footerNote={
                 <>
-                  Ava runs on a deterministic demo adapter in this build. Your details are used only to prepare this comparison (POPIA).
+                  {getAssistantAdapter().id === 'fal'
+                    ? 'Ava answers general questions with an AI model; figures are rough indications, not quotes, and a licensed broker confirms cover and price.'
+                    : 'Ava runs on a deterministic demo adapter in this build.'}{' '}
+                  Your details are used only to prepare this comparison (POPIA).
                 </>
               }
             />

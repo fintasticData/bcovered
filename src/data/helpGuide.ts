@@ -16,7 +16,7 @@ export interface Capability {
 
 export const HELP_SECTIONS = [
   { id: 'start', label: 'Getting started' },
-  { id: 'roles', label: 'Who can do what' },
+  { id: 'roles', label: 'Roles and access' },
   { id: 'capabilities', label: 'Capabilities' },
   { id: 'walkthroughs', label: 'Walkthroughs' },
   { id: 'copilot', label: 'Copilot commands' },
@@ -85,12 +85,217 @@ export const ROLES = [
   {
     role: 'Manager',
     who: 'Naledi Mokoena',
-    can: 'The same broker workspace and approval rights, for oversight of the team’s pipeline.',
-    home: { to: '/broker', label: 'Broker workspace' },
+    can: 'Everything a broker can do, for oversight of the team’s pipeline, plus the Systems area: database and ERD, agents and copilots, workflows and the audit trail.',
+    home: { to: '/broker/systems', label: 'Systems overview' },
+  },
+  {
+    role: 'Brokerage team (other brokerages)',
+    who: 'Acacia Cover Brokers: Anele Mahlangu (owner), Ruan Pretorius, Fatima Essop (read-only), Sam Pillay (also Coastline). Coastline Risk Partners: Thandiwe Zulu, Marco Rossi, Grace Mokoena, Sipho Khumalo. Highveld Advisory: Kagiso Molefe (onboarding)',
+    can: 'Work only in their own brokerage’s workspace, by role. Brokerages still onboarding land in guided setup with Russ; people in two brokerages switch workspace explicitly.',
+    home: { to: '/onboarding', label: 'Brokerage onboarding' },
+  },
+  {
+    role: 'B-Covered platform staff',
+    who: 'Nomvula Khoza (platform administrator), Pieter Botha (onboarding reviewer)',
+    can: 'Invite brokerages, review applications item by item, request corrections, approve, activate separately, and suspend or reinstate. They see onboarding records only, never a brokerage’s clients or policies.',
+    home: { to: '/platform/onboarding', label: 'Onboarding queue' },
   },
 ]
 
+export type AccessLevel = 'full' | 'view' | 'limited' | 'prepares' | 'none'
+
+export const ACCESS_LEVEL_LABEL: Record<AccessLevel, string> = {
+  full: 'Full use',
+  view: 'Sees results',
+  limited: 'Partial',
+  prepares: 'Prepares only',
+  none: 'No access',
+}
+
+export const ACCESS_LEVEL_HINT: Record<AccessLevel, string> = {
+  full: 'Can open the area and take every action in it',
+  view: 'Sees what others have approved or released, cannot change it',
+  limited: 'Some of the area, as described in the note',
+  prepares: 'Drafts and proposes through tools; a person decides',
+  none: 'The area is not available to this role',
+}
+
+export const ACCESS_ROLES = [
+  { id: 'visitor', label: 'Public visitor' },
+  { id: 'customer', label: 'Customer' },
+  { id: 'business', label: 'Business customer' },
+  { id: 'broker', label: 'Broker' },
+  { id: 'manager', label: 'Manager' },
+  { id: 'agent', label: 'AI agents' },
+] as const
+
+export type AccessRoleId = (typeof ACCESS_ROLES)[number]['id']
+
+export interface AccessCell {
+  level: AccessLevel
+  note?: string
+}
+
+export interface AccessRow {
+  area: string
+  link: HelpLink
+  access: Record<AccessRoleId, AccessCell>
+}
+
+const NONE: AccessCell = { level: 'none' }
+const FULL: AccessCell = { level: 'full' }
+
+export const ACCESS_MATRIX: AccessRow[] = [
+  {
+    area: 'Public site, quote and claims forms, help and Demo Studio',
+    link: { to: '/', label: 'Public site' },
+    access: { visitor: FULL, customer: FULL, business: FULL, broker: FULL, manager: FULL, agent: NONE },
+  },
+  {
+    area: 'Ava motor intake and business risk review',
+    link: { to: '/assist', label: 'Ava' },
+    access: {
+      visitor: { level: 'full', note: 'Starts a conversation and gives consent' },
+      customer: FULL,
+      business: FULL,
+      broker: FULL,
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Lead and Discovery agents run the interview and create the lead or profile' },
+    },
+  },
+  {
+    area: 'Personal portal: proposals, options and messages',
+    link: { to: '/portal', label: 'My portal' },
+    access: {
+      visitor: NONE,
+      customer: { level: 'view', note: 'Own released proposals; can compare options and ask questions' },
+      business: { level: 'limited', note: 'Only personal proposals released to them' },
+      broker: NONE,
+      manager: NONE,
+      agent: { level: 'prepares', note: 'Answers questions about a released comparison' },
+    },
+  },
+  {
+    area: 'Business portal: review status, risk profile, document requests',
+    link: { to: '/portal/business', label: 'Business portal' },
+    access: {
+      visitor: NONE,
+      customer: { level: 'limited', note: 'Without a business, sees how to start a review' },
+      business: { level: 'view', note: 'Own business profile and the broker’s requests' },
+      broker: NONE,
+      manager: NONE,
+      agent: NONE,
+    },
+  },
+  {
+    area: 'Broker overview, leads and business clients',
+    link: { to: '/broker', label: 'Broker overview' },
+    access: {
+      visitor: NONE,
+      customer: NONE,
+      business: NONE,
+      broker: FULL,
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Creates and updates leads, customers and profiles; cannot overwrite verified values' },
+    },
+  },
+  {
+    area: 'Russ workspace (all lenses)',
+    link: { to: '/broker/workspace', label: 'Russ' },
+    access: {
+      visitor: NONE,
+      customer: NONE,
+      business: NONE,
+      broker: FULL,
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Plans and runs the steps a broker asks for' },
+    },
+  },
+  {
+    area: 'Risk Twins and assessments',
+    link: { to: '/broker/commercial/risk-twins', label: 'Risk Twins' },
+    access: {
+      visitor: NONE,
+      customer: NONE,
+      business: { level: 'view', note: 'Profile with provenance labels, in the business portal' },
+      broker: { level: 'full', note: 'Decides findings, confirms links, overrides priority, signs off' },
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Builds Twins and runs assessments; cannot decide findings or confirm links' },
+    },
+  },
+  {
+    area: 'Submission packs',
+    link: { to: '/broker/commercial/submissions', label: 'Submissions' },
+    access: {
+      visitor: NONE,
+      customer: NONE,
+      business: NONE,
+      broker: { level: 'full', note: 'Edits sections, exports, requests approval' },
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Drafts and refreshes the pack; section edits are people only' },
+    },
+  },
+  {
+    area: 'Approvals',
+    link: { to: '/broker/approvals', label: 'Approvals' },
+    access: {
+      visitor: NONE,
+      customer: { level: 'view', note: 'Sees a proposal only after it is approved and released' },
+      business: { level: 'view', note: 'Sees requests once the broker releases them' },
+      broker: { level: 'full', note: 'Approve, request changes or reject' },
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Can request approval, never approve' },
+    },
+  },
+  {
+    area: 'Tasks and jobs',
+    link: { to: '/broker/jobs', label: 'Tasks & Jobs' },
+    access: {
+      visitor: NONE,
+      customer: { level: 'view', note: 'Work in progress on their own request' },
+      business: { level: 'view', note: 'Review status in the business portal' },
+      broker: { level: 'full', note: 'Pause, resume, cancel, retry and archive' },
+      manager: FULL,
+      agent: { level: 'prepares', note: 'Runs job steps and creates tasks; cannot control jobs' },
+    },
+  },
+  {
+    area: 'Systems: database, agents, workflows and audit',
+    link: { to: '/broker/systems', label: 'Systems overview' },
+    access: { visitor: NONE, customer: NONE, business: NONE, broker: NONE, manager: FULL, agent: NONE },
+  },
+]
+
+export const ROLE_FLOW = [
+  { role: 'Visitor or customer', step: 'Asks for cover through Ava, the risk review or a form' },
+  { role: 'AI agents', step: 'Qualify the lead, build the profile and draft options or a pack' },
+  { role: 'Broker', step: 'Reviews, edits and approves or sends back' },
+  { role: 'Customer', step: 'Sees only the approved result in their portal' },
+  { role: 'Manager', step: 'Oversees the pipeline and the system behind it' },
+]
+
 export const CAPABILITIES: Capability[] = [
+  {
+    area: 'AR, Ava and Russ: database copilots',
+    audience: 'Brokers, advisers and managers',
+    summary:
+      'Talk to the B-Covered database. Ava works with people, Russ with businesses, and AR splits a request and routes each part. Every action is an MCP job run as you, in Sample or Live.',
+    can: [
+      'Type @ (or just a name or number) to pick a client, account or policy; each suggestion shows its number and a Sample or Live badge',
+      'Type / for the list of jobs the MCP server offers',
+      'Find clients by client number (CL-), account number (AC-), policy number, name, partial name or similar spelling',
+      'Add notes and follow-ups against a client, account and policy; create clients (with a duplicate check), accounts, quote requests and life applications',
+      'Show policies, history, the latest life application, group schemes and members',
+      'Ask with choices when a name or policy is ambiguous, before anything is saved; retries never save twice',
+      '“Ask Ava” and “Ask Russ” on Person 360, policies and business clients open the copilot with that record selected',
+    ],
+    status: 'live',
+    links: [
+      { to: '/broker/workspace', label: 'AR · Ava · Russ' },
+      { to: '/broker/workspace?copilot=ava', label: 'Ava' },
+      { to: '/broker/workspace?copilot=russ', label: 'Russ' },
+    ],
+  },
   {
     area: 'Public website: Personal and Business',
     audience: 'Visitors',
@@ -149,20 +354,22 @@ export const CAPABILITIES: Capability[] = [
     links: [{ to: '/broker', label: 'Broker overview' }],
   },
   {
-    area: 'Broker AI Workspace',
+    area: 'Russ workspace',
     audience: 'Broker, manager',
-    summary: 'The Broker Copilot (left, about 40%) coordinates agents; results, the execution plan and customer context open on the right (about 60%).',
+    summary:
+      'One workspace with lenses: General, Commercial, Life & benefits and Controls. Russ (left, about 40%) coordinates agents; results, the execution plan and context open on the right (about 60%). Each lens keeps its own conversation and only brings its own jobs into focus.',
     can: [
+      'Switches lens from the chips above the conversation; the old Commercial, Life and Controls workspace addresses open the matching lens',
       'Lists pending approvals, new leads and running jobs on request',
       'Starts a simulated motor comparison for a customer with a motor lead',
       'Opens an existing job instead of starting a duplicate',
       'Shows an Approval tab when a proposal is waiting for a decision',
     ],
     status: 'live',
-    links: [{ to: '/broker/workspace', label: 'Open AI Workspace' }],
+    links: [{ to: '/broker/workspace', label: 'Open Russ' }],
   },
   {
-    area: 'Commercial workspace',
+    area: 'Russ · Commercial lens',
     audience: 'Broker, manager',
     summary: 'The Commercial Copilot runs business reviews: Risk Twin, potential exposures, outstanding questions and a draft submission pack.',
     can: [
@@ -174,7 +381,7 @@ export const CAPABILITIES: Capability[] = [
     ],
     status: 'live',
     links: [
-      { to: '/broker/commercial', label: 'Commercial workspace' },
+      { to: '/broker/workspace?lens=commercial', label: 'Russ · Commercial' },
       { to: '/broker/commercial/clients', label: 'Business clients' },
       { to: '/broker/commercial/risk-twins', label: 'Risk Twins' },
     ],
@@ -294,6 +501,24 @@ export const CAPABILITIES: Capability[] = [
     ],
   },
   {
+    area: 'Broker onboarding and brokerage workspaces',
+    audience: 'Independent brokerages, B-Covered staff',
+    summary: 'Brokerages join by invitation or application, set up with Russ, are reviewed and activated by B-Covered, then import their client book and enable insurers one by one.',
+    can: [
+      'Guided setup in nine sections with autosave and resume; requirements depend on brokerage type and product modules',
+      'Russ: Chat, Suggestions (values read from documents, applied only when you confirm), Tasks and Review',
+      'Review queue: item decisions, feedback the brokerage sees, internal notes it never sees, separate approval and activation',
+      'Client-book import (CSV or XLSX) with mapping, validation, duplicates inside the brokerage only, confirmation, retry and an error report',
+      'Insurer access per insurer and product; quoting uses enabled insurers only; credentials are masked',
+    ],
+    status: 'live',
+    links: [
+      { to: '/brokers/join', label: 'Join as a broker' },
+      { to: '/platform/onboarding', label: 'Onboarding queue' },
+      { to: '/broker/imports/client-book', label: 'Client-book import' },
+    ],
+  },
+  {
     area: 'Help centre, FAQ and system updates',
     audience: 'Everyone',
     summary: 'Self-service guidance for visitors, customers and brokers.',
@@ -311,6 +536,18 @@ export const CAPABILITIES: Capability[] = [
 ]
 
 export const WALKTHROUGHS = [
+  {
+    id: 'copilots',
+    title: 'AR, Ava and Russ on the database',
+    outcome: 'A note saved on Priya Naidoo’s motor policy with its reference, visible on the policy after refresh, and her life application retrieved in the same request.',
+    steps: [
+      { text: 'Choose “Demo as” → Thabo Nkosi. The header shows “Supabase · Sample” once the database sign-in completes.', link: { to: '/broker', label: 'Broker workspace' } },
+      { text: 'Open AR · Ava · Russ. Keep Sample selected. Type @Naid and pick Priya Naidoo or Priyanka Naidu from the dropdown.', link: { to: '/broker/workspace', label: 'AR' } },
+      { text: 'Send: “Find the Naidoo account, add a note to Priya’s motor policy and show me her latest life application”. Give the note wording when asked.', link: { to: '/broker/workspace', label: 'AR' } },
+      { text: 'Use “Open record” on the saved note. The motor policy lists the note under Notes and activity; refresh to confirm.', link: { to: '/broker/personal', label: 'Personal lines' } },
+      { text: 'On Person 360 for any client, use “Ask Ava” to open Ava with that client selected above the message box.', link: { to: '/broker/people', label: 'People' } },
+    ],
+  },
   {
     id: 'motor',
     title: 'Scenario 1: new motor lead',
@@ -332,12 +569,32 @@ export const WALKTHROUGHS = [
       { text: 'Switch to Thabo Nkosi. Open Business clients to see the Risk Twin, exposures and requests.', link: { to: '/broker/commercial/clients', label: 'Business clients' } },
       { text: 'Open Submissions, review the pack, apply the suggested sections, then approve.', link: { to: '/broker/commercial/submissions', label: 'Submissions' } },
       { text: 'Switch to Nomsa Dlamini: you land in her business portal. Open the risk profile from there.', link: { to: '/portal/business', label: 'Business portal' } },
-      { text: 'Optional: in the Commercial workspace ask “Review Ubuntu Foods and identify outstanding insurance questions”.', link: { to: '/broker/commercial', label: 'Commercial workspace' } },
+      { text: 'Optional: in Russ, switch to the Commercial lens and ask “Review Ubuntu Foods and identify outstanding insurance questions”.', link: { to: '/broker/workspace?lens=commercial', label: 'Russ · Commercial' } },
+    ],
+  },
+  {
+    id: 'onboarding',
+    title: 'Broker onboarding: review, correct, approve and activate',
+    outcome: 'Highveld Advisory goes from submitted to an active workspace, through a correction round, with every decision in the audit trail.',
+    steps: [
+      { text: 'Switch to Pieter Botha. Open the onboarding queue and choose Highveld Advisory, then Start review.', link: { to: '/platform/onboarding', label: 'Onboarding queue' } },
+      { text: 'Request a correction on the PI schedule with feedback, add an internal note, then Request information.', link: { to: '/platform/onboarding', label: 'Onboarding queue' } },
+      { text: 'Switch to Kagiso Molefe. Russ’s Review tab shows the feedback (not the internal note). Use a sample PI schedule under Documents and resubmit.', link: { to: '/onboarding', label: 'Brokerage onboarding' } },
+      { text: 'Back as Pieter: start the review, accept each item, Approve, then Activate workspace as a separate step.', link: { to: '/platform/onboarding', label: 'Onboarding queue' } },
+      { text: 'As Anele Mahlangu (Acacia) import a client CSV, correct a failed row and retry; as Sam Pillay switch between Acacia and Coastline.', link: { to: '/broker/imports/client-book', label: 'Client-book import' } },
     ],
   },
 ]
 
 export const COPILOT_COMMANDS = [
+  { workspace: 'AR', command: 'Find the Naidoo account, add a note to Priya’s motor policy and show me her latest life application', does: 'Three actions reported separately: finds the account, saves the note once you give the wording, retrieves the life application.' },
+  { workspace: 'AR', command: 'Show policies for CL-S1001', does: 'Short-term and long-term policies for one client, by client number, with links to each record.' },
+  { workspace: 'Ava', command: 'Add a note that Priya requested a callback on her motor renewal', does: 'Saves the note on Priya’s motor policy and returns NT-… with client and policy numbers.' },
+  { workspace: 'Ava', command: 'Arrange a callback for @Priya Naidoo tomorrow', does: 'Creates a follow-up (TK-…) due tomorrow against the client.' },
+  { workspace: 'Ava', command: 'Start a life application for Priyanka Naidu R650', does: 'Records a life application (PL-…) against the existing client. Nothing is sent to an insurer.' },
+  { workspace: 'Ava', command: 'Create a client called Sipho Dlamini born 1990-02-03', does: 'Checks for duplicates, allocates a client number and creates a personal account.' },
+  { workspace: 'Russ', command: 'Show schemes for Karoo Logistics', does: 'Group schemes for a business account with active member counts.' },
+  { workspace: 'Russ', command: 'Show members for Karoo Logistics', does: 'Scheme members with client numbers, cover and status.' },
   { workspace: 'Both', command: 'Show pending approvals', does: 'Lists approvals waiting for a decision.' },
   { workspace: 'AI Workspace', command: 'Show new leads', does: 'New and qualifying leads. “Show leads” lists all open leads.' },
   { workspace: 'AI Workspace', command: 'Create a quote comparison for Ayanda Khumalo', does: 'Starts a simulated motor comparison for a customer with a motor lead.' },

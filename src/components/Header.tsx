@@ -141,9 +141,13 @@ export default function Header() {
   const workspace =
     me?.role === 'customer'
       ? { to: '/portal', label: 'My portal' }
-      : me && ['broker', 'manager', 'admin'].includes(me.role)
-        ? { to: '/broker', label: 'Broker workspace' }
-        : null
+      : me?.platform_role
+        ? { to: '/platform/onboarding', label: 'Platform admin' }
+        : me?.member_role
+          ? { to: me.home, label: me.organisation?.lifecycle_status === 'active' ? 'Broker workspace' : 'Continue onboarding' }
+          : me && ['broker', 'manager', 'admin'].includes(me.role)
+            ? { to: '/broker', label: 'Broker workspace' }
+            : null
   const inPersonal = pathname.startsWith('/insurance/')
   const inBusiness = pathname.startsWith('/business')
 
@@ -183,11 +187,17 @@ export default function Header() {
           <NavLink to="/claims" className={navLink()}>Claims</NavLink>
           <NavLink to="/about" className={navLink('hidden xl:inline-block')}>About us</NavLink>
           <NavLink to="/demo" className={navLink()}>Demo Studio</NavLink>
+          <NavLink to="/brokers/join" className={navLink('hidden 2xl:inline-block')}>For brokers</NavLink>
           <NavLink to="/help" className={navLink('hidden 2xl:inline-block')}>Help</NavLink>
           {workspace && <NavLink to={workspace.to} className={navLink()}>{workspace.label}</NavLink>}
         </nav>
 
         <div className="hidden shrink-0 items-center gap-3 lg:flex">
+          {!me && (
+            <Link to="/sign-in" className="hidden text-sm font-semibold whitespace-nowrap text-brand-800 hover:underline xl:inline">
+              Sign in
+            </Link>
+          )}
           <RoleSwitcher compact />
           <Link to="/assist" className="btn-primary whitespace-nowrap px-4 xl:px-6" aria-label="Find My Cover">
             <Sparkles className="h-4 w-4" /> <span className="hidden xl:inline">Find My Cover</span>
@@ -255,6 +265,8 @@ export default function Header() {
               ['/about', 'About us'],
               ['/contact', 'Contact'],
               ['/demo', 'Demo Studio'],
+              ['/brokers/join', 'Join as a broker'],
+              ...(me ? [] : [['/sign-in', 'Sign in']]),
               ['/help', 'Help and capabilities'],
               ['/faq', 'FAQ'],
               ['/updates', 'System updates'],

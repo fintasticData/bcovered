@@ -14,6 +14,7 @@ import { db, Repo } from '../db/store'
 import { hashPayload } from '../lib/hash'
 import { ToolError } from '../lib/errors'
 import { deterministicAdapter } from '../llm/deterministic'
+import { isGeneralQuestion } from '../llm/fal'
 import { initialIntakeState } from '../llm/adapter'
 import { cancelJob, configureRunner, kick, retryJob } from '../jobs/runner'
 import { invokeTool, type Actor } from '../tools/registry'
@@ -22,6 +23,17 @@ const visitor: Auth = { userId: null }
 const broker: Auth = { userId: SEED_IDS.users.broker }
 const agent: Actor = { type: 'agent', id: 'test_agent', role: 'agent' }
 const repo = () => new Repo(TENANT_ID)
+
+describe('fal general questions', () => {
+  it('sends questions to fal but keeps consent and personal details in the deterministic intake', () => {
+    const fresh = initialIntakeState()
+    expect(isGeneralQuestion(fresh, 'If I have a printing business, what items do I typically insure and how much could we estimate?')).toBe(true)
+    expect(isGeneralQuestion(fresh, 'What is the difference between comprehensive and third party cover')).toBe(true)
+    expect(isGeneralQuestion(fresh, 'I’ve just bought a Toyota Corolla')).toBe(false)
+    expect(isGeneralQuestion({ ...fresh, stage: 'consent' }, 'What do you do with my data?')).toBe(false)
+    expect(isGeneralQuestion({ ...fresh, stage: 'contact' }, 'Is 082 555 0142 fine?')).toBe(false)
+  })
+})
 
 async function runScenario() {
   let view = startConversation(visitor, { channel: 'public' })

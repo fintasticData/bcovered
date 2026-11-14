@@ -106,6 +106,31 @@ export const RESTAURANT_GROUP: DemoScenario = {
   available: true,
 }
 
+export const BROKER_ONBOARDING: DemoScenario = {
+  id: 'broker-onboarding',
+  number: 1,
+  code: 'O',
+  title: 'External brokerage onboarding',
+  summary:
+    'Highveld Advisory has applied to join B-Covered. A reviewer sends one document back, the brokerage corrects it with Russ, and the application is approved and then activated as a separate step.',
+  initial_conditions: [
+    'Highveld Advisory (Kagiso Molefe, owner) submitted two days ago with every item in',
+    'Acacia Cover Brokers and Coastline Risk Partners are active, with different teams and client books',
+    'Sam Pillay works in both; Zodwa Nkosi is a client of both and is never merged',
+    'Local in-browser tables only: nothing is applied to Supabase',
+  ],
+  agents: ['Russ (onboarding)', 'Deterministic document extraction', 'Requirement checklist engine'],
+  database_effects: [
+    'onboarding_items decisions, onboarding_feedback and separate onboarding_internal_notes',
+    'onboarding_status_events: under review → information required → submitted → approved → active',
+    'documents and storage objects for the corrected upload; extracted_field_proposals',
+    'organisations.lifecycle_status becomes active only on activation; audit_events throughout',
+  ],
+  deliverable: 'An active Highveld workspace with its first-use home, every decision in the audit trail, and no insurer enabled until it is configured.',
+  script: [],
+  available: true,
+}
+
 export const PLANNED_COMMERCIAL_SCENARIOS: Array<Pick<DemoScenario, 'code' | 'title' | 'summary'>> = [
   { code: 'B', title: 'Manufacturing business', summary: 'Machinery schedule import, production dependencies and machinery breakdown and BI review.' },
   { code: 'C', title: 'Logistics company', summary: 'Fleet import, operating regions, cargo exposure and a simulated fleet comparison.' },

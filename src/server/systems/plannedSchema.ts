@@ -1,6 +1,8 @@
 // Target normalised schema for the dedicated InsureFlow Supabase project (insureflow-dev, then insureflow-prod).
 // Planning registry only: nothing here is applied. The Systems section renders the ERD and screen alignment from it,
 // and src/server/__tests__/systems.test.ts keeps it consistent with the routes and the in-browser demo tables.
+import { BENEFITS_TABLES } from './plannedSchemaBenefits'
+import { col, fk, id, key, pkfk, uk } from './schemaHelpers'
 
 export type DomainKey =
   | 'platform'
@@ -12,6 +14,11 @@ export type DomainKey =
   | 'submissions'
   | 'agent_ops'
   | 'systems'
+  | 'life_benefits'
+  | 'controls'
+  | 'funds'
+  | 'specialist'
+  | 'onboarding'
 
 export type TableStatus = 'carried' | 'reshaped' | 'new'
 
@@ -49,7 +56,7 @@ export interface Domain {
 
 export const DOMAINS: Domain[] = [
   { key: 'platform', label: 'Platform and identity', summary: 'Tenants, people linked to Supabase Auth, roles and portal access.' },
-  { key: 'crm', label: 'Customers and contact', summary: 'Customers, contacts, consent, conversations, leads, enquiries, messages and tasks.' },
+  { key: 'crm', label: 'Customers and contact', summary: 'Customers, consent, conversations, leads, enquiries, messages and tasks. People live in persons.' },
   { key: 'reference', label: 'Reference data', summary: 'Lookups shared across screens: products, insurers, industries, cover classes and claim types.' },
   { key: 'personal', label: 'Personal-lines quoting', summary: 'Simulated comparisons and their options and terms.' },
   { key: 'policies_claims', label: 'Policies and claims', summary: 'Policies (placed or existing evidence), sections, claims and documents.' },
@@ -57,30 +64,44 @@ export const DOMAINS: Domain[] = [
   { key: 'submissions', label: 'Submissions', summary: 'Draft underwriting submission packs and their sections.' },
   { key: 'agent_ops', label: 'Agents, copilots and jobs', summary: 'Agent and tool catalogue, workflows, durable jobs, approvals and audit.' },
   { key: 'systems', label: 'Systems', summary: 'Components, dependencies, API endpoints and health checks.' },
+  { key: 'life_benefits', label: 'Life & Benefits', summary: 'People and relationships, adviser authorisations, products, needs analyses, advice records and long-term policies.' },
+  { key: 'controls', label: 'Financial controls', summary: 'Data sources, import batches, matching, reconciliations, exceptions, corrections and append-only evidence.' },
+  { key: 'funds', label: 'Group risk, funds and investments', summary: 'Employers’ schemes and rules, employments and salaries, fund memberships, movements, benefit events, valuations, investments and transfers.' },
+  { key: 'specialist', label: 'Specialist', summary: 'Cell captives, trustee governance, forensic investigations and commission records.' },
+  {
+    key: 'onboarding',
+    label: 'Brokerage onboarding',
+    summary: 'Invitations, applications, configurable requirements, review decisions, extracted values, product modules, commercial terms and insurer access per brokerage.',
+  },
 ]
 
-const id = (): PlannedColumn => ({ name: 'id', type: 'uuid', key: 'PK' })
-const key = (type = 'text'): PlannedColumn => ({ name: 'key', type, key: 'PK' })
-const fk = (name: string, ref: string, optional = false, note?: string): PlannedColumn => ({ name, type: keyType(ref), key: 'FK', ref, optional, note })
-const pkfk = (name: string, ref: string): PlannedColumn => ({ name, type: keyType(ref), key: 'PK, FK', ref })
-const col = (name: string, type: string, note?: string): PlannedColumn => ({ name, type, note })
-const uk = (name: string, type = 'text', note?: string): PlannedColumn => ({ name, type, key: 'UK', note })
-
-/** Lookup tables keyed by a text code rather than a uuid. */
-const TEXT_KEYED = new Set(['roles', 'product_categories', 'industries', 'cover_classes', 'claim_types', 'approval_types'])
-function keyType(ref: string) {
-  return TEXT_KEYED.has(ref) ? 'text' : 'uuid'
-}
-
-export const PLANNED_TABLES: PlannedTable[] = [
+const CORE_TABLES: PlannedTable[] = [
   // ------------------------------------------------------------------ platform
   {
     name: 'organisations',
     domain: 'platform',
     status: 'carried',
     scope: 'global',
-    purpose: 'Each brokerage tenant (BCovered is the first). Every tenant table references it.',
-    columns: [id(), col('name', 'text'), uk('slug'), col('fsp_number', 'text'), col('fsp_verified', 'bool'), col('is_demo', 'bool')],
+    purpose: 'Each brokerage tenant (BCovered is the first) and the B-Covered platform itself. Every tenant table references it.',
+    columns: [
+      id(),
+      col('name', 'text'),
+      uk('slug'),
+      col('kind', 'text', 'platform | brokerage'),
+      col('legal_name', 'text'),
+      col('trading_name', 'text'),
+      col('registration_number', 'text'),
+      col('brokerage_type', 'text'),
+      col('lifecycle_status', 'text', 'onboarding | active | suspended | closed; only active is operational'),
+      col('status_reason', 'text'),
+      col('fsp_number', 'text', 'declared'),
+      col('fsp_verified', 'bool'),
+      col('activated_at', 'timestamptz'),
+      col('suspended_at', 'timestamptz'),
+      col('retention_until', 'date'),
+      col('is_demo', 'bool'),
+    ],
+    changes: ['adds kind, lifecycle status, legal details and retention for multi-brokerage onboarding (migration 0010)'],
   },
   {
     name: 'app_users',
@@ -88,24 +109,32 @@ export const PLANNED_TABLES: PlannedTable[] = [
     status: 'reshaped',
     scope: 'global',
     purpose: 'A signed-in person. The id is the Supabase Auth user id.',
-    columns: [{ ...id(), note: '= auth.users.id' }, uk('email'), col('full_name', 'text')],
-    changes: ['id references auth.users(id)', 'role and tenant move to tenant_memberships', 'customer link moves to customer_user_access'],
+    columns: [{ ...id(), note: '= auth.users.id' }, uk('email'), col('full_name', 'text'), fk('active_organisation_id', 'organisations', true, 'explicit workspace choice; feeds the tenant claim')],
+    changes: ['id references auth.users(id)', 'role and tenant move to organisation_memberships', 'customer link moves to customer_user_access', 'adds active_organisation_id for explicit workspace switching'],
   },
   {
     name: 'roles',
     domain: 'platform',
     status: 'new',
     scope: 'global',
-    purpose: 'Visitor, customer, broker, claims admin, manager and admin.',
+    purpose: 'Visitor and customer, the legacy demo staff roles, and the brokerage roles: owner, administrator, representative, operations administrator, compliance reviewer and read-only.',
     columns: [key(), col('label', 'text'), col('is_staff', 'bool')],
   },
   {
-    name: 'tenant_memberships',
+    name: 'organisation_memberships',
+    domain: 'platform',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Which brokerages a person works in and with which role. The active one feeds the tenant and role claims in the login token.',
+    columns: [id(), fk('user_id', 'app_users'), fk('role', 'roles'), col('status', 'text', 'active | suspended | removed'), fk('invited_by', 'app_users', true)],
+  },
+  {
+    name: 'platform_staff',
     domain: 'platform',
     status: 'new',
     scope: 'global',
-    purpose: 'Which tenants a person works in and with which role. Feeds the tenant and role claims in the login token.',
-    columns: [pkfk('tenant_id', 'organisations'), pkfk('user_id', 'app_users'), fk('role_key', 'roles'), col('status', 'text')],
+    purpose: 'B-Covered staff with explicit, audited platform roles: platform administrator, onboarding reviewer or read-only.',
+    columns: [pkfk('user_id', 'app_users'), col('role', 'text'), fk('granted_by', 'app_users', true), col('revoked_at', 'timestamptz')],
   },
   {
     name: 'customer_user_access',
@@ -123,17 +152,19 @@ export const PLANNED_TABLES: PlannedTable[] = [
     status: 'reshaped',
     scope: 'tenant',
     purpose: 'A personal or commercial customer of the brokerage.',
-    columns: [id(), col('customer_type', 'text'), col('display_name', 'text'), col('status', 'text'), col('is_synthetic', 'bool'), fk('created_by', 'app_users', true)],
-    changes: ['email and phone move to contacts', 'full_name becomes display_name'],
-  },
-  {
-    name: 'contacts',
-    domain: 'crm',
-    status: 'new',
-    scope: 'tenant',
-    purpose: 'People at a customer: the personal customer themself or a business contact.',
-    columns: [id(), fk('customer_id', 'customers'), col('full_name', 'text'), col('email', 'text'), col('phone', 'text'), col('role', 'text'), col('is_primary', 'bool')],
-    replaces: ['customers.email', 'customers.phone', 'business_profiles.primary_contact'],
+    columns: [
+      id(),
+      col('customer_type', 'text'),
+      col('display_name', 'text'),
+      col('status', 'text'),
+      col('is_synthetic', 'bool'),
+      fk('created_by', 'app_users', true),
+      col('source_system', 'text'),
+      col('source_ref', 'text', 'unique per tenant and source system'),
+      fk('import_batch_id', 'import_batches', true),
+      col('data_origin', 'text', 'demo | imported | live'),
+    ],
+    changes: ['email and phone move to persons, linked through customer_persons', 'full_name becomes display_name', 'adds client-book provenance (migration 0010)'],
   },
   {
     name: 'customer_consents',
@@ -208,7 +239,7 @@ export const PLANNED_TABLES: PlannedTable[] = [
     columns: [
       id(),
       fk('customer_id', 'customers'),
-      fk('contact_id', 'contacts', true),
+      fk('person_id', 'persons', true),
       fk('quote_id', 'quotes', true),
       fk('job_id', 'jobs', true),
       col('channel', 'text'),
@@ -216,7 +247,7 @@ export const PLANNED_TABLES: PlannedTable[] = [
       col('status', 'text'),
       col('preview_only', 'bool'),
     ],
-    changes: ['adds contact_id so the recipient is a real contact record'],
+    changes: ['adds person_id so the recipient is a real person record'],
   },
   {
     name: 'tasks',
@@ -349,21 +380,33 @@ export const PLANNED_TABLES: PlannedTable[] = [
     domain: 'policies_claims',
     status: 'reshaped',
     scope: 'tenant',
-    purpose: 'A policy a customer holds: placed by the brokerage, declared or extracted from a document.',
+    purpose: 'Every policy across lines (short-term personal and commercial, individual life, group risk): placed, declared or extracted.',
     columns: [
       id(),
       fk('customer_id', 'customers'),
       fk('business_profile_id', 'business_profiles', true),
       fk('insurer_id', 'insurers'),
+      fk('product_version_id', 'product_versions', true),
+      fk('record_of_advice_id', 'records_of_advice', true),
+      fk('adviser_id', 'app_users', true),
       fk('document_id', 'documents', true),
+      col('line', 'text', 'short_term_personal | short_term_commercial | individual_life | group_risk'),
       col('policy_number', 'text'),
       col('origin', 'text', 'placed | existing_declared | existing_extracted'),
+      col('status', 'text'),
+      col('underwriting_status', 'text'),
+      col('premium_amount', 'numeric(14,2)'),
+      col('premium_frequency', 'text'),
       col('inception_date', 'date'),
+      col('anniversary_month', 'int'),
       col('renewal_date', 'date'),
       col('source', 'provenance'),
+      col('source_ref', 'text', 'identifier in the brokerage’s own system; unique per tenant'),
+      fk('import_batch_id', 'import_batches', true),
+      col('data_origin', 'text', 'demo | imported | live'),
     ],
     replaces: ['insurance_policies', 'business_profiles.existing_cover'],
-    changes: ['insurer text becomes insurer_id → insurers'],
+    changes: ['insurer text becomes insurer_id → insurers', 'adds line, status, premium and the advice record so long-term policies share the table'],
   },
   {
     name: 'policy_sections',
@@ -407,7 +450,7 @@ export const PLANNED_TABLES: PlannedTable[] = [
       fk('customer_id', 'customers', true),
       fk('policy_id', 'policies', true),
       fk('claim_type_key', 'claim_types'),
-      fk('reported_by_contact_id', 'contacts', true),
+      fk('reported_by_person_id', 'persons', true),
       col('policy_number_given', 'text', 'as typed, until matched to a policy'),
       col('incident_date', 'date'),
       col('description', 'text'),
@@ -428,17 +471,23 @@ export const PLANNED_TABLES: PlannedTable[] = [
     domain: 'policies_claims',
     status: 'reshaped',
     scope: 'tenant',
-    purpose: 'An uploaded file in Supabase Storage, owned by a customer and optionally tied to a business or claim.',
+    purpose: 'An uploaded file in the private tenant-documents bucket, owned by a customer, business, claim or onboarding application. Opened only through short-lived, audited links.',
     columns: [
       id(),
-      fk('customer_id', 'customers'),
+      fk('customer_id', 'customers', true),
       fk('business_profile_id', 'business_profiles', true),
       fk('claim_id', 'claims', true),
       fk('uploaded_by', 'app_users', true),
+      col('owner_table', 'text', 'for example brokerage_applications'),
+      col('owner_id', 'uuid'),
       col('doc_type', 'text'),
-      col('storage_path', 'text'),
+      col('storage_path', 'text', 'starts with the tenant id'),
       col('file_name', 'text'),
-      col('status', 'text'),
+      col('mime_type', 'text'),
+      col('file_size', 'bigint'),
+      col('sha256', 'text'),
+      col('status', 'text', 'review status: uploaded | in_review | accepted | rejected | superseded'),
+      col('data_origin', 'text', 'demo | imported | live'),
       col('is_simulated', 'bool'),
     ],
     replaces: ['business_documents', 'claim file names (browser storage)'],
@@ -466,7 +515,7 @@ export const PLANNED_TABLES: PlannedTable[] = [
     ],
     changes: [
       'registered name and registration number come from the primary legal entity',
-      'primary_contact → contacts, existing_cover → policies, loss_history → loss_events',
+      'primary_contact → persons via customer_persons, existing_cover → policies, loss_history → loss_events',
       'industry_key references industries',
     ],
   },
@@ -890,7 +939,225 @@ export const PLANNED_TABLES: PlannedTable[] = [
       col('before', 'jsonb'),
       col('after', 'jsonb'),
     ],
-    changes: ['actor_id text becomes actor_user_id or actor_agent_id'],
+    changes: ['actor_id text becomes actor_user_id or actor_agent_id', 'data_category and copilot (ar, ava, russ) on copilot actions (0012)'],
+  },
+  {
+    name: 'client_interactions',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Notes, calls, meetings, emails and callback requests against a client, account and policy, saved by brokers or the AR, Ava and Russ copilots.',
+    columns: [
+      id(),
+      uk('reference', 'text', 'NT-1001 (Live) or NT-S1001 (Sample), unique per tenant and category'),
+      col('data_category', 'text', 'sample or live; linked records must share it'),
+      fk('person_id', 'persons', true),
+      fk('customer_id', 'customers', true),
+      fk('policy_id', 'policies', true),
+      col('kind', 'text'),
+      col('body', 'text'),
+      col('business_line', 'text'),
+      col('copilot', 'text', 'ar, ava or russ'),
+      fk('created_by', 'app_users'),
+      uk('idempotency_key', 'text', 'a retried write returns the first receipt'),
+    ],
+  },
+  {
+    name: 'copilot_actions',
+    domain: 'agent_ops',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Every copilot action: who asked, which copilot acted, the MCP job, the affected records and the outcome (saved, retrieved, needs input, failed, refused).',
+    columns: [
+      id(),
+      col('data_category', 'text'),
+      fk('requested_by', 'app_users'),
+      col('copilot', 'text'),
+      col('tool', 'text', 'MCP job name'),
+      col('args', 'jsonb'),
+      col('outcome', 'text'),
+      col('affected', 'jsonb', 'table, id and reference of each record touched'),
+      col('result', 'jsonb', 'the receipt returned to the broker'),
+      uk('idempotency_key', 'text'),
+    ],
+  },
+  {
+    name: 'route_runs',
+    domain: 'agent_ops',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'One run of a Route (a guided business process such as Prepare motor quotes) for a client: progress and working data shared by the guide buttons and Russ. Browser-held today; the compliance record stays in client_interactions and tasks.',
+    columns: [
+      id(),
+      col('definition_id', 'text', 'Route definition, e.g. motor_quotes'),
+      col('subject_type', 'text'),
+      fk('subject_id', 'persons', true),
+      col('category', 'text', 'sample'),
+      col('status', 'text', 'active, completed or abandoned'),
+      col('current_action_id', 'text'),
+      col('state', 'jsonb', 'client snapshot, draft request, quotes and outcome'),
+      fk('started_by', 'app_users'),
+      col('completed_at', 'timestamptz'),
+    ],
+  },
+  {
+    name: 'route_action_results',
+    domain: 'agent_ops',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Each attempt at a Route action: done, needs input, blocked, failed or stale, with who did it (person or Russ) and when.',
+    columns: [
+      id(),
+      fk('run_id', 'route_runs'),
+      col('action_id', 'text'),
+      col('status', 'text'),
+      col('reason', 'text'),
+      col('result', 'jsonb'),
+      col('actor_type', 'text', 'user or agent'),
+      col('actor_name', 'text'),
+    ],
+  },
+  {
+    name: 'sales_team_members',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Brokers, sub-brokers and agents in a brokerage, each with a unique customer referral code; invited members get their code before they join (0019).',
+    columns: [
+      id(),
+      fk('user_id', 'app_users', true),
+      fk('invitation_id', 'brokerage_invitations', true),
+      col('full_name', 'text'),
+      col('email', 'text', 'unique per brokerage'),
+      col('sales_role', 'text', 'broker, sub_broker or agent'),
+      col('service_area', 'text'),
+      uk('referral_code', 'text', 'e.g. LERATO-QSA4; the customer link is /r/CODE'),
+      col('status', 'text', 'invited, active or suspended'),
+    ],
+  },
+  {
+    name: 'sales_enquiries',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Each submitted enquiry (referral link, typed code, phone or copilot) with the referrer, the person responsible and the contact it was linked to (0019).',
+    columns: [
+      id(),
+      uk('reference', 'text', 'EN-1001 (Live) or EN-S1001 (Sample)'),
+      col('data_category', 'text'),
+      col('source', 'text'),
+      col('referral_code', 'text'),
+      fk('referrer_member_id', 'sales_team_members', true),
+      fk('assigned_member_id', 'sales_team_members', true),
+      fk('person_id', 'persons', true),
+      fk('customer_id', 'customers', true),
+      col('match_status', 'text', 'new, linked or possible_match (held until a broker confirms)'),
+      col('consent_at', 'timestamptz'),
+      uk('idempotency_key', 'text'),
+    ],
+  },
+  {
+    name: 'sales_offers',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Offers to a client from a saved quote or captured details; each tracks its own status from draft to sold (0019).',
+    columns: [
+      id(),
+      uk('reference', 'text', 'OF-1001 (Live) or OF-S1001 (Sample)'),
+      col('data_category', 'text'),
+      fk('person_id', 'persons'),
+      fk('customer_id', 'customers', true),
+      fk('enquiry_id', 'sales_enquiries', true),
+      fk('quote_option_id', 'quote_options', true),
+      col('from_sample_quote', 'boolean'),
+      col('insurer_name', 'text'),
+      col('product', 'text'),
+      col('premium_amount', 'numeric'),
+      col('premium_frequency', 'text'),
+      col('status', 'text', 'draft, sent, accepted, sold, declined or withdrawn'),
+      fk('responsible_member_id', 'sales_team_members', true),
+      uk('idempotency_key', 'text'),
+    ],
+  },
+  {
+    name: 'sales_records',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'One sale per offer once the insurer confirms cover: insurer reference, cover start and the original referrer (0019).',
+    columns: [
+      id(),
+      uk('reference', 'text', 'SL-1001 (Live) or SL-S1001 (Sample)'),
+      uk('offer_id', 'uuid', 'one sale per offer, however often it is clicked'),
+      fk('person_id', 'persons'),
+      col('insurer_reference', 'text'),
+      col('cover_start_date', 'date'),
+      fk('sold_by_member_id', 'sales_team_members', true),
+      fk('referrer_member_id', 'sales_team_members', true),
+    ],
+  },
+  {
+    name: 'contact_assignment_events',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Reassignment history of a client between team members; the original referrer never changes (0019).',
+    columns: [id(), fk('person_id', 'persons'), fk('from_member_id', 'sales_team_members', true), fk('to_member_id', 'sales_team_members', true), col('reason', 'text'), fk('changed_by', 'app_users')],
+  },
+  {
+    name: 'franchise_partners',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Franchisees: partner businesses whose outlets introduce customers to the brokerage; Sample or Live (0020).',
+    columns: [id(), col('data_category', 'text'), col('name', 'text', 'unique per brokerage and category'), col('trading_name', 'text'), col('status', 'text', 'active or paused'), fk('created_by', 'app_users', true)],
+  },
+  {
+    name: 'franchise_outlets',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Outlets of a franchisee: customer code, link and QR code, service area, receiving broker and sales mode (refer to broker or sell at outlet) (0020).',
+    columns: [
+      id(),
+      col('data_category', 'text'),
+      fk('partner_id', 'franchise_partners'),
+      col('name', 'text'),
+      col('service_area', 'text'),
+      fk('receiving_member_id', 'sales_team_members', true),
+      col('sales_mode', 'text', 'refer or sell'),
+      uk('referral_code', 'text', 'e.g. BENONI-7KQ2; the customer link is /r/CODE'),
+      col('status', 'text', 'active or paused'),
+    ],
+  },
+  {
+    name: 'franchise_outlet_staff',
+    domain: 'crm',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Outlet managers and staff with personal codes that credit the outlet; referral access only unless linked to an existing seller (0020).',
+    columns: [
+      id(),
+      col('data_category', 'text'),
+      fk('outlet_id', 'franchise_outlets'),
+      fk('user_id', 'app_users', true),
+      col('full_name', 'text'),
+      col('email', 'text'),
+      col('outlet_role', 'text', 'manager or staff'),
+      uk('referral_code', 'text'),
+      fk('sales_member_id', 'sales_team_members', true),
+      fk('invitation_id', 'brokerage_invitations', true),
+      col('status', 'text', 'invited, active or suspended'),
+    ],
+  },
+  {
+    name: 'number_sequences',
+    domain: 'platform',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Database-backed allocation of client (CL), account (AC), policy (PL), note (NT), task (TK), enquiry (EN), offer (OF) and sale (SL) numbers per brokerage and category.',
+    columns: [col('kind', 'text', 'PK with tenant_id and data_category'), col('data_category', 'text'), col('last_value', 'bigint')],
   },
 
   // ------------------------------------------------------------------ systems
@@ -928,6 +1195,123 @@ export const PLANNED_TABLES: PlannedTable[] = [
   },
 ]
 
+const ONBOARDING_TABLES: PlannedTable[] = [
+  {
+    name: 'brokerage_invitations',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Owner invitations from B-Covered and team invitations from a brokerage. Only the token hash is stored; links expire and work once.',
+    columns: [id(), col('email', 'text'), fk('role', 'roles'), col('kind', 'text', 'owner | team'), uk('token_hash'), col('expires_at', 'timestamptz'), col('accepted_at', 'timestamptz'), fk('accepted_by', 'app_users', true), col('revoked_at', 'timestamptz'), fk('invited_by', 'app_users')],
+  },
+  {
+    name: 'brokerage_applications',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'One brokerage’s onboarding: autosaved section drafts, declared modules, status from draft to active, and separate approval and activation.',
+    columns: [
+      id(),
+      col('route', 'text', 'invitation | application'),
+      fk('invitation_id', 'brokerage_invitations', true),
+      col('status', 'text', 'draft | submitted | under_review | information_required | approved | active | declined | withdrawn | suspended'),
+      col('status_reason', 'text'),
+      col('brokerage_type', 'text'),
+      col('sections', 'jsonb'),
+      col('current_section', 'text', 'where the brokerage resumes'),
+      col('declared_modules', 'text[]'),
+      col('migration_choice', 'text'),
+      fk('assigned_reviewer', 'app_users', true),
+      col('revision', 'int'),
+      col('submitted_at', 'timestamptz'),
+      fk('approved_by', 'app_users', true),
+      fk('activated_by', 'app_users', true),
+    ],
+  },
+  {
+    name: 'onboarding_status_events',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Every status change with its reason, actor and time.',
+    columns: [id(), fk('application_id', 'brokerage_applications'), col('from_status', 'text'), col('to_status', 'text'), col('reason', 'text'), fk('actor_id', 'app_users', true), col('actor_type', 'text'), col('created_at', 'timestamptz')],
+  },
+  {
+    name: 'onboarding_requirements',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'global',
+    purpose: 'Configurable checklist: each requirement applies to some brokerage types and product modules. No single hard-coded compliance list.',
+    columns: [key(), col('section', 'text'), col('kind', 'text', 'document | field | task | attestation'), col('label', 'text'), col('brokerage_types', 'text[]'), col('modules', 'text[]'), col('is_required', 'bool'), col('version', 'int')],
+  },
+  {
+    name: 'onboarding_items',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'One requirement for one application, with its status and reviewer decision.',
+    columns: [id(), fk('application_id', 'brokerage_applications'), fk('requirement_key', 'onboarding_requirements'), col('status', 'text', 'outstanding | submitted | accepted | correction_requested | rejected | waived'), fk('document_id', 'documents', true), fk('reviewed_by', 'app_users', true), col('reviewed_at', 'timestamptz')],
+  },
+  {
+    name: 'onboarding_feedback',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Reviewer feedback the brokerage sees.',
+    columns: [id(), fk('application_id', 'brokerage_applications'), fk('item_id', 'onboarding_items', true), col('body', 'text'), fk('author_id', 'app_users'), col('resolved_at', 'timestamptz')],
+  },
+  {
+    name: 'onboarding_internal_notes',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Internal reviewer notes. A separate table readable by platform staff only.',
+    columns: [id(), fk('application_id', 'brokerage_applications'), fk('item_id', 'onboarding_items', true), col('body', 'text'), fk('author_id', 'app_users')],
+  },
+  {
+    name: 'extracted_field_proposals',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Values Russ read from a document, with source excerpt and method. Applied only when a person confirms.',
+    columns: [id(), fk('document_id', 'documents'), col('target_field', 'text'), col('current_value', 'jsonb'), col('suggested_value', 'jsonb'), col('source_excerpt', 'text'), col('method', 'text', 'simulated | parsed | model'), col('status', 'text'), fk('decided_by', 'app_users', true)],
+  },
+  {
+    name: 'organisation_product_modules',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Product modules a brokerage declared, B-Covered approved and activation enabled.',
+    columns: [pkfk('tenant_id', 'organisations'), col('module', 'text', 'PK with tenant_id'), col('status', 'text', 'declared | approved | enabled | disabled'), fk('decided_by', 'app_users', true)],
+  },
+  {
+    name: 'organisation_commercial_terms',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'The selected platform package and the terms version the owner agreed.',
+    columns: [id(), col('package_key', 'text'), col('terms', 'jsonb'), col('status', 'text'), fk('agreed_by', 'app_users', true), col('agreed_at', 'timestamptz')],
+  },
+  {
+    name: 'insurer_access',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Access to one insurer and product for one brokerage, separate from platform membership. Quoting only uses enabled rows.',
+    columns: [id(), fk('insurer_id', 'insurers'), col('product_module', 'text'), col('intermediary_code', 'text'), col('mandate', 'jsonb'), col('integration_key', 'text', 'null = unsupported'), col('status', 'text', 'not_configured | awaiting_credentials | testing | enabled | disabled'), col('last_test_result', 'text'), fk('enabled_by', 'app_users', true)],
+  },
+  {
+    name: 'insurer_access_credentials',
+    domain: 'onboarding',
+    status: 'new',
+    scope: 'tenant',
+    purpose: 'Server-only pointer to the Vault secret for an insurer connection, with a masked hint. No client policy can read it.',
+    columns: [pkfk('insurer_access_id', 'insurer_access'), col('vault_secret_id', 'uuid'), col('masked_hint', 'text'), col('rotated_at', 'timestamptz')],
+  },
+]
+
+export const PLANNED_TABLES: PlannedTable[] = [...CORE_TABLES, ...BENEFITS_TABLES, ...ONBOARDING_TABLES]
+
 /** Demo or migration tables that have no direct successor. */
 export const REMOVED_TABLES: Array<{ name: string; reason: string; successor: string }> = [
   { name: 'risk_dependencies', reason: 'Structural links are already captured by foreign keys; operational links are stored once.', successor: 'entity_links' },
@@ -936,9 +1320,17 @@ export const REMOVED_TABLES: Array<{ name: string; reason: string; successor: st
   { name: 'business_documents', reason: 'Renamed and widened to hold claim and customer documents.', successor: 'documents' },
 ]
 
+/** In-browser tables that stand in for a Supabase service and are not created in Postgres. */
+export const LOCAL_STANDINS: Array<{ name: string; service: string; successor: string }> = [
+  { name: 'auth_identities', service: 'Supabase Auth (auth.users)', successor: 'app_users' },
+  { name: 'storage_objects', service: 'Supabase Storage, private tenant-documents bucket', successor: 'documents' },
+  { name: 'document_links', service: 'Supabase Storage signed URLs', successor: 'documents' },
+  { name: 'vault_secrets', service: 'Supabase Vault', successor: 'insurer_access_credentials' },
+]
+
 /** Where each current in-browser demo table goes in the target schema. */
 export function plannedFor(currentTable: string): string | null {
-  const removed = REMOVED_TABLES.find((r) => r.name === currentTable)
+  const removed = REMOVED_TABLES.find((r) => r.name === currentTable) ?? LOCAL_STANDINS.find((r) => r.name === currentTable)
   if (removed) return removed.successor
   return PLANNED_TABLES.some((t) => t.name === currentTable) ? currentTable : null
 }

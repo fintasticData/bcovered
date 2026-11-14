@@ -5,6 +5,7 @@ import { StatusBadge, humanise } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { formatDateTime } from '@/lib/utils'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
+import { lensPath } from '../russ/lenses'
 
 export default function ClientsPage() {
   const { data, isLoading, error } = useCommercialClients()
@@ -15,8 +16,8 @@ export default function ClientsPage() {
         description="Every commercial client with a structured business profile. Open one to see its Risk Twin, potential exposures and outstanding requests."
         actions={
           <Button variant="outline" size="sm" asChild>
-            <Link to="/broker/commercial">
-              <Sparkles /> Commercial workspace
+            <Link to={lensPath('commercial')}>
+              <Sparkles /> Ask Russ · Commercial
             </Link>
           </Button>
         }

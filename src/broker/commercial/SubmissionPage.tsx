@@ -73,7 +73,7 @@ export default function SubmissionPage() {
       {!expanded && (
         <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>
           <ChatPanel
-            title="Commercial Copilot"
+            title="Russ · commercial"
             subtitle={`Working on ${name}`}
             avatar={<Briefcase className="h-4 w-4" />}
             messages={conversation?.messages ?? []}
@@ -84,7 +84,7 @@ export default function SubmissionPage() {
             placeholder={`e.g. Review ${name}`}
             footerNote={
               <>
-                Results of Copilot requests open in the <Link to="/broker/commercial" className="font-semibold text-brand-600">commercial workspace</Link>.
+                Results of Copilot requests open in <Link to="/broker/workspace?lens=commercial" className="font-semibold text-brand-600">Russ · Commercial</Link>.
                 Agent suggestions for this pack are on the right.
               </>
             }

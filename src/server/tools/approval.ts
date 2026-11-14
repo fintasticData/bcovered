@@ -17,7 +17,49 @@ const APPROVAL_TYPES = [
   'underwriting_submission',
   'risk_assessment_signoff',
   'risk_investigation_review',
+  'record_of_advice_signoff',
+  'application_submission',
+  'beneficiary_change',
+  'import_commit',
+  'correction_schedule',
+  'exception_write_off',
+  'movement_submission',
 ] as const
+
+type Decision = 'approved' | 'rejected' | 'changes_requested'
+
+export interface ApprovalDetail {
+  lines: string[]
+  links: Array<{ label: string; to: string }>
+}
+
+export interface ApprovalSubjectHandler {
+  /** The payload an approval on this subject must still match when a person decides. Undefined skips the check. */
+  currentPayload?: (repo: Repo, subjectId: string, approval: ApprovalRequest) => unknown
+  /** Throws when this person may not decide, for example an adviser without the FAIS category. */
+  authorise?: (repo: Repo, subjectId: string, actorId: string, approval: ApprovalRequest) => void
+  onRequested?: (repo: Repo, subjectId: string, approval: ApprovalRequest) => void
+  onDecided?: (repo: Repo, subjectId: string, decision: Decision, actorId: string, approval: ApprovalRequest) => void
+  /** What the reviewer needs to see, for the approval card. */
+  describe?: (repo: Repo, approval: ApprovalRequest) => ApprovalDetail
+}
+
+export const approvalSubjectHandler = (table: string) => subjectHandlers.get(table)
+
+const subjectHandlers = new Map<string, ApprovalSubjectHandler>()
+
+/** Lets a module keep its own subject table in step with approvals, without the approval engine knowing its schema. */
+export const registerApprovalSubject = (table: string, handler: ApprovalSubjectHandler) => void subjectHandlers.set(table, handler)
+
+/** The latest approved request of this type for the subject, checked against the payload it was raised for. */
+export function requireApproved(repo: Repo, type: ApprovalType, subjectId: string, payload: unknown, what: string): ApprovalRequest {
+  const approval = repo
+    .list('approval_requests', (a) => a.subject_id === subjectId && a.approval_type === type && a.status === 'approved')
+    .sort((a, b) => (b.decided_at ?? '').localeCompare(a.decided_at ?? ''))[0]
+  if (!approval) throw new ToolError('approval_required', `A licensed person must approve ${what} first`)
+  if (hashPayload(payload) !== approval.payload_hash) throw new ToolError('approval_stale', `${what} changed after approval; it needs a fresh approval`)
+  return approval
+}
 
 export interface ApprovalInput {
   approval_type: ApprovalType
@@ -55,6 +97,7 @@ export function requestApproval(repo: Repo, requestedBy: string, jobId: string |
     decision_note: null,
   })
   if (input.subject_table === 'risk_assessments') repo.update('risk_assessments', input.subject_id, { status: 'awaiting_review', approval_id: approval.id })
+  subjectHandlers.get(input.subject_table)?.onRequested?.(repo, input.subject_id, approval)
   return approval
 }
 
@@ -110,6 +153,12 @@ export const approvalTools = [
       if (approval.subject_table === 'risk_assessments' && hashPayload(assessmentReviewPayload(repo, approval.subject_id)) !== approval.payload_hash) {
         throw new ToolError('approval_stale', 'The assessment findings changed after this request was raised; review the latest version')
       }
+      const handler = subjectHandlers.get(approval.subject_table)
+      const current = handler?.currentPayload?.(repo, approval.subject_id, approval)
+      if (current !== undefined && hashPayload(current) !== approval.payload_hash) {
+        throw new ToolError('approval_stale', 'The record changed after this request was raised; review the latest version and request approval again')
+      }
+      handler?.authorise?.(repo, approval.subject_id, actor.id, approval)
       if (decision !== 'approved' && !note?.trim()) {
         throw new ToolError('validation', 'Add a note explaining the rejection or the changes needed')
       }
@@ -141,6 +190,7 @@ export const approvalTools = [
             .forEach((f) => repo.update('risk_assessment_findings', f.id, { status: 'accepted' }))
         }
       }
+      handler?.onDecided?.(repo, approval.subject_id, decision, actor.id, updated)
       return updated
     },
     auditEntity: (r) => ({ table: 'approval_requests', id: r.id }),

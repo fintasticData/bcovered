@@ -60,7 +60,7 @@ export default function BrokerQuotePage() {
           <CompareWithAi quoteId={quote.id} onHighlight={(label) => setHighlight(options.find((o) => o.option_label === label)?.id ?? null)} />
           {quote.proposal && (
             <section className="panel p-4">
-              <h3 className="text-sm font-semibold text-navy-900">Broker Copilot summary</h3>
+              <h3 className="text-sm font-semibold text-navy-900">Russ summary</h3>
               <p className="mt-2 text-sm leading-relaxed text-navy-700">{quote.proposal.broker_summary}</p>
             </section>
           )}

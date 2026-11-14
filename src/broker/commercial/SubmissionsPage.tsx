@@ -46,7 +46,7 @@ export default function SubmissionsPage() {
       {error && <ErrorState message={error.message} />}
       {data?.length === 0 && (
         <EmptyState title="No submission packs yet">
-          Ask the Commercial Copilot to review a business, or load three completed demo packs.
+          Ask Russ to review a business, or load three completed demo packs.
           <div className="mt-3 flex justify-center">{loadButton}</div>
         </EmptyState>
       )}

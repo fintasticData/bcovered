@@ -1,5 +1,11 @@
 // Row types mirror supabase/migrations/20261106_0001_insureflow_core.sql one to one.
+import type { BenefitsTables } from './benefitsSchema'
 import type { CommercialTables } from './commercialSchema'
+import type { ControlsTables } from './controlsSchema'
+import type { LifeTables } from './lifeSchema'
+import type { BrokerageType, DataOrigin, LifecycleStatus, OnboardingTables, OrganisationKind } from './onboardingSchema'
+import type { RouteTables } from './routeSchema'
+import type { SpecialistTables } from './specialistSchema'
 
 export type UUID = string
 export type ISODate = string
@@ -14,24 +20,44 @@ export interface Organisation {
   fsp_number: string | null
   fsp_verified: boolean
   is_demo: boolean
+  kind: OrganisationKind
+  legal_name: string | null
+  trading_name: string | null
+  registration_number: string | null
+  brokerage_type: BrokerageType | null
+  lifecycle_status: LifecycleStatus
+  status_reason: string | null
+  activated_at: ISODate | null
+  suspended_at: ISODate | null
+  retention_until: string | null
   created_at: ISODate
   updated_at: ISODate
 }
 
 export interface AppUser {
   id: UUID
+  /** Home brokerage. Membership of other brokerages lives in organisation_memberships. */
   tenant_id: UUID
   email: string
   full_name: string
+  /** Legacy demo role. Staff roles come from the membership of the active brokerage. */
   role: Role
   customer_id: UUID | null
+  /** The workspace the person explicitly switched to; feeds the tenant claim in the login token. */
+  active_organisation_id?: UUID | null
   created_at: ISODate
   updated_at: ISODate
 }
 
+/** Sample (synthetic demo) or Live (real client) records; Supabase enforces it on every read, write and link (0012). */
+export type DataCategory = 'sample' | 'live'
+
 export interface Customer {
   id: UUID
   tenant_id: UUID
+  /** Assigned by the database (AC-1001 Live, AC-S1001 Sample); absent until a Supabase write returns it. */
+  account_number?: string
+  data_category?: DataCategory
   customer_type: 'personal' | 'commercial'
   full_name: string
   email: string | null
@@ -40,6 +66,11 @@ export interface Customer {
   status: 'prospect' | 'active' | 'lapsed' | 'archived'
   is_synthetic: boolean
   created_by: UUID | null
+  /** Provenance for client-book imports: the brokerage's own system and its identifier there. */
+  source_system?: string | null
+  source_ref?: string | null
+  import_batch_id?: UUID | null
+  data_origin?: DataOrigin
   created_at: ISODate
   updated_at: ISODate
 }
@@ -143,9 +174,12 @@ export interface Lead {
   updated_at: ISODate
 }
 
+export type ProviderType = 'insurer' | 'fund_administrator' | 'investment_manager' | 'cell_captive_insurer' | 'other'
+
 export interface Insurer {
   id: UUID
   name: string
+  provider_type: ProviderType
   is_fictional: true
   created_at: ISODate
 }
@@ -322,6 +356,13 @@ export type ApprovalType =
   | 'underwriting_submission'
   | 'risk_assessment_signoff'
   | 'risk_investigation_review'
+  | 'record_of_advice_signoff'
+  | 'application_submission'
+  | 'beneficiary_change'
+  | 'import_commit'
+  | 'correction_schedule'
+  | 'exception_write_off'
+  | 'movement_submission'
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested' | 'cancelled'
 
@@ -373,10 +414,12 @@ export interface AuditEvent {
   before: Json | null
   after: Json | null
   job_id: UUID | null
+  /** Platform staff acting on a brokerage's records are recorded with the platform scope. */
+  actor_scope?: 'tenant' | 'platform'
   created_at: ISODate
 }
 
-export interface Tables extends CommercialTables {
+export interface Tables extends CommercialTables, LifeTables, ControlsTables, BenefitsTables, SpecialistTables, OnboardingTables, RouteTables {
   organisations: Organisation[]
   app_users: AppUser[]
   customers: Customer[]
@@ -399,4 +442,14 @@ export interface Tables extends CommercialTables {
 export type TableName = keyof Tables
 export type Row<T extends TableName> = Tables[T][number]
 
-export const GLOBAL_TABLES: TableName[] = ['organisations', 'insurers']
+export const GLOBAL_TABLES: TableName[] = [
+  'organisations',
+  'insurers',
+  'benefit_types',
+  'products',
+  'product_versions',
+  'product_benefits',
+  'platform_staff',
+  'auth_identities',
+  'onboarding_requirements',
+]

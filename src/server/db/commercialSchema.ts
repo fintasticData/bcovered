@@ -558,6 +558,11 @@ export interface SubmissionSection {
 export interface Task {
   id: UUID
   tenant_id: UUID
+  /** Assigned by the database (TK-1001 / TK-S1001). */
+  reference?: string
+  person_id?: UUID | null
+  policy_id?: UUID | null
+  data_category?: 'sample' | 'live'
   customer_id: UUID | null
   subject_table: string | null
   subject_id: UUID | null

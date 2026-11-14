@@ -1,7 +1,8 @@
 // Request handlers shaped like the future FastAPI routes (/api/v1/...). The UI reaches them only via src/api/client.ts.
 import './tools'
 import { agentLabel } from './agents/catalog'
-import { COMMERCIAL_COPILOT_SUGGESTIONS, COPILOT_SUGGESTIONS, handleCopilotCommand, type CopilotView } from './agents/copilotCommands'
+import { COMMERCIAL_COPILOT_SUGGESTIONS, COPILOT_SUGGESTIONS, handleCopilotCommand, type CopilotMode, type CopilotView } from './agents/copilotCommands'
+import { CONTROLS_SUGGESTIONS, LIFE_SUGGESTIONS } from './agents/russ'
 import { startMotorLeadWorkflow } from './agents/orchestrator'
 import { startCommercialReview } from './agents/commercialOrchestrator'
 import { commercialTurn, initialCommercialState, type CommercialIntakeState } from './llm/commercialIntake'
@@ -25,9 +26,14 @@ import type {
   Quote,
   QuoteOption,
   Role,
+  TableName,
 } from './db/schema'
+import { approvalSubjectHandler, type ApprovalDetail } from './tools/approval'
 import { TENANT_ID } from './db/seed'
-import { db, Repo } from './db/store'
+import type { ApplicationStatus, MemberRole, OrganisationMembership, PlatformRole, PlatformStaff } from './db/onboardingSchema'
+import type { Organisation } from './db/schema'
+import { db, identity, Repo, ScopedRepo, type Grants } from './db/store'
+import { capabilitiesOf, LEGACY_ROLE, READ_ONLY_ROLES, ROLE_LABEL, type Capability } from './onboarding/config'
 import type { QuoteAnswer } from './domain/quotes'
 import type { CommercialSubmission } from './db/commercialSchema'
 import { hashPayload } from './lib/hash'
@@ -44,18 +50,98 @@ export interface Auth {
 export interface Principal {
   repo: Repo
   user: AppUser | null
+  /** Role the broker modules check: the legacy demo role, or the one mapped from the active membership. */
   role: Role
   actor: Actor
+  /** The active brokerage, or null for platform staff outside any brokerage and for people with no valid membership. */
+  organisation: Organisation | null
+  membership: OrganisationMembership | null
+  platform: PlatformStaff | null
 }
 
 export const STAFF_ROLES: Role[] = ['broker', 'manager', 'admin']
 
+/** A tenant id that owns nothing: people without a valid membership get a repository that sees no rows. */
+export const NO_TENANT = '00000000-0000-4000-8000-000000000000'
+
+/** Active access grants for a portal user, by scope type. */
+export function grantsFor(repo: Repo, userId: string): Grants {
+  const grants: Grants = new Map()
+  repo
+    .list('access_grants', (g) => g.user_id === userId && !g.revoked_at)
+    .forEach((g) => grants.set(g.scope_type, (grants.get(g.scope_type) ?? new Set()).add(g.scope_id)))
+  return grants
+}
+
+const isOperational = (org: Organisation | null | undefined) => org?.lifecycle_status === 'active'
+
+/**
+ * Resolves who is calling and which brokerage they act in. Staff act in the brokerage they explicitly switched to
+ * (app_users.active_organisation_id, the tenant claim in the target login token) and only while their membership
+ * there is active. Read-only roles get a repository that refuses writes; brokerages that are onboarding, suspended
+ * or closed get one that refuses operational tables.
+ */
 export function principal(auth: Auth): Principal {
-  const repo = new Repo(TENANT_ID)
-  const user = auth.userId ? (repo.get('app_users', auth.userId) ?? null) : null
-  if (auth.userId && !user) throw new ToolError('forbidden', 'Session is no longer valid. Choose a demo identity again.')
-  const role: Role = user?.role ?? 'visitor'
-  return { repo, user, role, actor: { type: user ? 'user' : 'system', id: user?.id ?? 'visitor', role } }
+  const user = auth.userId ? (identity.user(auth.userId) ?? null) : null
+  if (auth.userId && !user) throw new ToolError('forbidden', 'Session is no longer valid. Sign in or choose a demo identity again.')
+  const platform = user ? (identity.platformStaff(user.id) ?? null) : null
+  const result = (repo: Repo, role: Role, organisation: Organisation | null, membership: OrganisationMembership | null): Principal => ({
+    repo,
+    user,
+    role,
+    organisation,
+    membership,
+    platform,
+    actor: { type: user ? 'user' : 'system', id: user?.id ?? 'visitor', role },
+  })
+
+  if (!user) return result(new Repo(TENANT_ID), 'visitor', identity.organisation(TENANT_ID) ?? null, null)
+
+  if (user.role === 'customer') {
+    const org = identity.organisation(user.tenant_id) ?? null
+    const base = new Repo(user.tenant_id, { operational: isOperational(org) })
+    const grants = grantsFor(base, user.id)
+    return result(grants.size ? new ScopedRepo(user.tenant_id, grants) : base, 'customer', org, null)
+  }
+
+  const memberships = identity.memberships(user.id)
+  const activeId = user.active_organisation_id ?? user.tenant_id
+  const membership = memberships.find((m) => m.tenant_id === activeId && m.status === 'active') ?? null
+  if (membership) {
+    const org = identity.organisation(membership.tenant_id) ?? null
+    const repo = new Repo(membership.tenant_id, { readOnly: READ_ONLY_ROLES.includes(membership.role), operational: isOperational(org) })
+    return result(repo, LEGACY_ROLE[membership.role], org, membership)
+  }
+  // Staff created before memberships existed keep their demo role in their home brokerage.
+  if (!memberships.length && !platform && STAFF_ROLES.includes(user.role)) {
+    const org = identity.organisation(user.tenant_id) ?? null
+    return result(new Repo(user.tenant_id, { operational: isOperational(org) }), user.role, org, null)
+  }
+  return result(new Repo(NO_TENANT, { readOnly: true }), 'visitor', null, null)
+}
+
+/**
+ * Ava and the Business Discovery Agent are always available. When the caller's own brokerage is onboarding, suspended
+ * or closed, their public and portal conversations run in the public B-Covered workspace as a visitor, with no link to
+ * the caller's records. Broker-channel copilots keep the caller's principal, so brokerage rules still apply there.
+ */
+function conversationPrincipal(auth: Auth, channel?: Channel): Principal {
+  const p = principal(auth)
+  if (channel === 'broker' || p.repo.options.operational !== false) return p
+  return {
+    repo: new Repo(TENANT_ID),
+    user: null,
+    role: 'visitor',
+    organisation: identity.organisation(TENANT_ID) ?? null,
+    membership: null,
+    platform: p.platform,
+    actor: { type: 'system', id: 'visitor', role: 'visitor' },
+  }
+}
+
+export function requirePlatform(p: Principal, roles: PlatformRole[] = ['platform_admin', 'onboarding_reviewer', 'platform_read_only']): PlatformStaff {
+  if (!p.platform || !roles.includes(p.platform.role)) throw new ToolError('forbidden', 'This needs a B-Covered platform role.')
+  return p.platform
 }
 
 export function requireRole(p: Principal, roles: Role[]) {
@@ -72,47 +158,137 @@ export interface DemoIdentity {
   full_name: string
   role: Role
   description: string
+  /** Organisation heading in the switcher. */
+  group: string
   /** Where the role switcher lands this identity. */
   home: string
 }
 
-export function listIdentities(): DemoIdentity[] {
+/** Where a staff member lands: the onboarding journey until their brokerage is active. */
+function staffHome(p: Principal): string {
+  if (!p.membership) return p.platform ? '/platform/onboarding' : '/'
+  return p.organisation?.lifecycle_status === 'active' ? '/broker' : '/onboarding'
+}
+
+function bcoveredIdentities(): DemoIdentity[] {
   const repo = new Repo(TENANT_ID)
   const order: Role[] = ['broker', 'manager', 'admin', 'customer']
-  const people = repo
-    .list('app_users')
+  return repo
+    .list('app_users', (u) => u.tenant_id === TENANT_ID)
     .sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))
     .map((u) => {
       const business = u.role === 'customer' && u.customer_id ? repo.find('business_profiles', (b) => b.customer_id === u.customer_id) : undefined
+      const grants = u.role === 'customer' ? grantsFor(repo, u.id) : new Map()
+      const org = u.customer_id ? repo.get('customers', u.customer_id)?.full_name : undefined
+      const longTerm = repo.list('adviser_authorisations', (a) => a.user_id === u.id && a.status === 'active' && a.product_category.startsWith('lt_')).length > 0
+      const description =
+        u.role === 'customer'
+          ? grants.has('employer')
+            ? `Employer HR portal · ${org ?? 'employer'}`
+            : grants.has('cell')
+              ? `Cell owner portal · ${org ?? 'cell owner'}`
+              : business
+                ? `Business portal · ${business.trading_name ?? business.registered_name}`
+                : 'Customer portal'
+          : u.role === 'manager'
+            ? 'Brokerage manager and key individual'
+            : longTerm
+              ? 'Licensed adviser · life, group risk and retirement'
+              : 'Licensed broker · short-term'
+      const home =
+        u.role !== 'customer'
+          ? '/broker'
+          : grants.has('employer')
+            ? '/portal/employer'
+            : grants.has('cell')
+              ? '/portal/cell'
+              : business
+                ? '/portal/business'
+                : '/portal'
+      return { user_id: u.id, customer_id: u.customer_id, full_name: u.full_name, role: u.role, description, group: 'BCovered (first brokerage)', home }
+    })
+}
+
+export function listIdentities(): DemoIdentity[] {
+  const others = identity
+    .allUsers()
+    .filter((u) => u.tenant_id !== TENANT_ID)
+    .map((u): DemoIdentity => {
+      const p = principal({ userId: u.id })
+      const org = p.organisation ?? identity.organisation(u.tenant_id)
+      const memberships = identity.memberships(u.id).filter((m) => m.status === 'active')
+      const description = p.platform
+        ? 'B-Covered platform staff'
+        : p.membership
+          ? `${ROLE_LABEL[p.membership.role]}${memberships.length > 1 ? ` · ${memberships.length} brokerages` : ''}${org && org.lifecycle_status !== 'active' ? ` · ${org.lifecycle_status}` : ''}`
+          : 'No active membership'
       return {
         user_id: u.id,
         customer_id: u.customer_id,
         full_name: u.full_name,
-        role: u.role,
-        description:
-          u.role === 'customer'
-            ? business
-              ? `Business portal · ${business.trading_name ?? business.registered_name}`
-              : 'Customer portal'
-            : u.role === 'manager'
-              ? 'Brokerage manager'
-              : 'Licensed broker',
-        home: u.role === 'customer' ? (business ? '/portal/business' : '/portal') : '/broker',
+        role: p.role,
+        description,
+        group: p.platform ? 'B-Covered platform' : (identity.organisation(u.tenant_id)?.name ?? 'Other'),
+        home: staffHome(p),
       }
     })
   return [
-    { user_id: null, customer_id: null, full_name: 'Public visitor', role: 'visitor' as Role, description: 'Public website', home: '/' },
-    ...people,
+    { user_id: null, customer_id: null, full_name: 'Public visitor', role: 'visitor' as Role, description: 'Public website', group: 'Public', home: '/' },
+    ...bcoveredIdentities(),
+    ...others,
   ]
 }
 
 /** True when the demo identity still exists, for example after a data reset removed it. */
 export function sessionExists(userId: string) {
-  return Boolean(new Repo(TENANT_ID).get('app_users', userId))
+  return Boolean(identity.user(userId))
 }
 
-export function getSessionUser(auth: Auth) {
-  return principal(auth).user
+export interface WorkspaceOption {
+  organisation_id: string
+  name: string
+  role: MemberRole
+  role_label: string
+  lifecycle_status: Organisation['lifecycle_status']
+  active: boolean
+}
+
+export interface SessionView extends AppUser {
+  member_role: MemberRole | null
+  platform_role: PlatformRole | null
+  organisation: Pick<Organisation, 'id' | 'name' | 'kind' | 'lifecycle_status' | 'is_demo' | 'status_reason'> | null
+  workspaces: WorkspaceOption[]
+  capabilities: Capability[]
+  read_only: boolean
+  application_status: ApplicationStatus | null
+  home: string
+}
+
+export function getSessionUser(auth: Auth): SessionView | null {
+  const p = principal(auth)
+  if (!p.user) return null
+  const activeId = p.organisation?.id ?? null
+  const workspaces = identity
+    .memberships(p.user.id)
+    .filter((m) => m.status === 'active')
+    .flatMap((m) => {
+      const org = identity.organisation(m.tenant_id)
+      return org ? [{ organisation_id: org.id, name: org.name, role: m.role, role_label: ROLE_LABEL[m.role], lifecycle_status: org.lifecycle_status, active: org.id === activeId && Boolean(p.membership) }] : []
+    })
+  const application = p.membership ? p.repo.list('brokerage_applications').sort((a, b) => b.created_at.localeCompare(a.created_at))[0] : undefined
+  const org = p.organisation
+  return {
+    ...p.user,
+    role: p.role,
+    member_role: p.membership?.role ?? null,
+    platform_role: p.platform?.role ?? null,
+    organisation: org ? { id: org.id, name: org.name, kind: org.kind, lifecycle_status: org.lifecycle_status, is_demo: org.is_demo, status_reason: org.status_reason } : null,
+    workspaces,
+    capabilities: p.user.role === 'customer' ? [] : capabilitiesOf(p.membership?.role ?? null),
+    read_only: Boolean(p.repo.options.readOnly),
+    application_status: application?.status ?? null,
+    home: p.user.role === 'customer' ? '/portal' : staffHome(p),
+  }
 }
 
 export function resetDemo() {
@@ -151,7 +327,11 @@ export interface ConversationView {
 }
 
 /** Assistants a conversation can be started with, per channel. */
-export type AssistantKind = 'ava' | 'business_discovery' | 'broker_copilot' | 'commercial_copilot'
+export type AssistantKind = 'ava' | 'business_discovery' | 'broker_copilot' | 'commercial_copilot' | 'russ_life' | 'russ_controls'
+
+const BROKER_ASSISTANTS: AssistantKind[] = ['commercial_copilot', 'russ_life', 'russ_controls']
+
+const COPILOT_MODE: Record<string, CopilotMode> = { commercial_copilot: 'commercial', russ_life: 'life', russ_controls: 'controls' }
 
 function toMessageView(m: ConversationMessage): MessageView {
   const s = (m.structured ?? {}) as { quick_replies?: string[]; links?: MessageView['links']; view?: CopilotView }
@@ -183,26 +363,28 @@ const COMMERCIAL_GREETING =
   'Hi, I’m BCovered’s Business Discovery Agent. Tell me how your business operates, in your own words, and I’ll only ask for what’s missing. Our agents then map potential risks and a licensed broker reviews everything. I don’t give financial advice.'
 
 const COMMERCIAL_COPILOT_GREETING =
-  'I’m your Commercial Copilot. Ask me to review a business, show commercial clients or draft submissions. Results open on the right and every review runs as a job you can monitor.'
+  'I’m Russ, working with the commercial agents. Ask me to review a business, show commercial clients or draft submissions. Results open on the right and every review runs as a job you can monitor.'
 
 const GREETING: Record<Channel, string> = {
   public:
     'Hi, I’m Ava, BCovered’s AI assistant. Tell me what you’d like to insure and I’ll gather what our brokers need. I’m not a licensed adviser: a broker reviews every recommendation before you see it.',
   portal: 'Hi, I’m Ava. I can help with a new motor comparison from here.',
   broker:
-    'I’m your Broker Copilot. Ask me to show work queues or start a comparison; I’ll show the results on the right and create jobs you can monitor.',
+    'I’m Russ, B-Covered’s assistant. Ask me about work queues, comparisons, life advice, employee movements, contribution reconciliations, transfers, investments or cell captives. Results open on the right and every piece of work runs as a job you can monitor. I prepare; a licensed person approves.',
 }
 
 export function startConversation(
   auth: Auth,
   body: { channel: Channel; context?: Record<string, Json>; assistant?: AssistantKind },
 ): ConversationView {
-  const p = principal(auth)
-  if (body.channel === 'broker') requireRole(p, STAFF_ROLES)
+  const p = conversationPrincipal(auth, body.channel)
+  // A visitor only sees public conversations, so a portal chat that fell back to the public workspace becomes public.
+  const channel: Channel = body.channel === 'portal' && !p.user ? 'public' : body.channel
+  if (channel === 'broker') requireRole(p, STAFF_ROLES)
   const assistant: AssistantKind =
-    body.channel === 'broker'
-      ? body.assistant === 'commercial_copilot'
-        ? 'commercial_copilot'
+    channel === 'broker'
+      ? body.assistant && BROKER_ASSISTANTS.includes(body.assistant)
+        ? body.assistant
         : 'broker_copilot'
       : body.assistant === 'business_discovery'
         ? 'business_discovery'
@@ -214,15 +396,25 @@ export function startConversation(
         ? { intake: initialIntakeState() as unknown as Json }
         : {}
   const opening: Record<AssistantKind, { content: string; quick_replies: string[] }> = {
-    ava: { content: GREETING[body.channel], quick_replies: ['I’ve just bought a car', 'I want to compare my car insurance', 'Someone hit my parked car'] },
+    ava: { content: GREETING[channel], quick_replies: ['I’ve just bought a car', 'I want to compare my car insurance', 'Someone hit my parked car'] },
     broker_copilot: { content: GREETING.broker, quick_replies: COPILOT_SUGGESTIONS },
     commercial_copilot: { content: COMMERCIAL_COPILOT_GREETING, quick_replies: COMMERCIAL_COPILOT_SUGGESTIONS },
+    russ_life: {
+      content:
+        'I’m Russ, working with the Life Sales, Underwriting and Servicing agents. I prepare needs analyses, simulated quotes and draft Records of Advice for an authorised adviser to review and sign off. I never give advice myself.',
+      quick_replies: LIFE_SUGGESTIONS,
+    },
+    russ_controls: {
+      content:
+        'I’m Russ, working with the Group Membership, Contribution and Investment agents. I validate and match source files, reconcile them, quantify the differences and prepare corrections for your approval. I never authorise a payment or a correction.',
+      quick_replies: CONTROLS_SUGGESTIONS,
+    },
     business_discovery: { content: COMMERCIAL_GREETING, quick_replies: ['We operate three restaurants around Johannesburg and want better insurance.'] },
   }
   return db.transaction(() => {
     const c = p.repo.insert('conversations', {
       customer_id: p.user?.customer_id ?? null,
-      channel: body.channel,
+      channel,
       assistant,
       context: { ...(body.context ?? {}), ...intake },
     })
@@ -237,14 +429,14 @@ export function startConversation(
 }
 
 export function getConversation(auth: Auth, body: { conversation_id: string }): ConversationView {
-  const p = principal(auth)
+  const p = conversationPrincipal(auth)
   const c = p.repo.require('conversations', body.conversation_id)
   if (!canSeeConversation(p, c)) throw new ToolError('forbidden', 'This conversation belongs to someone else.')
   return conversationView(p.repo, c)
 }
 
 export async function sendMessage(auth: Auth, body: { conversation_id: string; text: string }): Promise<ConversationView> {
-  const p = principal(auth)
+  const p = conversationPrincipal(auth)
   const text = body.text.trim()
   if (!text) throw new ToolError('validation', 'Message is empty')
   if (text.length > 2000) throw new ToolError('validation', 'Message is too long')
@@ -256,14 +448,15 @@ export async function sendMessage(auth: Auth, body: { conversation_id: string; t
   if (c.channel === 'broker') {
     requireRole(p, STAFF_ROLES)
     if (c.assistant === 'commercial_copilot' && c.context.broker_discovery) return brokerDiscoveryTurn(p, c, text)
-    const out = handleCopilotCommand(p.repo, p.actor, text, c.assistant === 'commercial_copilot' ? 'commercial' : 'personal')
+    const out = handleCopilotCommand(p.repo, p.actor, text, COPILOT_MODE[c.assistant] ?? 'personal')
     p.repo.insert('conversation_messages', {
       conversation_id: c.id,
       role: 'assistant',
       content: out.reply,
       structured: { quick_replies: out.suggestions, view: out.view } as unknown as Json,
     })
-    const jobId = out.view.kind === 'job' || out.view.kind === 'business' || out.view.kind === 'twin' ? out.view.job_id : null
+    const v = out.view
+    const jobId = v.kind === 'job' || v.kind === 'business' || v.kind === 'twin' || v.kind === 'life_case' || v.kind === 'reconciliation' || v.kind === 'movements' ? v.job_id : null
     const context: Record<string, Json> = { ...c.context }
     if (jobId) context.job_id = jobId
     if (out.discovery) {
@@ -475,7 +668,7 @@ export function getJob(auth: Auth, body: { job_id: string }): JobDetail {
 
 /** Public progress for the Ava panel: step names and statuses only, scoped to the caller's own conversation. */
 export function getConversationJobProgress(auth: Auth, body: { conversation_id: string }) {
-  const p = principal(auth)
+  const p = conversationPrincipal(auth)
   const c = p.repo.require('conversations', body.conversation_id)
   if (!canSeeConversation(p, c)) throw new ToolError('forbidden', 'This conversation belongs to someone else.')
   const jobId = c.context.job_id as string | undefined
@@ -625,8 +818,32 @@ export interface ApprovalView {
   quote: QuoteDetail | null
   submission: ApprovalSubmissionView | null
   risk: ApprovalRiskView | null
+  /** Life, controls and funds approvals describe themselves through their subject handler. */
+  detail: (ApprovalDetail & { current_matches: boolean }) | null
   job: JobSummary | null
   requested_by_label: string
+}
+
+function approvalDetail(repo: Repo, a: ApprovalRequest): ApprovalView['detail'] {
+  const handler = approvalSubjectHandler(a.subject_table)
+  if (!handler?.describe) return null
+  let current_matches = true
+  try {
+    const current = handler.currentPayload?.(repo, a.subject_id, a)
+    current_matches = current === undefined || hashPayload(current) === a.payload_hash
+  } catch {
+    current_matches = false
+  }
+  return { ...handler.describe(repo, a), current_matches }
+}
+
+function subjectCustomer(repo: Repo, a: ApprovalRequest): Customer | null {
+  try {
+    const row = repo.get(a.subject_table as TableName, a.subject_id) as { customer_id?: string | null } | undefined
+    return row?.customer_id ? (repo.get('customers', row.customer_id) ?? null) : null
+  } catch {
+    return null
+  }
 }
 
 function approvalRisk(repo: Repo, a: ApprovalRequest): ApprovalRiskView | null {
@@ -682,9 +899,14 @@ export function listApprovals(auth: Auth, body: { status?: ApprovalRequest['stat
         quote,
         submission,
         risk,
+        detail: approvalDetail(p.repo, a),
         customer:
           quote?.customer ??
-          (submission ? (p.repo.get('customers', submission.submission.customer_id) ?? null) : riskCustomer ? (p.repo.get('customers', riskCustomer) ?? null) : null),
+          (submission
+            ? (p.repo.get('customers', submission.submission.customer_id) ?? null)
+            : riskCustomer
+              ? (p.repo.get('customers', riskCustomer) ?? null)
+              : subjectCustomer(p.repo, a)),
         job: job ? summariseJob(p.repo, job) : null,
         requested_by_label: p.repo.get('app_users', a.requested_by_agent)?.full_name ?? agentLabel(a.requested_by_agent),
       }
@@ -812,5 +1034,10 @@ export function getOverview(auth: Auth): OverviewData {
 }
 
 export function bootServer() {
-  if (typeof window !== 'undefined') recoverJobs(TENANT_ID)
+  if (typeof window !== 'undefined') recoverAllJobs()
+}
+
+/** Resumes interrupted jobs in every brokerage; each runs on its own tenant repository. */
+export function recoverAllJobs() {
+  identity.brokerageIds().forEach((id) => recoverJobs(id))
 }

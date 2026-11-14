@@ -51,7 +51,8 @@ export interface WorkflowInfo {
 
 export interface DemoTableInfo {
   name: string
-  rows: number
+  /** Null when the caller's repository may not read the table (platform-only or not yet operational). */
+  rows: number | null
   planned: string | null
 }
 
@@ -155,7 +156,15 @@ export function buildCatalogue(repo: Repo): SystemsCatalogue {
   })
 
   const demoTables: DemoTableInfo[] = (Object.keys(db.snapshot()) as TableName[])
-    .map((name) => ({ name, rows: repo.list(name).length, planned: plannedFor(name) }))
+    .map((name) => {
+      let rows: number | null
+      try {
+        rows = repo.list(name).length
+      } catch {
+        rows = null
+      }
+      return { name, rows, planned: plannedFor(name) }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const users = new Map(repo.list('app_users').map((u) => [u.id, u.full_name]))

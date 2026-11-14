@@ -7,6 +7,7 @@ import { invokeTool, type Actor } from '../tools/registry'
 import type { ChangeReport } from '../tools/twin'
 import { activeCommercialJob, startAssessment, startCommercialReview, startInvestigation, startTwinBuild } from './commercialOrchestrator'
 import { startMotorLeadWorkflow } from './orchestrator'
+import { CONTROLS_SUGGESTIONS, LIFE_SUGGESTIONS, russCommand } from './russ'
 
 export type CopilotView =
   | { kind: 'approvals'; title: string; approval_ids: string[] }
@@ -24,6 +25,13 @@ export type CopilotView =
       focus: 'assessment' | 'graph' | 'actions' | 'insurance' | 'changes'
       impact?: { risk_profile_id: string; table: TwinTable; id: string }
     }
+  | { kind: 'life_case'; title: string; customer_id: string; job_id: string | null }
+  | { kind: 'life_servicing'; title: string }
+  | { kind: 'policies'; title: string; customer_id: string | null }
+  | { kind: 'reconciliation'; title: string; run_id: string | null; job_id: string | null }
+  | { kind: 'exceptions'; title: string; customer_id: string | null }
+  | { kind: 'movements'; title: string; employer_id: string; job_id: string | null }
+  | { kind: 'links'; title: string; items: Array<{ label: string; to: string; detail: string; badge?: string }> }
   | { kind: 'none' }
 
 export interface CopilotTurn {
@@ -36,6 +44,8 @@ export interface CopilotTurn {
 
 export const COPILOT_SUGGESTIONS = [
   'Show pending approvals',
+  'Reconcile the October payroll against the administrator contribution schedule',
+  'Start life advice for Johan van der Merwe',
   'Show new leads',
   'Create a quote comparison for Ayanda Khumalo',
   'Show running jobs',
@@ -438,10 +448,15 @@ const LATER_PHASE: Array<[RegExp, string]> = [
 const OPEN_LEAD: LeadStatus[] = ['new', 'qualifying', 'qualified', 'quoting', 'proposal_pending']
 const TERMINAL = ['completed', 'failed', 'cancelled']
 
-export function handleCopilotCommand(repo: Repo, actor: Actor, text: string, mode: 'personal' | 'commercial' = 'personal'): CopilotTurn {
+export type CopilotMode = 'personal' | 'commercial' | 'life' | 'controls'
+
+export function handleCopilotCommand(repo: Repo, actor: Actor, text: string, mode: CopilotMode = 'personal'): CopilotTurn {
   const t = text.toLowerCase().trim()
   const ctx = { repo, actor }
-  const suggestions = mode === 'commercial' ? COMMERCIAL_COPILOT_SUGGESTIONS : COPILOT_SUGGESTIONS
+  const suggestions = mode === 'commercial' ? COMMERCIAL_COPILOT_SUGGESTIONS : mode === 'life' ? LIFE_SUGGESTIONS : mode === 'controls' ? CONTROLS_SUGGESTIONS : COPILOT_SUGGESTIONS
+
+  const russ = russCommand(repo, actor, text, t)
+  if (russ) return russ
 
   const commercial = commercialCommand(repo, actor, text, t)
   if (commercial) return commercial
@@ -524,7 +539,11 @@ export function handleCopilotCommand(repo: Repo, actor: Actor, text: string, mod
   const can =
     mode === 'commercial'
       ? 'I can review a business (for example “Review Ubuntu Foods”), show commercial clients, draft submissions, approvals and jobs.'
-      : 'I can show pending approvals, new leads and jobs, create a quote comparison for a customer with a motor lead, or review a commercial client.'
+      : mode === 'life'
+        ? 'I can start life advice for a client with a financial profile, show policies, and run the servicing scan.'
+        : mode === 'controls'
+          ? 'I can reconcile payroll against the administrator contribution schedule, process employee movements, reconcile holdings and show financial exceptions.'
+          : 'I can show approvals, leads and jobs, compare motor quotes, review a commercial client, start life advice, reconcile contributions, process employee movements, and report on transfers, investments and cell captives.'
   return {
     reply: later ? `${later[1]} In this build ${can}` : `In this build ${can}`,
     view: { kind: 'none' },

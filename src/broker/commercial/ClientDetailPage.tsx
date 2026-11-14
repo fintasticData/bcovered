@@ -16,6 +16,8 @@ import { compactRand } from '@/server/domain/commercial/format'
 import { rand } from '@/lib/quote'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { EmptyState, ErrorState, LoadingState } from '../PageHeader'
+import { lensPath } from '../russ/lenses'
+import { AskCopilotButton } from '../copilot/AskCopilotButton'
 
 export default function ClientDetailPage() {
   const { profileId } = useParams()
@@ -50,13 +52,14 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <AskCopilotButton copilot="russ" kind="account" id={p.customer_id} />
           <Button variant="accent" size="sm" asChild>
             <Link to={`/broker/commercial/risk-twins/${p.id}`}>
               <Network /> Open Twin workspace
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link to={`/broker/commercial?prompt=${encodeURIComponent(`Review ${name} and identify outstanding insurance questions`)}`}>
+            <Link to={lensPath('commercial', `Review ${name} and identify outstanding insurance questions`)}>
               <Sparkles /> Review with Copilot
             </Link>
           </Button>

@@ -5,6 +5,10 @@ import { usePlatform } from '@/api/hooks'
 import { LATEST_UPDATE } from '@/data/updates'
 import { Badge } from '@/components/ui/badge'
 import {
+  ACCESS_LEVEL_HINT,
+  ACCESS_LEVEL_LABEL,
+  ACCESS_MATRIX,
+  ACCESS_ROLES,
   CAPABILITIES,
   COPILOT_COMMANDS,
   FAQ,
@@ -13,9 +17,12 @@ import {
   HELP_SECTIONS,
   LIMITATIONS,
   ROLES,
+  ROLE_FLOW,
   STATUSES,
   STATUS_LABEL,
   WALKTHROUGHS,
+  type AccessCell,
+  type AccessLevel,
   type CapabilityStatus,
 } from '@/data/helpGuide'
 import { AGENTS } from '@/server/agents/catalog'
@@ -25,6 +32,14 @@ const STATUS_TONE: Record<CapabilityStatus, 'success' | 'warning' | 'neutral'> =
   live: 'success',
   demo_only: 'warning',
   later: 'neutral',
+}
+
+const ACCESS_TONE: Record<AccessLevel, 'success' | 'info' | 'warning' | 'accent' | 'neutral'> = {
+  full: 'success',
+  view: 'info',
+  limited: 'warning',
+  prepares: 'accent',
+  none: 'neutral',
 }
 
 const TOOL_GROUPS: Record<string, string> = {
@@ -114,7 +129,7 @@ export default function HelpPage() {
           )}
 
           {!q && (
-            <Section id="roles" title="Who can do what">
+            <Section id="roles" title="Roles and access">
               <p>Switch between these identities with “Demo as …” in the header. Broker areas and portals check the role before they open.</p>
               <div className="mt-3 space-y-3 md:hidden">
                 {ROLES.map((r) => (
@@ -145,6 +160,77 @@ export default function HelpPage() {
                         <td className="py-3 whitespace-nowrap">
                           <Link to={r.home.to}>{r.home.label}</Link>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 className="mt-6 font-semibold text-navy-900">How the roles connect</h3>
+              <ol className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {ROLE_FLOW.map((f, i) => (
+                  <li key={f.role} className="flex gap-3 rounded-xl bg-mist p-3 lg:flex-col lg:gap-2">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-white">{i + 1}</span>
+                    <span>
+                      <span className="block font-semibold text-navy-900">{f.role}</span>
+                      <span className="block text-xs text-navy-600">{f.step}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+              <h3 className="mt-6 font-semibold text-navy-900">What each role can use</h3>
+              <p>Each row is an area of the system; each column shows how far that role can go in it.</p>
+              <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                {(Object.keys(ACCESS_LEVEL_LABEL) as AccessLevel[]).map((level) => (
+                  <div key={level} className="flex items-center gap-1.5">
+                    <dt>
+                      <Badge tone={ACCESS_TONE[level]}>{ACCESS_LEVEL_LABEL[level]}</Badge>
+                    </dt>
+                    <dd className="text-xs text-navy-600">{ACCESS_LEVEL_HINT[level]}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="mt-3 space-y-3 lg:hidden">
+                {ACCESS_MATRIX.map((row) => (
+                  <div key={row.area} className="rounded-xl bg-mist p-4">
+                    <p className="font-semibold text-navy-900">{row.area}</p>
+                    <div className="mt-2 space-y-2">
+                      {ACCESS_ROLES.map((r) => (
+                        <div key={r.id} className="flex gap-3">
+                          <span className="w-32 shrink-0 pt-0.5 text-xs font-semibold text-navy-800">{r.label}</span>
+                          <AccessCellView cell={row.access[r.id]} />
+                        </div>
+                      ))}
+                    </div>
+                    <InlineLink to={row.link.to}>{row.link.label}</InlineLink>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 hidden max-h-[75vh] overflow-auto rounded-xl ring-1 ring-navy-800/10 lg:block">
+                <table className="w-full min-w-[960px] text-left text-sm">
+                  <caption className="sr-only">Access by role for each area of the system</caption>
+                  <thead className="sticky top-0 z-10 bg-white text-xs text-navy-500 uppercase">
+                    <tr>
+                      <th scope="col" className="sticky left-0 bg-white px-3 py-2 font-semibold">Area</th>
+                      {ACCESS_ROLES.map((r) => (
+                        <th key={r.id} scope="col" className="px-3 py-2 font-semibold">{r.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-navy-800/10 align-top">
+                    {ACCESS_MATRIX.map((row) => (
+                      <tr key={row.area}>
+                        <th scope="row" className="sticky left-0 w-56 bg-white px-3 py-3 font-semibold text-navy-900">
+                          {row.area}
+                          <Link to={row.link.to} className="mt-1 block text-xs">{row.link.label}</Link>
+                        </th>
+                        {ACCESS_ROLES.map((r) => (
+                          <td key={r.id} className="px-3 py-3">
+                            <AccessCellView cell={row.access[r.id]} />
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
@@ -215,8 +301,8 @@ export default function HelpPage() {
 
           <Section id="copilot" title="Copilot commands">
             <p>
-              Type these into the Broker Copilot in <Link to="/broker/workspace">AI Workspace</Link> or the Commercial Copilot in{' '}
-              <Link to="/broker/commercial">Commercial workspace</Link>. Results open in the panel on the right.
+              Type these into <Link to="/broker/workspace">Russ</Link> (General lens) or{' '}
+              <Link to="/broker/workspace?lens=commercial">Russ · Commercial</Link>. Results open in the panel on the right.
             </p>
             {commands.length > 0 && (
               <div className="mt-3 space-y-3 md:hidden">
@@ -418,6 +504,15 @@ function Section({ id, title, children }: { id: string; title: string; children:
         {children}
       </div>
     </section>
+  )
+}
+
+function AccessCellView({ cell }: { cell: AccessCell }) {
+  return (
+    <span className="block">
+      <Badge tone={ACCESS_TONE[cell.level]}>{ACCESS_LEVEL_LABEL[cell.level]}</Badge>
+      {cell.note && <span className="mt-1 block text-xs text-navy-600">{cell.note}</span>}
+    </span>
   )
 }
 

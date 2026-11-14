@@ -50,6 +50,18 @@
   --color-business-700: #283a93;
   --color-business-800: #1f2d70;
   --color-business-900: #151f50;
+
+  /* Insurance term: short-term lines (gold) and long-term lines (violet) */
+  --color-short-50: #fff8e8;
+  --color-short-200: #fbe0a3;
+  --color-short-400: #f5b841;
+  --color-short-500: #e39f1c;
+  --color-short-700: #8a5d08;
+  --color-long-50: #f5f1ff;
+  --color-long-200: #d9ccfb;
+  --color-long-400: #a78bfa;
+  --color-long-500: #7c5cc4;
+  --color-long-700: #553c9a;
 }
 
 /* Inside an identity scope every brand-* utility resolves to that identity's palette. */
@@ -134,6 +146,7 @@ body {
 }
 
 @media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
   select,
   textarea {
     font-size: 16px;

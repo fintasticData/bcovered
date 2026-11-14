@@ -98,7 +98,7 @@ export default function TwinWorkspacePage() {
         {!expanded && (
           <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>
             <ChatPanel
-              title="Commercial Copilot"
+              title="Russ · commercial"
               subtitle={`Working on ${name} · results open on the right`}
               avatar={<Briefcase className="h-4 w-4" />}
               messages={messages}

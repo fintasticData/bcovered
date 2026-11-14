@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Car, ChevronRight, Plus } from 'lucide-react'
 import { useLeads } from '@/api/hooks'
 import { StatusBadge, humanise } from '@/components/StatusBadge'
+import { Button } from '@/components/ui/button'
+import { DemoSampleBadge } from './quotes/shared'
+import { products } from '@/data/products'
 import { formatDateTime } from '@/lib/utils'
+import { categoriesFor, PRODUCT_KEYS } from '@/server/shortTermApi'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from './PageHeader'
 
 const FILTERS = [
@@ -14,28 +19,67 @@ const FILTERS = [
 export default function LeadsPage() {
   const { data: leads, isLoading, error } = useLeads()
   const [filter, setFilter] = useState('open')
+  const [params] = useSearchParams()
+  const product = PRODUCT_KEYS.find((k) => k === params.get('product')) ?? null
+  const market = params.get('market') === 'personal' || params.get('market') === 'commercial' ? params.get('market') : null
   const rows = useMemo(() => {
     const f = FILTERS.find((x) => x.id === filter)!
-    return (leads ?? []).filter((l) => f.match(l.status))
-  }, [leads, filter])
+    return (leads ?? []).filter((l) => f.match(l.status) && (!product || categoriesFor(product).includes(l.product_category)) && (!market || l.line === market))
+  }, [leads, filter, product, market])
+  const scope = product ? (products.find((p) => p.slug === product)?.name ?? product) : market === 'personal' ? 'Personal lines' : market === 'commercial' ? 'Commercial' : null
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <PageHeader
         title="Leads"
         description="Enquiries captured by Ava, the web form and the Copilot. Agents keep these records current as they work."
-        actions={FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            aria-pressed={filter === f.id}
-            className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${filter === f.id ? 'bg-navy-800 text-white' : 'bg-white text-navy-700 ring-1 ring-navy-800/10'}`}
-          >
-            {f.label}
-          </button>
-        ))}
+        actions={
+          <>
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                aria-pressed={filter === f.id}
+                className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${filter === f.id ? 'bg-navy-800 text-white' : 'bg-white text-navy-700 ring-1 ring-navy-800/10'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+            <Button variant="accent" size="sm" asChild>
+              <Link to="/broker/quotes/sample-motor">
+                <Plus /> New motor quote
+              </Link>
+            </Button>
+          </>
+        }
       />
+      <Link
+        to="/broker/quotes/sample-motor"
+        className="panel mb-4 flex items-center gap-4 p-4 transition hover:border-brand-500/40"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+          <Car className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-navy-900">Sample client · Private motor</span>
+            <DemoSampleBadge />
+          </span>
+          <span className="mt-0.5 block text-xs text-navy-600">
+            Lerato Sample · one private vehicle, prefilled. Edit the details and get three sample insurer results.
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-navy-400" />
+      </Link>
+      {scope && (
+        <p className="mb-3 text-xs text-navy-600">
+          Showing {scope} leads only.{' '}
+          <Link to="/broker/leads" className="font-semibold text-brand-600">
+            Show all leads
+          </Link>
+        </p>
+      )}
       {isLoading && <LoadingState />}
       {error && <ErrorState message={error.message} />}
       {leads && rows.length === 0 && <EmptyState title="No leads in this view" />}

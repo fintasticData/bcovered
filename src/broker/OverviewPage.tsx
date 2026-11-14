@@ -5,6 +5,7 @@ import { humanise } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { formatDateTime } from '@/lib/utils'
 import { ErrorState, LoadingState, PageHeader } from './PageHeader'
+import { BrokerageHomePanel } from './home/BrokerageHomePanel'
 
 export default function OverviewPage() {
   const { data, isLoading, error } = useOverview()
@@ -31,11 +32,13 @@ export default function OverviewPage() {
         actions={
           <Button variant="accent" asChild>
             <Link to="/broker/workspace">
-              <Sparkles /> Open AI Workspace
+              <Sparkles /> Open Russ
             </Link>
           </Button>
         }
       />
+
+      <BrokerageHomePanel />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {kpis.map((k) => (

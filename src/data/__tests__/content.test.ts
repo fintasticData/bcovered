@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { FAQ_CATEGORIES } from '../faq'
-import { CAPABILITIES, GETTING_STARTED, ROLES, WALKTHROUGHS } from '../helpGuide'
+import { ACCESS_MATRIX, CAPABILITIES, GETTING_STARTED, ROLES, WALKTHROUGHS } from '../helpGuide'
 import { LATEST_UPDATE, UPDATE_THREADS } from '../updates'
 import { LATEST_UPDATE_HEADLINE } from '../latestUpdate'
 import { LEGAL_SECTIONS } from '../legal'
@@ -15,7 +15,8 @@ const knownPaths = new Set([...routes.filter((p) => p.startsWith('/')), ...broke
 const HELP_ANCHORS = ['start', 'roles', 'capabilities', 'walkthroughs', 'copilot', 'agents', 'guardrails', 'statuses', 'roadmap', 'faq', 'more']
 
 function resolves(to: string) {
-  const [path, hash] = to.split('#')
+  const [target, hash] = to.split('#')
+  const path = target.split('?')[0]
   if (!knownPaths.has(path)) return false
   if (path === '/legal' && hash) return LEGAL_SECTIONS.some((s) => s.id === hash)
   if (path === '/help' && hash) return HELP_ANCHORS.includes(hash)
@@ -31,6 +32,7 @@ describe('help, FAQ and updates content', () => {
       ...CAPABILITIES.flatMap((c) => c.links.map((l) => l.to)),
       ...GETTING_STARTED.flatMap((s) => (s.link ? [s.link.to] : [])),
       ...ROLES.map((r) => r.home.to),
+      ...ACCESS_MATRIX.map((r) => r.link.to),
       ...WALKTHROUGHS.flatMap((w) => w.steps.map((s) => s.link.to)),
     ]
     expect(links.filter((to) => !resolves(to))).toEqual([])

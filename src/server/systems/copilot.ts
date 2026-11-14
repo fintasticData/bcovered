@@ -83,7 +83,7 @@ export function answerSystemsQuestion(cat: SystemsCatalogue, question: string): 
 
   if (/instance|create (the )?(database|project)|supabase project|set ?up (the )?database|mcp|aivoortrekker|insureflow-dev/.test(q)) {
     return reply(
-      `insureflow-dev has not been created yet, and nothing has been applied. Steps:\n\n${cat.instance_steps.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\nThe only Supabase connection in Cursor today points at aivoortrekker, which must never be used for InsureFlow.`,
+      `The bcovered Supabase project (cgwgmzpcrvimoqaxgoop) is live: migrations 0001–0018 are applied, Sample data is loaded, and the bcovered-mcp and copilot-agent Edge Functions serve AR, Ava and Russ. Remaining steps for production:\n\n${cat.instance_steps.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\nNever use the aivoortrekker project for InsureFlow.`,
       { tab: 'database', view: 'plan', label: 'Database plan and instance' },
     )
   }

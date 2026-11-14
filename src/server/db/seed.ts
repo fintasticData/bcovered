@@ -1,5 +1,7 @@
 import { INDUSTRY_TEMPLATES } from '../domain/commercial/industryTemplates'
+import { benefitsSeed, BX } from './benefitsSeed'
 import type { CommercialTables } from './commercialSchema'
+import { onboardingSeed } from './onboardingSeed'
 import type { Customer, CustomerConsent, Lead, Tables } from './schema'
 
 export const TENANT_ID = 'a0000000-0000-4000-8000-000000000001'
@@ -108,7 +110,24 @@ export function seedTables(now = Date.now()): Tables {
     updated_at: daysAgo(now, age),
   })
 
+  const benefits = benefitsSeed(t, {
+    johanCustomer: C.johan,
+    ayandaCustomer: C.ayanda,
+    brokerUser: SEED_IDS.users.broker,
+    managerUser: SEED_IDS.users.manager,
+  })
+
+  const onboarding = onboardingSeed(now, {
+    bcoveredTenant: t,
+    bcoveredOwner: SEED_IDS.users.manager,
+    bcoveredReps: [SEED_IDS.users.broker, BX.users.lerato],
+    insurers: { ...SEED_IDS.insurers, fynbos: BX.providers.fynbos },
+  })
+
   return {
+    ...benefits.tables,
+    ...onboarding.tables,
+    policies: [...benefits.tables.policies, ...onboarding.policies],
     organisations: [
       {
         id: t,
@@ -117,14 +136,26 @@ export function seedTables(now = Date.now()): Tables {
         fsp_number: null,
         fsp_verified: false,
         is_demo: true,
+        kind: 'brokerage',
+        legal_name: 'BCovered (Pty) Ltd (fictional)',
+        trading_name: 'BCovered',
+        registration_number: null,
+        brokerage_type: 'independent',
+        lifecycle_status: 'active',
+        status_reason: null,
+        activated_at: ts,
+        suspended_at: null,
+        retention_until: null,
         created_at: ts,
         updated_at: ts,
       },
+      ...onboarding.organisations,
     ],
     insurers: [
-      { id: SEED_IDS.insurers.protea, name: 'Protea Insure', is_fictional: true, created_at: ts },
-      { id: SEED_IDS.insurers.karoo, name: 'Karoo Mutual', is_fictional: true, created_at: ts },
-      { id: SEED_IDS.insurers.baobab, name: 'Baobab General', is_fictional: true, created_at: ts },
+      { id: SEED_IDS.insurers.protea, name: 'Protea Insure', provider_type: 'insurer', is_fictional: true, created_at: ts },
+      { id: SEED_IDS.insurers.karoo, name: 'Karoo Mutual', provider_type: 'insurer', is_fictional: true, created_at: ts },
+      { id: SEED_IDS.insurers.baobab, name: 'Baobab General', provider_type: 'insurer', is_fictional: true, created_at: ts },
+      ...benefits.insurers,
     ],
     app_users: [
       {
@@ -167,6 +198,8 @@ export function seedTables(now = Date.now()): Tables {
         created_at: ts,
         updated_at: ts,
       },
+      ...benefits.app_users,
+      ...onboarding.app_users,
     ],
     customers: [
       customer(C.johan, 'Johan van der Merwe', 'johan.vdmerwe@example.demo', '0825550101', 'Western Cape', 'active', 'personal', 28),
@@ -174,8 +207,10 @@ export function seedTables(now = Date.now()): Tables {
       customer(C.priya, "Priya's Spice Café (Priya Naidoo)", 'priya@spicecafe.example.demo', '0315550123', 'KwaZulu-Natal', 'prospect', 'commercial', 3),
       customer(C.lindiwe, 'Lindiwe Mthembu', 'lindiwe.m@example.demo', '0615550177', 'Gauteng', 'prospect', 'personal', 1),
       customer(C.ubuntu, 'Ubuntu Foods (Pty) Ltd', 'sipho.ndlovu@ubuntufoods.example.demo', '0115550160', 'Gauteng', 'active', 'commercial', 40),
+      ...benefits.customers,
+      ...onboarding.customers,
     ],
-    customer_consents: [consent(C.johan, 28), consent(C.ayanda, 6), consent(C.priya, 3), consent(C.lindiwe, 1), consent(C.ubuntu, 40)],
+    customer_consents: [consent(C.johan, 28), consent(C.ayanda, 6), consent(C.priya, 3), consent(C.lindiwe, 1), consent(C.ubuntu, 40), ...benefits.customer_consents],
     conversations: [],
     conversation_messages: [],
     leads: [
@@ -238,6 +273,7 @@ export function seedTables(now = Date.now()): Tables {
         'personal',
         'low',
       ),
+      ...onboarding.leads,
     ],
     quotes: [],
     quote_options: [],
@@ -247,6 +283,8 @@ export function seedTables(now = Date.now()): Tables {
     agent_tool_calls: [],
     approval_requests: [],
     communications: [],
+    route_runs: [],
+    route_action_results: [],
     ...commercialSeed(now),
     audit_events: [
       {
@@ -262,6 +300,7 @@ export function seedTables(now = Date.now()): Tables {
         job_id: null,
         created_at: ts,
       },
+      ...onboarding.audit_events,
     ],
   }
 }

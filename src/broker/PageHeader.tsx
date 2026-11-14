@@ -1,14 +1,43 @@
 import type { ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AlertTriangle, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { MARKET_DOT, TERM_STYLE, lineForPath, lineLabel, type Market, type Term } from './navConfig'
+import { HubTabs, useHub } from './shared/TabbedHub'
 
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+type Line = { term: Term; market: Market }
+
+/** Which insurance line a screen belongs to: term colour and market dot, always with its text label. */
+export function LineChip({ line, className }: { line: Line; className?: string }) {
   return (
-    <div className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
-      <div>
-        <h1 className="text-2xl font-semibold text-navy-900">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-sm text-navy-600">{description}</p>}
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold', TERM_STYLE[line.term].chip, className)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', MARKET_DOT[line.market])} aria-hidden />
+      {lineLabel(line)}
+    </span>
+  )
+}
+
+/** Screen title. The line chip comes from the route unless `line` is given (null hides it). */
+export function PageHeader({ title, description, actions, line }: { title: string; description?: ReactNode; actions?: ReactNode; line?: Line | null }) {
+  const { pathname } = useLocation()
+  const hub = useHub()
+  const chip = line === undefined ? lineForPath(pathname) : line
+  return (
+    <div className="mb-6">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div>
+          {(hub || chip) && (
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              {hub && <span className="text-[11px] font-semibold tracking-[0.14em] text-navy-500 uppercase">{hub.label}</span>}
+              {chip && <LineChip line={chip} />}
+            </div>
+          )}
+          <h1 className="text-2xl font-semibold text-navy-900">{title}</h1>
+          {description && <p className="mt-1 max-w-3xl text-sm text-navy-600">{description}</p>}
+        </div>
+        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {hub && <HubTabs hub={hub} />}
     </div>
   )
 }

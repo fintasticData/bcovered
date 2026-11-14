@@ -297,7 +297,7 @@ function TableCard({
 
           <p className="text-[11px] text-navy-600">
             {demo.length
-              ? `In the demo today: ${demo.map((d) => `${d.name} (${d.rows} rows)`).join(', ')}.`
+              ? `In the demo today: ${demo.map((d) => `${d.name} (${d.rows === null ? 'restricted' : `${d.rows} rows`})`).join(', ')}.`
               : 'No demo table yet: this table arrives with the normalised baseline.'}
           </p>
         </div>
@@ -460,7 +460,7 @@ function PlanView({ cat, onTable }: { cat: SystemsCatalogue; onTable: (t: string
               {cat.demo_tables.map((d) => (
                 <tr key={d.name}>
                   <td className="py-1.5 pr-3 font-mono text-navy-800">{d.name}</td>
-                  <td className="py-1.5 pr-3 text-navy-700 tabular-nums">{d.rows}</td>
+                  <td className="py-1.5 pr-3 text-navy-700 tabular-nums">{d.rows ?? 'restricted'}</td>
                   <td className="py-1.5">
                     {d.planned ? (
                       <button type="button" onClick={() => onTable(d.planned!)} className="cursor-pointer font-mono font-semibold text-brand-600 hover:underline">

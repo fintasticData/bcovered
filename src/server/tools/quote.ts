@@ -57,8 +57,12 @@ export const quoteTools = [
       const quote = repo.require('quotes', quote_id)
       const existing = repo.list('quote_options', (o) => o.quote_id === quote_id)
       if (existing.length) return existing
+      const enabled = new Set(repo.list('insurer_access', (a) => a.product_module === 'personal_lines' && a.status === 'enabled').map((a) => a.insurer_id))
+      if (!enabled.size) {
+        throw new ToolError('forbidden', 'No insurer is enabled for personal-lines quoting in this brokerage. Configure and enable insurer access first.')
+      }
       const expires = new Date(Date.now() + QUOTE_VALIDITY_DAYS * 86_400_000).toISOString()
-      return getDemoOptions(quote.risk_summary.vehicle ?? {}, repo.list('insurers')).map((spec) =>
+      return getDemoOptions(quote.risk_summary.vehicle ?? {}, repo.list('insurers', (i) => enabled.has(i.id))).map((spec) =>
         repo.insert('quote_options', {
           quote_id,
           ...spec,

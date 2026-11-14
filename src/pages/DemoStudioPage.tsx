@@ -1,9 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { Bot, Building2, Database, FlaskConical, Loader2, Play, RotateCcw, ShieldAlert, Target, Users } from 'lucide-react'
+import { Bot, Building2, Database, FlaskConical, Handshake, Loader2, Play, RotateCcw, ShieldAlert, Target, Users } from 'lucide-react'
 import { session } from '@/api/client'
 import { useIdentities, usePlatform, useResetDemo } from '@/api/hooks'
 import { Button } from '@/components/ui/button'
-import { DEMO_BUSINESS_SUMMARIES, NEW_MOTOR_LEAD, PLANNED_COMMERCIAL_SCENARIOS, PLANNED_SCENARIOS, RESTAURANT_GROUP, type DemoScenario } from '@/server/demo/scenarios'
+import { OB } from '@/server/db/onboardingSeed'
+import { BROKER_ONBOARDING, DEMO_BUSINESS_SUMMARIES, NEW_MOTOR_LEAD, PLANNED_COMMERCIAL_SCENARIOS, PLANNED_SCENARIOS, RESTAURANT_GROUP, type DemoScenario } from '@/server/demo/scenarios'
+import { OnboardingDemo } from './demo/OnboardingDemo'
 
 export default function DemoStudioPage() {
   const navigate = useNavigate()
@@ -78,7 +80,7 @@ export default function DemoStudioPage() {
           s={RESTAURANT_GROUP}
           badge={RESTAURANT_GROUP.code ?? 'A'}
           onStart={() => asVisitor(`/business/risk-review?scenario=${RESTAURANT_GROUP.id}`)}
-          secondary={{ label: 'Open commercial workspace', onClick: () => asBroker('/broker/commercial'), disabled: !broker }}
+          secondary={{ label: 'Open Russ · Commercial', onClick: () => asBroker('/broker/workspace?lens=commercial'), disabled: !broker }}
           steps={[
             'Start the scenario and press Play. The fictional owner describes the business.',
             'Switch to Thabo Nkosi (broker). Open Submissions, review the pack and apply the suggested sections, then approve.',
@@ -121,6 +123,36 @@ export default function DemoStudioPage() {
           </div>
         </section>
 
+        <h2 className="mt-10 mb-3 flex items-center gap-2 text-sm font-semibold text-navy-900">
+          <Handshake className="h-4 w-4 text-brand-500" /> Broker onboarding and brokerage workspaces
+        </h2>
+        <ScenarioCard
+          s={BROKER_ONBOARDING}
+          badge={BROKER_ONBOARDING.code ?? 'O'}
+          startLabel="Start as reviewer"
+          onStart={() => {
+            session.set(OB.users.reviewer)
+            navigate(`/platform/onboarding/${OB.applications.highveld}`)
+          }}
+          secondary={{
+            label: 'Open as Kagiso (Highveld)',
+            onClick: () => {
+              session.set(OB.users.highveldOwner)
+              navigate('/onboarding')
+            },
+            disabled: false,
+          }}
+          steps={[
+            'As Pieter Botha: Start review, request a correction on the PI schedule with feedback and an internal note, then Request information.',
+            'As Kagiso Molefe: read the feedback in Russ’s Review tab, use a sample PI schedule under Documents, then resubmit from Readiness.',
+            'As Pieter: Start review, accept every item, Approve application, then Activate workspace as a separate step.',
+            'As Kagiso: open the broker workspace to see the first-use home. Quoting stays blocked until an insurer is enabled.',
+          ]}
+        />
+        <div className="mt-6">
+          <OnboardingDemo />
+        </div>
+
         {platform && (
           <section className="panel mt-8 grid grid-cols-1 gap-6 p-6 md:grid-cols-3">
             <div>
@@ -160,12 +192,14 @@ function ScenarioCard({
   s,
   badge,
   onStart,
+  startLabel = 'Start scenario',
   secondary,
   steps,
 }: {
   s: DemoScenario
   badge: string
   onStart: () => void
+  startLabel?: string
   secondary: { label: string; onClick: () => void; disabled: boolean }
   steps: string[]
 }) {
@@ -179,7 +213,7 @@ function ScenarioCard({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="accent" size="lg" onClick={onStart}>
-            <Play /> Start scenario
+            <Play /> {startLabel}
           </Button>
           <Button variant="outline" size="lg" onClick={secondary.onClick} disabled={secondary.disabled}>
             {secondary.label}

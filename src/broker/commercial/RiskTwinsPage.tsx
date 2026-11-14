@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn, formatDate } from '@/lib/utils'
 import type { CoverageStatus, RiskPriority } from '@/server/db/commercialSchema'
 import { ErrorState, LoadingState, PageHeader } from '../PageHeader'
+import { lensPath } from '../russ/lenses'
 
 const BAR: Record<CoverageStatus, string> = {
   awaiting_broker_review: 'bg-amber-400',
@@ -32,7 +33,7 @@ const ASSESSMENT: Record<AssessmentStatus, { label: string; tone: 'success' | 'w
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-const workspace = (prompt: string) => `/broker/commercial?prompt=${encodeURIComponent(prompt)}`
+const workspace = (prompt: string) => lensPath('commercial', prompt)
 const nameOf = (r: BusinessRow) => r.profile.trading_name ?? r.profile.registered_name
 const openTasks = (r: BusinessRow) => r.open_broker_tasks + r.open_customer_tasks
 const NotRecorded = () => <span className="text-navy-500">Not recorded</span>
