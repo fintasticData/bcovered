@@ -115,9 +115,10 @@ export function mirrorClientProfile(profile: ClientProfile, userId: string) {
 export async function ensureClientProfile(): Promise<ClientProfile> {
   if (!supabase) throw new Error('This build has no Supabase connection.')
   const { data: sessionData } = await supabase.auth.getSession()
-  const token = sessionData.session?.access_token
-  if (!token) throw new Error('Sign in again — your session is not ready yet.')
-  if (sessionData.session.user.id) rememberDatabaseUser(sessionData.session.user.id)
+  const session = sessionData.session
+  const token = session?.access_token
+  if (!session || !token) throw new Error('Sign in again — your session is not ready yet.')
+  if (session.user.id) rememberDatabaseUser(session.user.id)
   const { data, error } = await supabase.rpc('ensure_client_profile').setHeader('Authorization', `Bearer ${token}`)
   if (error) {
     if (/permission denied/i.test(error.message)) {
