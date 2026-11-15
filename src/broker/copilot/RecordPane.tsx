@@ -3,6 +3,22 @@ import { SalesStepView } from '../book/SalesRecordViews'
 import { EmptyState, LoadingState } from '../PageHeader'
 import { AccountOverviewView, ClientOverviewView, HistoryTimeline, MembersTable, PolicyDetailView, PolicyTable, SchemesTable } from './RecordViews'
 import { FranchiseStepView, isFranchiseStep } from '../franchise/FranchiseViews'
+import { useLeadRun } from '@/lib/leadResearch/api'
+import { LeadRunDetails } from '../leads/LeadRunViews'
+
+function LeadRunPane({ runId }: { runId: string | null }) {
+  const q = useLeadRun(runId)
+  if (!runId) {
+    return (
+      <EmptyState title="Lead search results open here">
+        Check the filters in the conversation and start the search. The sourced area summary and every saved business, with the page showing its email, appear here.
+      </EmptyState>
+    )
+  }
+  if (q.isLoading) return <LoadingState />
+  if (q.error) return <EmptyState title="Lead search unavailable">{(q.error as Error).message}</EmptyState>
+  return q.data ? <LeadRunDetails run={q.data} /> : null
+}
 
 function ContextRecord({ context }: { context: TurnContext }) {
   const policy = usePolicyDetail(context.policy?.id)
@@ -35,6 +51,7 @@ function SavedRecord({ step }: { step: StepResult }) {
 /** The editor side of the copilot workspace (about 60%): the record a step retrieved or saved, or the selected record. */
 export function RecordPane({ step, context }: { step: StepResult | null; context: TurnContext }) {
   if (!step) return <ContextRecord context={context} />
+  if (step.job === 'russ.leads.generate') return <LeadRunPane runId={(step.data as { run_id?: string | null } | undefined)?.run_id ?? null} />
   if (step.intent.startsWith('sales_') || step.job?.startsWith('sales.')) {
     const view = <SalesStepView step={step} />
     if (step.status === 'saved' || step.status === 'retrieved') return view

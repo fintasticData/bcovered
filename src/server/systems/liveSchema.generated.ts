@@ -71,8 +71,10 @@ export const LIVE_TABLE_ROWS: ReadonlyArray<readonly [string, number, number, st
   ['investment_portfolios',4,1,'id uuid PK,tenant_id uuid,fund_id uuid,manager_id uuid,name text,mandate jsonb,status text,created_at timestamptz,updated_at timestamptz'],
   ['investment_valuations',4,13,'id uuid PK,tenant_id uuid,portfolio_id uuid,valuation_date date,market_value numeric,net_cash_flow numeric,source_reference text,value_basis text,created_at timestamptz'],
   ['job_steps',4,4,'id uuid PK,tenant_id uuid,job_id uuid,seq int,key text,agent text,name text,status text,input jsonb,output jsonb,error jsonb,started_at timestamptz,completed_at timestamptz'],
-  ['jobs',5,1,'id uuid PK,tenant_id uuid,workflow_type text,agent text,status text,initiated_by uuid,inputs jsonb,outputs jsonb,error jsonb,customer_id uuid,lead_id uuid,quote_id uuid,idempotency_key text,attempt int,revision int,cancel_requested bool,locked_by text,locked_at timestamptz,started_at timestamptz,completed_at timestamptz,archived_at timestamptz,created_at timestamptz,updated_at timestamptz'],
-  ['leads',7,5,'id uuid PK,tenant_id uuid,customer_id uuid,conversation_id uuid,line text,product_category text,status text,urgency text,qualification jsonb,missing_info jsonb,source text,created_by uuid,created_at timestamptz,updated_at timestamptz,data_category text'],
+  ['jobs',6,1,'id uuid PK,tenant_id uuid,workflow_type text,agent text,status text,initiated_by uuid,inputs jsonb,outputs jsonb,error jsonb,customer_id uuid,lead_id uuid,quote_id uuid,idempotency_key text,attempt int,revision int,cancel_requested bool,locked_by text,locked_at timestamptz,started_at timestamptz,completed_at timestamptz,archived_at timestamptz,created_at timestamptz,updated_at timestamptz,data_category text'],
+  ['lead_prospect_matches',6,0,'id uuid PK,tenant_id uuid,data_category text,job_id uuid,prospect_id uuid,lead_id uuid,cover_type text,cover_fit text,evidence jsonb,retrieved_at timestamptz,created_at timestamptz'],
+  ['lead_prospects',6,0,'id uuid PK,tenant_id uuid,data_category text,customer_id uuid,business_name text,email text,email_normalised text,website text,website_host text,phone text,address text,area text,industry text,business_function text,category text,research jsonb,evidence jsonb,status text,is_sample bool,first_job_id uuid,last_job_id uuid,created_at timestamptz,updated_at timestamptz'],
+  ['leads',7,5,'id uuid PK,tenant_id uuid,customer_id uuid,conversation_id uuid,line text,product_category text,status text,urgency text,qualification jsonb,missing_info jsonb,source text,created_by uuid,created_at timestamptz,updated_at timestamptz,data_category text,prospect_id uuid,source_job_id uuid'],
   ['life_quote_options',4,0,'id uuid PK,tenant_id uuid,life_quote_id uuid,provider_id uuid,product_version_id uuid,label text,benefits jsonb,monthly_premium numeric,policy_fee numeric,underwriting_expected jsonb,source text,is_simulated bool,created_at timestamptz'],
   ['life_quotes',5,0,'id uuid PK,tenant_id uuid,customer_id uuid,person_id uuid,needs_analysis_id uuid,status text,assumptions jsonb,valid_until timestamptz,job_id uuid,is_simulated bool,created_at timestamptz,updated_at timestamptz,data_category text'],
   ['member_movements',5,0,'id uuid PK,tenant_id uuid,employer_customer_id uuid,scheme_id uuid,fund_id uuid,employment_id uuid,person_id uuid,movement_type text,effective_date date,processing_date timestamptz,source_batch_id uuid,before jsonb,after jsonb,cover_before numeric,cover_after numeric,status text,approval_id uuid,created_at timestamptz,updated_at timestamptz'],
@@ -179,7 +181,8 @@ investigation_findings.investigation_id>investigations investigation_findings.re
 investment_benchmarks.portfolio_id>investment_portfolios investment_holdings.portfolio_id>investment_portfolios investment_holdings.source_batch_id>import_batches?
 investment_portfolios.fund_id>retirement_funds investment_portfolios.manager_id>insurers investment_valuations.portfolio_id>investment_portfolios job_steps.job_id>jobs
 jobs.customer_id>customers? jobs.initiated_by>app_users? jobs.lead_id>leads? jobs.quote_id>quotes? leads.conversation_id>conversations? leads.created_by>app_users?
-leads.customer_id>customers life_quote_options.life_quote_id>life_quotes life_quote_options.product_version_id>product_versions life_quote_options.provider_id>insurers
+leads.customer_id>customers leads.prospect_id>lead_prospects? leads.source_job_id>jobs? lead_prospect_matches.job_id>jobs lead_prospect_matches.prospect_id>lead_prospects
+lead_prospect_matches.lead_id>leads? lead_prospects.customer_id>customers? lead_prospects.first_job_id>jobs? lead_prospects.last_job_id>jobs? life_quote_options.life_quote_id>life_quotes life_quote_options.product_version_id>product_versions life_quote_options.provider_id>insurers
 life_quotes.customer_id>customers life_quotes.job_id>jobs? life_quotes.needs_analysis_id>needs_analyses? life_quotes.person_id>persons
 member_movements.approval_id>approval_requests? member_movements.employer_customer_id>customers member_movements.employment_id>employments?
 member_movements.fund_id>retirement_funds? member_movements.person_id>persons? member_movements.scheme_id>group_schemes? member_movements.source_batch_id>import_batches?
@@ -251,4 +254,5 @@ export const LIVE_MIGRATIONS: readonly string[] = [
   '20261115_0022_franchise_person_sources',
   '20261115_0023_franchise_setup_wording',
   '20261115_0024_fais_communication_retention',
+  '20261115_0025_russ_lead_generation',
 ]

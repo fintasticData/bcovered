@@ -71,6 +71,8 @@ export interface Customer {
   source_ref?: string | null
   import_batch_id?: UUID | null
   data_origin?: DataOrigin
+  /** The team member (sales_team_members) who owns the account; set by the database. */
+  assigned_member_id?: UUID | null
   created_at: ISODate
   updated_at: ISODate
 }
@@ -172,6 +174,60 @@ export interface Lead {
   created_by: UUID | null
   created_at: ISODate
   updated_at: ISODate
+  data_category?: 'sample' | 'live'
+  /** Set on leads Russ found by research: the business and the run that found it. */
+  prospect_id?: UUID | null
+  source_job_id?: UUID | null
+}
+
+export type ProspectStatus = 'active' | 'archived' | 'do_not_contact'
+
+/** One researched business per brokerage and category, deduplicated on its published email. */
+export interface LeadProspect {
+  id: UUID
+  tenant_id: UUID
+  data_category: 'sample' | 'live'
+  customer_id: UUID | null
+  business_name: string
+  email: string
+  website: string | null
+  phone: string | null
+  address: string | null
+  area: string
+  industry: string | null
+  business_function: string | null
+  category: string | null
+  research: Record<string, Json>
+  evidence: Array<Record<string, Json>>
+  status: ProspectStatus
+  is_sample: boolean
+  first_job_id: UUID | null
+  last_job_id: UUID | null
+  created_at: ISODate
+  updated_at: ISODate
+}
+
+/** A run's match with a prospect: the cover type searched for, why it fits and the evidence pages. */
+export interface LeadProspectMatch {
+  id: UUID
+  tenant_id: UUID
+  data_category: 'sample' | 'live'
+  job_id: UUID
+  prospect_id: UUID
+  lead_id: UUID | null
+  cover_type: string
+  cover_fit: string
+  evidence: {
+    email_source_url?: string
+    location_source_url?: string
+    activity_source_url?: string
+    retrieved_at?: string
+    activity_quote?: string
+    location_basis?: string
+    research?: Record<string, Json>
+  }
+  retrieved_at: ISODate
+  created_at: ISODate
 }
 
 export type ProviderType = 'insurer' | 'fund_administrator' | 'investment_manager' | 'cell_captive_insurer' | 'other'
@@ -296,6 +352,8 @@ export interface Job {
   archived_at: ISODate | null
   created_at: ISODate
   updated_at: ISODate
+  /** Set on server-run jobs (Russ lead searches), which belong to one category. */
+  data_category?: 'sample' | 'live' | null
 }
 
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
@@ -427,6 +485,8 @@ export interface Tables extends CommercialTables, LifeTables, ControlsTables, Be
   conversations: Conversation[]
   conversation_messages: ConversationMessage[]
   leads: Lead[]
+  lead_prospects: LeadProspect[]
+  lead_prospect_matches: LeadProspectMatch[]
   insurers: Insurer[]
   quotes: Quote[]
   quote_options: QuoteOption[]

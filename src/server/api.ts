@@ -23,6 +23,10 @@ import type {
   JobStep,
   Json,
   Lead,
+  LeadProspect,
+  LeadProspectMatch,
+  LeadStatus,
+  ProspectStatus,
   Quote,
   QuoteOption,
   Role,
@@ -37,6 +41,7 @@ import { capabilitiesOf, LEGACY_ROLE, READ_ONLY_ROLES, ROLE_LABEL, type Capabili
 import type { QuoteAnswer } from './domain/quotes'
 import type { CommercialSubmission } from './db/commercialSchema'
 import { hashPayload } from './lib/hash'
+import { audit } from './lib/audit'
 import { assessmentReviewPayload } from './tools/assessmentPayload'
 import { ToolError } from './lib/errors'
 import { ADAPTERS, getAssistantAdapter, initialIntakeState, PRIVACY_NOTICE_VERSION, type IntakeState } from './llm'
@@ -603,6 +608,10 @@ export function summariseJob(repo: Repo, job: Job): JobSummary {
   } catch {
     /* unknown workflow keeps its type as title */
   }
+  if (job.workflow_type === 'lead_generation') {
+    const f = ((job.inputs as { filters?: Record<string, string | null> } | null)?.filters ?? {}) as Record<string, string | null>
+    title = `Russ lead search: ${f.business_function ?? f.category ?? f.industry ?? 'businesses'}${f.area ? ` near ${f.area}` : ''}`
+  }
   return {
     ...job,
     title,
@@ -703,20 +712,120 @@ export function controlJob(auth: Auth, body: { job_id: string; action: JobAction
 export interface LeadRow extends Lead {
   customer_name: string
   latest_quote_id: string | null
+  /** The researched business behind a Russ lead, with its latest run match. */
+  prospect: LeadProspect | null
+  match: LeadProspectMatch | null
+  run_ids: string[]
+  assigned_member_id: string | null
+  open_tasks: number
 }
 
 export function listLeads(auth: Auth): LeadRow[] {
   const p = principal(auth)
   requireRole(p, STAFF_ROLES)
+  const prospects = new Map(p.repo.list('lead_prospects').map((x) => [x.id, x]))
+  const matches = new Map<string, LeadProspectMatch[]>()
+  for (const m of p.repo.list('lead_prospect_matches')) if (m.lead_id) matches.set(m.lead_id, [...(matches.get(m.lead_id) ?? []), m])
+  const latestQuote = new Map<string, Quote>()
+  for (const q of p.repo.list('quotes')) {
+    if (!q.lead_id) continue
+    const cur = latestQuote.get(q.lead_id)
+    if (!cur || q.created_at > cur.created_at) latestQuote.set(q.lead_id, q)
+  }
+  const openTasks = new Map<string, number>()
+  for (const t of p.repo.list('tasks', (t) => t.status === 'open' && Boolean(t.customer_id))) openTasks.set(t.customer_id!, (openTasks.get(t.customer_id!) ?? 0) + 1)
   return p.repo
     .list('leads')
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((l) => ({
-      ...l,
-      customer_name: p.repo.get('customers', l.customer_id)?.full_name ?? 'Unknown',
-      latest_quote_id:
-        p.repo.list('quotes', (q) => q.lead_id === l.id).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.id ?? null,
-    }))
+    .map((l) => {
+      const customer = p.repo.get('customers', l.customer_id)
+      const ms = (matches.get(l.id) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at))
+      return {
+        ...l,
+        customer_name: customer?.full_name ?? 'Unknown',
+        latest_quote_id: latestQuote.get(l.id)?.id ?? null,
+        prospect: l.prospect_id ? (prospects.get(l.prospect_id) ?? null) : null,
+        match: ms[0] ?? null,
+        run_ids: [...new Set([...(l.source_job_id ? [l.source_job_id] : []), ...ms.map((m) => m.job_id)])],
+        assigned_member_id: customer?.assigned_member_id ?? null,
+        open_tasks: openTasks.get(l.customer_id) ?? 0,
+      }
+    })
+}
+
+export type LeadBulkChange =
+  | { action: 'status'; status: LeadStatus }
+  | { action: 'assign'; member_id: string | null }
+  | { action: 'prospect_status'; status: ProspectStatus }
+  | { action: 'follow_up'; title: string; due_date: string | null }
+
+/** One change applied to many leads at once (Leads grid bulk bar). Every lead is audited; outreach is not part of it. */
+export function bulkUpdateLeads(auth: Auth, body: { lead_ids: string[] } & LeadBulkChange): { updated: number; skipped: number } {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const ids = [...new Set(body.lead_ids)].slice(0, 500)
+  if (!ids.length) throw new ToolError('validation', 'Select at least one lead.')
+  if (body.action === 'follow_up' && !body.title.trim()) throw new ToolError('validation', 'Give the follow-up a title.')
+  let updated = 0
+  let skipped = 0
+  db.transaction(() => {
+    for (const id of ids) {
+      const lead = p.repo.get('leads', id)
+      if (!lead) {
+        skipped++
+        continue
+      }
+      if (body.action === 'status') {
+        if (lead.status === body.status) {
+          skipped++
+          continue
+        }
+        p.repo.update('leads', id, { status: body.status })
+        audit(p.repo, p.actor, 'lead.status_changed', { table: 'leads', id }, { before: { status: lead.status }, after: { status: body.status, bulk: true } })
+      } else if (body.action === 'assign') {
+        const customer = p.repo.get('customers', lead.customer_id)
+        if (!customer || customer.assigned_member_id === body.member_id) {
+          skipped++
+          continue
+        }
+        p.repo.update('customers', customer.id, { assigned_member_id: body.member_id })
+        audit(p.repo, p.actor, 'customer.assigned', { table: 'customers', id: customer.id }, { before: { assigned_member_id: customer.assigned_member_id ?? null }, after: { assigned_member_id: body.member_id, bulk: true } })
+      } else if (body.action === 'prospect_status') {
+        const prospect = lead.prospect_id ? p.repo.get('lead_prospects', lead.prospect_id) : undefined
+        if (!prospect || prospect.status === body.status) {
+          skipped++
+          continue
+        }
+        p.repo.update('lead_prospects', prospect.id, { status: body.status })
+        audit(p.repo, p.actor, 'lead_prospect.status_changed', { table: 'lead_prospects', id: prospect.id }, { before: { status: prospect.status }, after: { status: body.status, bulk: true } })
+      } else {
+        const dedupe = `lead-follow-up:${id}:${body.title.trim().toLowerCase()}:${body.due_date ?? ''}`
+        if (p.repo.find('tasks', (t) => t.dedupe_key === dedupe && t.status === 'open')) {
+          skipped++
+          continue
+        }
+        const task = p.repo.insert('tasks', {
+          customer_id: lead.customer_id,
+          subject_table: 'leads',
+          subject_id: id,
+          kind: 'follow_up',
+          audience: 'broker',
+          title: body.title.trim(),
+          detail: lead.qualification.summary ?? null,
+          status: 'open',
+          assigned_to: p.user?.id ?? null,
+          due_date: body.due_date,
+          created_by_agent: null,
+          job_id: lead.source_job_id ?? null,
+          dedupe_key: dedupe,
+          data_category: lead.data_category,
+        })
+        audit(p.repo, p.actor, 'task.created', { table: 'tasks', id: task.id }, { after: { title: task.title, lead_id: id, bulk: true } })
+      }
+      updated++
+    }
+  })
+  return { updated, skipped }
 }
 
 export interface LeadDetail {
@@ -726,18 +835,33 @@ export interface LeadDetail {
   quotes: Quote[]
   jobs: JobSummary[]
   messages: ConversationMessage[]
+  prospect: LeadProspect | null
+  /** Every run that found this business, newest first, for any cover type. */
+  matches: Array<LeadProspectMatch & { run_title: string; lead_status: string | null }>
 }
 
 export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
   const p = principal(auth)
   requireRole(p, STAFF_ROLES)
   const lead = p.repo.require('leads', body.lead_id)
+  const prospect = lead.prospect_id ? (p.repo.get('lead_prospects', lead.prospect_id) ?? null) : null
+  const matches = prospect
+    ? p.repo
+        .list('lead_prospect_matches', (m) => m.prospect_id === prospect.id)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((m) => {
+          const job = p.repo.get('jobs', m.job_id)
+          return { ...m, run_title: job ? summariseJob(p.repo, job).title : 'Russ lead search', lead_status: m.lead_id ? (p.repo.get('leads', m.lead_id)?.status ?? null) : null }
+        })
+    : []
   return {
     lead,
     customer: p.repo.require('customers', lead.customer_id),
     consents: p.repo.list('customer_consents', (c) => c.customer_id === lead.customer_id),
     quotes: p.repo.list('quotes', (q) => q.lead_id === lead.id),
-    jobs: p.repo.list('jobs', (j) => j.lead_id === lead.id).map((j) => summariseJob(p.repo, j)),
+    jobs: p.repo.list('jobs', (j) => j.lead_id === lead.id || (lead.source_job_id !== undefined && j.id === lead.source_job_id)).map((j) => summariseJob(p.repo, j)),
+    prospect,
+    matches,
     messages: lead.conversation_id
       ? p.repo
           .list('conversation_messages', (m) => m.conversation_id === lead.conversation_id)

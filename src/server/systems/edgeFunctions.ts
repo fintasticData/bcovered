@@ -82,6 +82,34 @@ const FRANCHISE_RPCS = [
 
 export const EDGE_FUNCTIONS: EdgeFunctionInfo[] = [
   {
+    slug: 'lead-research',
+    status: 'active',
+    version: 4,
+    verify_jwt: false,
+    source: 'supabase/functions/lead-research',
+    summary:
+      'Russ "Generate leads": reads the request (Gemini Flash), researches the area and finds businesses (Perplexity Sonar through the fal OpenRouter router), reads their public pages and keeps a business only when a page shows its email, location and activity. Runs one bounded step per call within a time, search, page and cost budget; every write is a leadgen_* function as the signed-in broker.',
+    routes: [
+      { method: 'POST', path: '/parse', access: 'signed_in', summary: 'Request text to search filters (area, radius, function, category, industry, cover, count)' },
+      { method: 'POST', path: '/runs', access: 'signed_in', summary: 'Create a lead search (idempotent per request)' },
+      { method: 'POST', path: '/runs/:id/step', access: 'signed_in', summary: 'One bounded unit of research under a lease; returns progress' },
+      { method: 'GET', path: '/runs/:id', access: 'signed_in', summary: 'The run, its sourced area findings and saved businesses' },
+      { method: 'POST', path: '/runs/:id/cancel', access: 'signed_in', summary: 'Stop a run at its next check' },
+      { method: 'GET', path: '/runs', access: 'signed_in', summary: 'Recent lead searches in the category' },
+      { method: 'GET', path: '/health', access: 'public', summary: 'Models, default budget and whether fal is configured' },
+    ],
+    secrets: ['BCOVERED_FAL_API_KEY', 'BCOVERED_FAL_LLM_MODEL', 'BCOVERED_FAL_AREA_MODEL', 'BCOVERED_FAL_SEARCH_MODEL', 'LEADGEN_MAX_SECONDS', 'LEADGEN_MAX_SEARCHES', 'LEADGEN_MAX_PAGE_FETCHES', 'LEADGEN_MAX_COST_USD', 'LEADGEN_MAX_COUNT'],
+    calls: [],
+    db_functions: ['leadgen_create_run', 'leadgen_claim', 'leadgen_update_run', 'leadgen_save_lead', 'leadgen_cancel_run', 'leadgen_get_run', 'leadgen_list_runs'],
+    tables: ['jobs', 'job_steps', 'lead_prospects', 'lead_prospect_matches', 'customers', 'leads', 'audit_events'],
+    external: ['fal.ai OpenRouter router (google/gemini-2.5-flash, perplexity/sonar, perplexity/sonar-pro)', 'Public business websites (read only)'],
+    callers: [
+      { label: 'Russ in AR · Ava · Russ (?copilot=russ)', route: '/broker/workspace' },
+      { label: 'Leads grid, run view (?run=)', route: '/broker/leads' },
+      { label: 'Lead search job', route: '/broker/jobs/:jobId' },
+    ],
+  },
+  {
     slug: 'copilot-agent',
     status: 'active',
     version: 5,

@@ -64,8 +64,10 @@ export const SUPABASE_COLUMNS: Record<string, readonly string[]> = {
   "investment_portfolios":["id","tenant_id","fund_id","manager_id","name","mandate","status","created_at","updated_at"],
   "investment_valuations":["id","tenant_id","portfolio_id","valuation_date","market_value","net_cash_flow","source_reference","value_basis","created_at"],
   "job_steps":["id","tenant_id","job_id","seq","key","agent","name","status","input","output","error","started_at","completed_at"],
-  "jobs":["id","tenant_id","workflow_type","agent","status","initiated_by","inputs","outputs","error","customer_id","lead_id","quote_id","idempotency_key","attempt","revision","cancel_requested","locked_by","locked_at","started_at","completed_at","archived_at","created_at","updated_at"],
-  "leads":["id","tenant_id","customer_id","conversation_id","line","product_category","status","urgency","qualification","missing_info","source","created_by","created_at","updated_at","data_category"],
+  "jobs":["id","tenant_id","workflow_type","agent","status","initiated_by","inputs","outputs","error","customer_id","lead_id","quote_id","idempotency_key","attempt","revision","cancel_requested","locked_by","locked_at","started_at","completed_at","archived_at","created_at","updated_at","data_category"],
+  "lead_prospect_matches":["id","tenant_id","data_category","job_id","prospect_id","lead_id","cover_type","cover_fit","evidence","retrieved_at","created_at"],
+  "lead_prospects":["id","tenant_id","data_category","customer_id","business_name","email","website","phone","address","area","industry","business_function","category","research","evidence","status","is_sample","first_job_id","last_job_id","created_at","updated_at"],
+  "leads":["id","tenant_id","customer_id","conversation_id","line","product_category","status","urgency","qualification","missing_info","source","created_by","created_at","updated_at","data_category","prospect_id","source_job_id"],
   "life_quote_options":["id","tenant_id","life_quote_id","provider_id","product_version_id","label","benefits","monthly_premium","policy_fee","underwriting_expected","source","is_simulated","created_at"],
   "life_quotes":["id","tenant_id","customer_id","person_id","needs_analysis_id","status","assumptions","valid_until","job_id","is_simulated","created_at","updated_at","data_category"],
   "member_movements":["id","tenant_id","employer_customer_id","scheme_id","fund_id","employment_id","person_id","movement_type","effective_date","processing_date","source_batch_id","before","after","cover_before","cover_after","status","approval_id","created_at","updated_at"],
@@ -116,4 +118,4 @@ export const SUPABASE_COLUMNS: Record<string, readonly string[]> = {
 }
 
 /** Tables whose rows carry the Sample / Live category. */
-export const CATEGORY_TABLES: readonly string[] = ["audit_events","business_profiles","client_interactions","communications","conversation_messages","conversations","copilot_actions","customer_persons","customers","employments","group_schemes","leads","life_quotes","needs_analyses","number_sequences","persons","policies","policy_parties","quotes","records_of_advice","scheme_memberships","tasks"]
+export const CATEGORY_TABLES: readonly string[] = ["audit_events","business_profiles","client_interactions","communications","conversation_messages","conversations","copilot_actions","customer_persons","customers","employments","group_schemes","jobs","lead_prospect_matches","lead_prospects","leads","life_quotes","needs_analyses","number_sequences","persons","policies","policy_parties","quotes","records_of_advice","scheme_memberships","tasks"]

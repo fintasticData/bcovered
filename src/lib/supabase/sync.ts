@@ -18,7 +18,7 @@ export const MODULES: Record<ModuleKey, { label: string; tables: string[] }> = {
   },
   personal: {
     label: 'Personal lines, leads, quotes, approvals and jobs',
-    tables: ['leads', 'quotes', 'quote_options', 'conversations', 'conversation_messages', 'communications', 'approval_requests', 'jobs', 'job_steps', 'agent_runs', 'agent_tool_calls', 'audit_events'],
+    tables: ['leads', 'lead_prospects', 'lead_prospect_matches', 'quotes', 'quote_options', 'conversations', 'conversation_messages', 'communications', 'approval_requests', 'jobs', 'job_steps', 'agent_runs', 'agent_tool_calls', 'audit_events'],
   },
   commercial: {
     label: 'Commercial, Risk Twin and submissions',

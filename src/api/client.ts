@@ -113,6 +113,7 @@ export const api = {
   // /api/v1/leads, /api/v1/quotes
   leads: () => call(() => server.listLeads(auth())),
   lead: (id: string) => call(() => server.getLead(auth(), { lead_id: id })),
+  bulkLeads: (body: Parameters<typeof server.bulkUpdateLeads>[1]) => call(() => server.bulkUpdateLeads(auth(), body)),
   quote: (id: string) => call(() => server.getQuote(auth(), { quote_id: id })),
   askQuote: (id: string, question: string) => call(() => server.askQuote(auth(), { quote_id: id, question })),
 

@@ -12,7 +12,7 @@ const SQL = `select coalesce(json_object_agg(table_name, cols order by table_nam
   from (select c.table_name, json_agg(c.column_name order by c.ordinal_position) as cols
           from information_schema.columns c
           join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name and t.table_type = 'BASE TABLE'
-         where c.table_schema = 'public'
+         where c.table_schema = 'public' and c.is_generated = 'NEVER'
          group by c.table_name) s`
 
 function envValue(name) {

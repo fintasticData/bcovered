@@ -275,6 +275,8 @@ export function seedTables(now = Date.now()): Tables {
       ),
       ...onboarding.leads,
     ],
+    lead_prospects: [],
+    lead_prospect_matches: [],
     quotes: [],
     quote_options: [],
     jobs: [],

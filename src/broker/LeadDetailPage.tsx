@@ -6,6 +6,7 @@ import { SimulatedBadge } from '@/components/SimulatedBadge'
 import { MOTOR_FIELDS, formatMotorField } from '@/server/domain/motor'
 import { formatDateTime } from '@/lib/utils'
 import { ErrorState, LoadingState, PageHeader } from './PageHeader'
+import { ResearchEvidence } from './leads/ResearchEvidence'
 
 export default function LeadDetailPage() {
   const { leadId } = useParams()
@@ -34,6 +35,7 @@ export default function LeadDetailPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-6">
+          <ResearchEvidence data={data} />
           <section className="panel p-5">
             <h2 className="text-sm font-semibold text-navy-900">Qualification</h2>
             {lead.qualification.summary && <p className="mt-1 text-sm text-navy-700">{lead.qualification.summary}</p>}
@@ -59,6 +61,7 @@ export default function LeadDetailPage() {
             )}
           </section>
 
+          {!(data.prospect && !risk) && (
           <section className="panel p-5">
             <h2 className="text-sm font-semibold text-navy-900">Risk Agent notes for broker review</h2>
             <p className="text-[11px] text-navy-500">Pre-assessment only. Underwriting decisions stay with the insurer.</p>
@@ -78,6 +81,7 @@ export default function LeadDetailPage() {
               <p className="mt-3 text-xs text-navy-600">No risk assessment yet. Ask the Copilot to create a comparison to run one.</p>
             )}
           </section>
+          )}
 
           {data.messages.length > 0 && (
             <section className="panel p-5">

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, RotateCcw, User } from 'lucide-react'
 import { copilotApi, useCopilotHealth, type CopilotId, type EntityRef, type PolicyRef, type StepResult, type TurnContext, type TurnResult } from '@/copilot/api'
-import type { StepInput } from '../../../supabase/functions/copilot-agent/planner'
+import { leadGenerationTurn, leadGenIntentOf, type StepInput } from '../../../supabase/functions/copilot-agent/planner'
 import { Button } from '@/components/ui/button'
 import { useDataCategory } from '@/lib/supabase/category'
 import { useSupabaseAuth } from '@/lib/supabase/client'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { routeTurn } from '../routes/russBridge'
 import { ContextBar } from './ContextBar'
 import { COPILOTS } from './identity'
+import { LeadRunCard, type LeadStepData } from './LeadRunCard'
 import { MentionComposer, type ComposerSubmit } from './MentionComposer'
 import { StepCard } from './StepCard'
 
@@ -39,7 +40,11 @@ interface Conversation {
 const STARTERS: Record<CopilotId, string[]> = {
   ar: ['Find the Naidoo account, add a note to Priya’s motor policy and show me her latest life application', 'Show policies for CL-S1001', 'Find Priy'],
   ava: ['Start a life application for Priyanka Naidu R650', 'Arrange a callback for Priya Naidoo tomorrow', 'Show history for Priya Naidoo'],
-  russ: ['Show Ubuntu Foods', 'Show schemes for Karoo Logistics', 'Show members for Karoo Logistics'],
+  russ: [
+    'Find 20 motor repair workshops within 10 km of Carnival City, Brakpan, with public business emails. I want prospects for commercial property cover.',
+    'Show Ubuntu Foods',
+    'Show schemes for Karoo Logistics',
+  ],
 }
 
 const newId = () => crypto.randomUUID()
@@ -142,12 +147,17 @@ export function CopilotPanel({
   const run = async (agentId: string, request: AgentMessage['request']) => {
     patch(agentId, { pending: true, error: undefined, request })
     try {
-      const routed = copilot === 'russ' ? await routeTurn(request.text, request.context, category) : null
+      const leadTurn =
+        (copilot === 'russ' || copilot === 'ar') && leadGenIntentOf(request.text)
+          ? leadGenerationTurn({ copilot, category, text: request.text, context: request.context, message_id: request.message_id })
+          : null
+      const routed = leadTurn ?? (copilot === 'russ' ? await routeTurn(request.text, request.context, category) : null)
       const result = routed ?? (await copilotApi.turn({ copilot, category, conversation_id: conversation.id, ...request }))
       patch(agentId, { pending: false, result })
       onContextChange(routed ? result.context : { ...result.context, route_run_id: request.context.route_run_id ?? null })
-      if (routed) void queryClient.invalidateQueries()
-      else if (result.steps.some((s) => s.status === 'saved')) void queryClient.invalidateQueries({ queryKey: ['supabase'] })
+      if (routed) {
+        if (!leadTurn) void queryClient.invalidateQueries()
+      } else if (result.steps.some((s) => s.status === 'saved')) void queryClient.invalidateQueries({ queryKey: ['supabase'] })
       const show = routed
         ? (result.steps.find((s) => s.status === 'needs_input') ?? result.steps[result.steps.length - 1])
         : (result.steps.find((s) => s.status === 'saved') ?? result.steps.find((s) => s.data !== undefined))
@@ -248,20 +258,34 @@ export function CopilotPanel({
                     {m.result.steps.filter((s) => s.status === 'needs_choice' || s.status === 'needs_input').length} waiting for you
                   </p>
                 )}
-                {m.result?.steps.map((s) => (
-                  <StepCard
-                    key={s.index}
-                    step={s}
-                    busy={m.pending}
-                    selected={selectedKey === stepKey(m.id, s)}
-                    onShow={() => onSelect({ key: stepKey(m.id, s), step: s })}
-                    onChoose={(choice: EntityRef | PolicyRef) => rerun(m, s.index, { choice })}
-                    onAnswer={(values) => {
-                      if (s.input?.field === 'text') return setPrefill({ text: m.request.text, nonce: Date.now() })
-                      rerun(m, s.index, { values })
-                    }}
-                  />
-                ))}
+                {m.result?.steps.map((s) =>
+                  s.job === 'russ.leads.generate' ? (
+                    <LeadRunCard
+                      key={s.index}
+                      step={s}
+                      category={s.category}
+                      onShow={() => onSelect({ key: stepKey(m.id, s), step: s })}
+                      onRunStarted={(runId) => {
+                        const next = { ...s, data: { ...(s.data as LeadStepData), run_id: runId } }
+                        patch(m.id, { result: m.result && { ...m.result, steps: m.result.steps.map((x) => (x.index === s.index ? next : x)) } })
+                        onSelect({ key: stepKey(m.id, next), step: next })
+                      }}
+                    />
+                  ) : (
+                    <StepCard
+                      key={s.index}
+                      step={s}
+                      busy={m.pending}
+                      selected={selectedKey === stepKey(m.id, s)}
+                      onShow={() => onSelect({ key: stepKey(m.id, s), step: s })}
+                      onChoose={(choice: EntityRef | PolicyRef) => rerun(m, s.index, { choice })}
+                      onAnswer={(values) => {
+                        if (s.input?.field === 'text') return setPrefill({ text: m.request.text, nonce: Date.now() })
+                        rerun(m, s.index, { values })
+                      }}
+                    />
+                  ),
+                )}
                 {m.result && m.result.steps.length === 0 && <p className="text-sm text-navy-700">{m.result.reply}</p>}
               </div>
             </div>

@@ -32,6 +32,10 @@ export interface WorkflowDefinition {
   restartOnChangesFrom?: string
 }
 
+/** Jobs run by an Edge Function; the browser shows them but never runs, recovers or controls them. */
+export const SERVER_WORKFLOWS = new Set(['lead_generation'])
+export const isServerJob = (j: Pick<Job, 'workflow_type'>) => SERVER_WORKFLOWS.has(j.workflow_type)
+
 const workflows = new Map<string, WorkflowDefinition>()
 export const registerWorkflow = (def: WorkflowDefinition) => void workflows.set(def.type, def)
 export const listWorkflows = (): WorkflowDefinition[] => [...workflows.values()]
@@ -153,7 +157,7 @@ function finalizeCancelled(repo: Repo, jobId: string, reason = 'Cancelled') {
 
 async function runLoop(repo: Repo, jobId: string): Promise<void> {
   let job = repo.get('jobs', jobId)
-  if (!job || (job.status !== 'queued' && job.status !== 'running') || lockedElsewhere(job)) return
+  if (!job || isServerJob(job) || (job.status !== 'queued' && job.status !== 'running') || lockedElsewhere(job)) return
   if (job.cancel_requested) return finalizeCancelled(repo, jobId)
   const def = workflows.get(job.workflow_type)
   if (!def) {
@@ -253,6 +257,9 @@ async function runLoop(repo: Repo, jobId: string): Promise<void> {
 // ---------------------------------------------------------------- controls
 
 function guard(job: Job, allowed: JobStatus[], action: string) {
+  if (isServerJob(job) && action !== 'archive') {
+    throw new ToolError('conflict', `This job runs on the server. ${action === 'cancel' ? 'Cancel' : 'Control'} it from its lead search instead.`)
+  }
   if (!allowed.includes(job.status)) {
     throw new ToolError('conflict', `Cannot ${action} a job that is ${job.status.replace(/_/g, ' ')}`)
   }
@@ -339,7 +346,7 @@ export function onApprovalResolved(repo: Repo, approvalId: string) {
 export function recoverJobs(tenantId: string) {
   const repo = new Repo(tenantId)
   repo
-    .list('jobs', (j) => j.status === 'queued' || j.status === 'running')
+    .list('jobs', (j) => (j.status === 'queued' || j.status === 'running') && !isServerJob(j))
     .forEach((j) => {
       if (active.has(j.id) || lockedElsewhere(j)) return
       stepsOf(repo, j.id)

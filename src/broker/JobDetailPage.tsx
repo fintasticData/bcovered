@@ -4,12 +4,15 @@ import { useJob } from '@/api/hooks'
 import { ExecutionPlan } from '@/components/ExecutionPlan'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateTime } from '@/lib/utils'
+import { useDataCategory } from '@/lib/supabase/category'
 import { JobControls } from './JobControls'
 import { ErrorState, LoadingState, PageHeader } from './PageHeader'
+import { LeadRunJobPanel } from './copilot/LeadRunCard'
 
 export default function JobDetailPage() {
   const { jobId } = useParams()
   const { data, isLoading, error } = useJob(jobId)
+  const category = useDataCategory()
 
   if (isLoading) return <div className="p-6"><LoadingState /></div>
   if (error || !data) return <div className="p-6"><ErrorState message={error?.message ?? 'Job not found'} /></div>
@@ -41,6 +44,13 @@ export default function JobDetailPage() {
         }
         actions={<JobControls job={job} size="md" />}
       />
+
+      {job.workflow_type === 'lead_generation' && (
+        <section className="panel mb-6 p-5">
+          <h2 className="mb-3 text-sm font-semibold text-navy-900">Lead search results</h2>
+          <LeadRunJobPanel runId={job.id} category={category} />
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="panel min-w-0 p-5">

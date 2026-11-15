@@ -39,6 +39,7 @@ export const useControlJob = () =>
 export const useLeads = () => useQuery({ queryKey: useKey('leads'), queryFn: api.leads })
 export const useLead = (id: string | undefined) =>
   useQuery({ queryKey: useKey('lead', id), queryFn: () => api.lead(id!), enabled: Boolean(id) })
+export const useBulkLeads = () => useInvalidatingMutation(api.bulkLeads)
 
 export const useQuote = (id: string | undefined) =>
   useQuery({ queryKey: useKey('quote', id), queryFn: () => api.quote(id!), enabled: Boolean(id) })

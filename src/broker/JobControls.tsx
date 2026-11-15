@@ -2,6 +2,7 @@ import { Archive, Ban, Pause, Play, RotateCw } from 'lucide-react'
 import type { JobSummary } from '@/api/client'
 import { useControlJob } from '@/api/hooks'
 import type { JobAction } from '@/server/api'
+import { isServerJob } from '@/server/jobs/runner'
 import { Button } from '@/components/ui/button'
 
 const ACTIONS: Array<{ action: JobAction; label: string; icon: typeof Pause; when: JobSummary['status'][] }> = [
@@ -14,7 +15,9 @@ const ACTIONS: Array<{ action: JobAction; label: string; icon: typeof Pause; whe
 
 export function JobControls({ job, size = 'sm' }: { job: JobSummary; size?: 'sm' | 'md' }) {
   const control = useControlJob()
-  const available = ACTIONS.filter((a) => a.when.includes(job.status) && !(a.action === 'archive' && job.archived_at))
+  const available = ACTIONS.filter(
+    (a) => a.when.includes(job.status) && !(a.action === 'archive' && job.archived_at) && (!isServerJob(job) || a.action === 'archive'),
+  )
 
   const run = (action: JobAction) => {
     if (action === 'cancel' && !window.confirm('Cancel this job? No further steps, messages or record changes will run.')) return

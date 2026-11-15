@@ -86,6 +86,7 @@ export type JobName =
   | 'russ.policies.list'
   | 'russ.scheme.overview'
   | 'russ.members.list'
+  | 'russ.leads.generate'
   | 'sales.workspace.setup'
   | 'sales.profile'
   | 'sales.team.invite'
@@ -147,6 +148,8 @@ export type Intent =
   | 'franchise_setup'
   | 'franchise_enquiries'
   | 'franchise_sales'
+  /** Russ "Generate leads": researched by the lead-research Edge Function, one bounded step at a time. */
+  | 'lead_generation'
   /** A Route step run in the browser (CopilotPanel bridge); never planned on the server. */
   | 'route'
   | 'unknown'
@@ -1501,4 +1504,47 @@ async function runSalesStep(a: {
     }
   }
   return fail(null, { code: 'failed', message: 'Unsupported sales request.' })
+}
+
+// ------------------------------------------------------------------ Russ: generate leads
+
+const LEAD_WORDS = /\b(leads?|prospects?|prospecting)\b/i
+const LEAD_VERBS = /\b(find|generate|source|get|build|search|look|prospect|want|need|research|compile)\b/i
+const PLACE_WORDS = /\b(in|near|within|around|km|kilometres?)\b/i
+const COUNTED_BUSINESSES = /\b(find|source|get|list|research)\s+(?:me\s+)?\d{1,3}\s+[a-z][a-z\s&-]{2,60}?\s+(?:within|near|around|in)\b/i
+const RECORD_VIEW = /\b(show|open|view|list|display)\s+(?:me\s+)?(?:my|the|all|open)?\s*leads?\b/i
+
+/** A broker asking Russ to research new business prospects in an area (not to view existing leads). */
+export function leadGenIntentOf(text: string): boolean {
+  const t = text.trim()
+  if (!t || RECORD_VIEW.test(t)) return false
+  if (COUNTED_BUSINESSES.test(t) && /\b(emails?|businesses|companies|workshops|shops|firms|prospects?|leads?)\b/i.test(t)) return true
+  return LEAD_WORDS.test(t) && LEAD_VERBS.test(t) && PLACE_WORDS.test(t)
+}
+
+/** Russ's reply to a lead request: one step the browser turns into a lead search card (filters, progress, results). */
+export function leadGenerationTurn(input: Pick<TurnInput, 'copilot' | 'category' | 'text' | 'context' | 'message_id'>): TurnResult {
+  return {
+    copilot: input.copilot,
+    category: input.category,
+    reply: 'Russ will research the area and find businesses that publish an email. Check the search filters, then start.',
+    steps: [
+      {
+        index: 0,
+        clause: input.text,
+        intent: 'lead_generation',
+        job: 'russ.leads.generate',
+        handled_by: 'russ',
+        handed_off: input.copilot !== 'russ',
+        status: 'needs_input',
+        title: 'Generate leads',
+        summary: 'Check the search filters Russ read from your request, then start. Russ saves only businesses whose own public pages show an email, with the pages as evidence.',
+        category: input.category,
+        data: { prompt: input.text, message_id: input.message_id, run_id: null },
+        input: { field: 'lead_search', label: 'Start search', kind: 'confirm' },
+        links: [],
+      },
+    ],
+    context: input.context ?? {},
+  }
 }
