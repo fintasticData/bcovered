@@ -1,7 +1,8 @@
 // Brokerage onboarding handlers, shaped like the future Supabase RPCs and Edge Functions (accept_invitation,
 // switch_workspace, activate_brokerage, send-invitation, document-link, insurer-access). The UI reaches them only via
 // src/api/client.ts. Every handler resolves the caller server-side and checks membership capability or platform role.
-import { NO_TENANT, principal, requirePlatform, type Auth, type Principal } from './api'
+import { ensureClientAccount, NO_TENANT, principal, requirePlatform, type Auth, type Principal } from './api'
+import { TENANT_ID as BC_TENANT } from './db/seed'
 import { documentFixture, hashToken, SAMPLE_FACTS } from './db/onboardingSeed'
 import type {
   ApplicationStatus,
@@ -127,6 +128,7 @@ function createOrganisation(name: string, type: BrokerageType | null): Organisat
     slug: slugify(name),
     fsp_number: null,
     fsp_verified: false,
+    blp_number: null,
     is_demo: true,
     kind: 'brokerage',
     legal_name: null,
@@ -177,14 +179,32 @@ function hashPassword(password: string, salt: string) {
 
 export function signUp(body: { email: string; password: string; full_name: string }): { user_id: string } {
   const email = body.email.trim().toLowerCase()
+  const fullName = body.full_name.trim()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ToolError('validation', 'Enter a valid email address.')
   if (body.password.length < 8) throw new ToolError('validation', 'Use a password of at least 8 characters.')
-  if (body.full_name.trim().length < 2) throw new ToolError('validation', 'Enter your full name.')
+  if (fullName.length < 2) throw new ToolError('validation', 'Enter your full name.')
   if (identity.userByEmail(email)) throw new ToolError('conflict', 'An account with this email already exists. Sign in instead.')
   return db.transaction(() => {
-    const user = new Repo(NO_TENANT).insert('app_users', { email, full_name: body.full_name.trim(), role: 'visitor', customer_id: null, active_organisation_id: null })
+    const repo = new Repo(BC_TENANT)
+    const customer = repo.insert('customers', {
+      full_name: fullName,
+      email,
+      phone: null,
+      region: null,
+      customer_type: 'personal',
+      status: 'prospect',
+      is_synthetic: false,
+      created_by: null,
+    })
+    const user = repo.insert('app_users', {
+      email,
+      full_name: fullName,
+      role: 'customer',
+      customer_id: customer.id,
+      active_organisation_id: null,
+    })
     const salt = randomToken().slice(0, 16)
-    new Repo(NO_TENANT).insert('auth_identities', { user_id: user.id, email, password_salt: salt, password_hash: hashPassword(body.password, salt) })
+    repo.insert('auth_identities', { user_id: user.id, email, password_salt: salt, password_hash: hashPassword(body.password, salt) })
     return { user_id: user.id }
   })
 }
@@ -194,6 +214,7 @@ export function signIn(body: { email: string; password: string }): { user_id: st
   if (!cred || cred.password_hash !== hashPassword(body.password, cred.password_salt)) {
     throw new ToolError('forbidden', 'Email or password is incorrect. Seeded demo people sign in with the “Demo as” switcher instead.')
   }
+  ensureClientAccount(cred.user_id)
   return { user_id: cred.user_id }
 }
 
@@ -262,7 +283,7 @@ export function acceptInvitation(auth: Auth, body: { token: string }): { organis
     refresh(repo, currentApplication(repo))
   })
   const org = identity.organisation(inv.tenant_id)
-  return { organisation_id: inv.tenant_id, home: org?.lifecycle_status === 'active' ? '/broker' : '/onboarding' }
+  return { organisation_id: inv.tenant_id, home: org?.lifecycle_status === 'active' ? '/my' : '/onboarding' }
 }
 
 export interface CreatedInvitation {

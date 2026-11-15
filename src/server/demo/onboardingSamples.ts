@@ -138,6 +138,7 @@ function createSample(s: SampleBrokerage, orgId: string, i: number) {
     slug: s.key,
     fsp_number: s.facts.fsp_number,
     fsp_verified: false,
+    blp_number: null,
     is_demo: true,
     kind: 'brokerage',
     legal_name: s.legal_name,

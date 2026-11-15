@@ -161,8 +161,8 @@ describe('commercial_discovery_review vertical slice', () => {
     await runRestaurantScenario()
     const identities = listIdentities()
     expect(identities.find((i) => i.full_name === 'Nomsa Dlamini')?.home).toBe('/portal/business')
-    expect(identities.find((i) => i.full_name === 'Johan van der Merwe')?.home).toBe('/portal')
-    expect(identities.find((i) => i.role === 'broker')?.home).toBe('/broker')
+    expect(identities.find((i) => i.full_name === 'Johan van der Merwe')?.home).toBe('/my')
+    expect(identities.find((i) => i.role === 'broker')?.home).toBe('/my')
     expect(getOverview(broker).kpis.approvals_pending).toBe(1)
   })
 

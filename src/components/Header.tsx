@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { ArrowRight, Building2, ChevronDown, Menu, Phone, Sparkles, User, X } from 'lucide-react'
+import { ArrowRight, Building2, ChevronDown, Menu, Phone, User, X } from 'lucide-react'
 import Logo from './Logo'
 import { RoleSwitcher } from './RoleSwitcher'
 import { personalProducts } from '../data/products'
@@ -139,15 +139,13 @@ export default function Header() {
   const navRef = useRef<HTMLElement>(null)
   const { data: me } = useMe()
   const workspace =
-    me?.role === 'customer'
-      ? { to: '/portal', label: 'My portal' }
-      : me?.platform_role
-        ? { to: '/platform/onboarding', label: 'Platform admin' }
-        : me?.member_role
-          ? { to: me.home, label: me.organisation?.lifecycle_status === 'active' ? 'Broker workspace' : 'Continue onboarding' }
-          : me && ['broker', 'manager', 'admin'].includes(me.role)
-            ? { to: '/broker', label: 'Broker workspace' }
-            : null
+    me?.platform_role
+      ? { to: '/platform/onboarding', label: 'Platform admin' }
+      : me?.member_role && me.organisation?.lifecycle_status !== 'active'
+        ? { to: '/onboarding', label: 'Continue onboarding' }
+        : me?.role === 'customer' || me?.member_role || (me && ['broker', 'manager', 'admin'].includes(me.role))
+          ? { to: '/my', label: 'My Area' }
+          : null
   const inPersonal = pathname.startsWith('/insurance/')
   const inBusiness = pathname.startsWith('/business')
 
@@ -193,15 +191,21 @@ export default function Header() {
         </nav>
 
         <div className="hidden shrink-0 items-center gap-3 lg:flex">
-          {!me && (
-            <Link to="/sign-in" className="hidden text-sm font-semibold whitespace-nowrap text-brand-800 hover:underline xl:inline">
-              Sign in
+          {!me ? (
+            <>
+              <Link to="/sign-in" className="text-sm font-semibold whitespace-nowrap text-brand-800 hover:underline">
+                Sign in
+              </Link>
+              <Link to="/#zones" className="btn-primary whitespace-nowrap px-4 xl:px-6">
+                Enter
+              </Link>
+            </>
+          ) : (
+            <Link to={workspace?.to ?? '/my'} className="btn-primary whitespace-nowrap px-4 xl:px-6">
+              {workspace?.label ?? 'My Area'}
             </Link>
           )}
           <RoleSwitcher compact />
-          <Link to="/assist" className="btn-primary whitespace-nowrap px-4 xl:px-6" aria-label="Find My Cover">
-            <Sparkles className="h-4 w-4" /> <span className="hidden xl:inline">Find My Cover</span>
-          </Link>
         </div>
 
         <button
@@ -266,7 +270,8 @@ export default function Header() {
               ['/contact', 'Contact'],
               ['/demo', 'Demo Studio'],
               ['/brokers/join', 'Join as a broker'],
-              ...(me ? [] : [['/sign-in', 'Sign in']]),
+              ['/brokers/invite', 'Have an invite?'],
+              ...(me ? [] : [['/sign-in', 'Sign in'], ['/sign-in?mode=sign_up', 'Create account']]),
               ['/help', 'Help and capabilities'],
               ['/faq', 'FAQ'],
               ['/updates', 'System updates'],
@@ -279,7 +284,7 @@ export default function Header() {
             <div className="px-3 pt-2">
               <RoleSwitcher align="left" />
             </div>
-            <Link to="/assist" className="btn-primary mt-3 w-full">Find My Cover</Link>
+            <Link to="/#zones" className="btn-primary mt-3 w-full">Enter a zone</Link>
             <a href="tel:0861268373" className="mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-brand-800">
               <Phone className="h-4 w-4" /> 0861 COVERED
             </a>

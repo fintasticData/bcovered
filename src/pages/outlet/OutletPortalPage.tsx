@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, FlaskConical, Loader2, LogIn, LogOut, MessageCircle, Send, Store } from 'lucide-react'
+import { PasswordField } from '@/components/PasswordField'
 import { ReferralQr } from '@/components/ReferralQr'
 import { outletApi, useOutletProfile, useOutletReferrals, type EnquiryStage, type OutletMembership } from '@/copilot/franchiseApi'
 import { supabaseAuth, useSupabaseAuth } from '@/lib/supabase/client'
@@ -96,10 +97,16 @@ function SignIn() {
           <label htmlFor="op-email" className="field-label">Email</label>
           <input id="op-email" type="email" className="field" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoComplete="email" />
         </div>
-        <div>
-          <label htmlFor="op-password" className="field-label">Password</label>
-          <input id="op-password" type="password" className="field" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} autoComplete="current-password" />
-        </div>
+        <PasswordField
+          id="op-password"
+          label="Password"
+          value={f.password}
+          onChange={(e) => setF({ ...f, password: e.target.value })}
+          autoComplete="current-password"
+        />
+        <p className="text-right text-xs">
+          <Link to="/forgot-password" className="font-semibold text-brand-600 underline">Forgot password?</Link>
+        </p>
         {auth.status === 'error' && <p className="field-error" role="alert">{auth.error}</p>}
         <button type="submit" className="btn-dark w-full" disabled={!f.email.trim() || !f.password || auth.status === 'signing_in'}>
           {auth.status === 'signing_in' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} Sign in

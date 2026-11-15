@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link2, Loader2, MessageCircle, UserPlus } from 'lucide-react'
+import { ShareInvite } from '@/components/ShareInvite'
 import { Button } from '@/components/ui/button'
 import { newKey, referralUrl, salesApi, shareText, useFunnel, useSalesMutation, useTeam, whatsappUrl, type MemberRef, type TeamMember } from '@/copilot/salesApi'
 import { useDataCategory } from '@/lib/supabase/category'
@@ -77,10 +78,13 @@ function MemberRow({ m, canManage }: { m: TeamMember; canManage: boolean }) {
         )}
       </div>
       {invitePath && (
-        <div className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-          Private team invitation for {m.name} (only works for {m.email}; the previous link no longer works):
-          <span className="mt-1 block font-mono break-all">{referralUrl(invitePath)}</span>
-          <div className="mt-1"><CopyButton text={referralUrl(invitePath)} label="Copy invitation" /></div>
+        <div className="mt-2">
+          <ShareInvite
+            url={referralUrl(invitePath)}
+            title={`Private team invitation for ${m.name}`}
+            hint={`Only works for ${m.email}; the previous link no longer works.`}
+            whatsappText={`Join ${m.name.split(' ')[0]} on B-Covered: ${referralUrl(invitePath)}`}
+          />
         </div>
       )}
       <ErrorText error={link.error} />
@@ -99,20 +103,20 @@ export function TeamTab({ canManage }: { canManage: boolean }) {
         <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
           <p><strong>{justInvited.member.name}</strong> is on your team as {justInvited.member.role_label}. Two separate links:</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-white p-2 ring-1 ring-emerald-200">
-              <p className="text-[11px] font-semibold uppercase">Private team invitation (send to {justInvited.member.name.split(' ')[0]})</p>
-              {justInvited.invite_path ? (
-                <>
-                  <p className="font-mono text-[11px] break-all">{referralUrl(justInvited.invite_path)}</p>
-                  <CopyButton text={referralUrl(justInvited.invite_path)} label="Copy invitation" />
-                </>
-              ) : <p className="text-xs">Add their email to issue the invitation.</p>}
-            </div>
-            <div className="rounded-lg bg-white p-2 ring-1 ring-emerald-200">
-              <p className="text-[11px] font-semibold uppercase">Customer referral link (for their customers)</p>
-              <p className="font-mono text-[11px] break-all">{referralUrl(justInvited.member.referral_path)}</p>
-              <CopyButton text={referralUrl(justInvited.member.referral_path)} label="Copy referral link" />
-            </div>
+            {justInvited.invite_path ? (
+              <ShareInvite
+                url={referralUrl(justInvited.invite_path)}
+                title={`Private team invitation (send to ${justInvited.member.name.split(' ')[0]})`}
+                whatsappText={`Join the team on B-Covered: ${referralUrl(justInvited.invite_path)}`}
+              />
+            ) : (
+              <p className="rounded-lg bg-white p-2 text-xs ring-1 ring-emerald-200">Add their email to issue the invitation.</p>
+            )}
+            <ShareInvite
+              url={referralUrl(justInvited.member.referral_path)}
+              title="Customer referral link (for their customers)"
+              whatsappText={shareText(justInvited.member)}
+            />
           </div>
         </div>
       )}

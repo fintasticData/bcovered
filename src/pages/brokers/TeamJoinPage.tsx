@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, LogIn, MailCheck, ShieldAlert, UserPlus } from 'lucide-react'
+import { PasswordField } from '@/components/PasswordField'
 import { referralApi } from '@/copilot/salesApi'
 import { acceptTeamInvitation, joinWithInvitation } from '@/lib/supabase/accounts'
 import { useSupabaseAuth } from '@/lib/supabase/client'
@@ -109,11 +110,19 @@ export default function TeamJoinPage() {
                   <input id="tj-email" type="email" className="field" value={form.email} readOnly autoComplete="email" />
                   <p className="mt-1 text-xs text-ink/60">The invitation only works for this address.</p>
                 </div>
-                <div>
-                  <label htmlFor="tj-password" className="field-label">Password</label>
-                  <input id="tj-password" type="password" className="field" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    autoComplete={mode === 'sign_up' ? 'new-password' : 'current-password'} minLength={8} />
-                </div>
+                <PasswordField
+                  id="tj-password"
+                  label="Password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  autoComplete={mode === 'sign_up' ? 'new-password' : 'current-password'}
+                  minLength={8}
+                />
+                {mode === 'sign_in' && (
+                  <p className="text-right text-xs">
+                    <Link to="/forgot-password" className="font-semibold text-brand-600 underline">Forgot password?</Link>
+                  </p>
+                )}
                 {error && <p className="field-error" role="alert">{error}</p>}
                 <button type="submit" className="btn-dark w-full" disabled={busy || form.password.length < 8 || (mode === 'sign_up' && form.full_name.trim().length < 2)}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'sign_up' ? <UserPlus className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}

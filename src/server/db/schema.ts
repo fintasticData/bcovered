@@ -19,6 +19,8 @@ export interface Organisation {
   slug: string
   fsp_number: string | null
   fsp_verified: boolean
+  /** Broker Licence Plate # — display identity for the brokerage. */
+  blp_number: string | null
   is_demo: boolean
   kind: OrganisationKind
   legal_name: string | null

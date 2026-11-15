@@ -34,7 +34,9 @@ export default function BrokeragePage() {
         <div>
           <h1 className="text-2xl font-semibold text-navy-900">{org.name}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-navy-600">
-            <StatusBadge status={org.lifecycle_status} /> {org.legal_name ?? ''} {org.registration_number && `· ${org.registration_number}`} {org.fsp_number && `· FSP ${org.fsp_number} (declared)`}
+            <StatusBadge status={org.lifecycle_status} /> {org.legal_name ?? ''} {org.registration_number && `· ${org.registration_number}`}
+            {org.blp_number && ` · BLP# ${org.blp_number}`}
+            {org.fsp_number && ` · FSP ${org.fsp_number} (declared)`}
             {org.is_demo && <Badge tone="warning">Demo data</Badge>}
           </p>
           {org.status_reason && <p className="mt-1 text-xs text-navy-600">Reason: {org.status_reason}</p>}
@@ -102,7 +104,7 @@ export default function BrokeragePage() {
                 <span>
                   {a.insurer_name} · {MODULE_LABEL[a.product_module]}
                   <span className="block text-xs text-navy-500">
-                    Code {a.intermediary_code ?? '–'} · credentials {a.credential_hint ?? 'none'} {!a.supported && '· no integration'}
+                    Intermediary / BLP code {a.intermediary_code ?? '–'} · credentials {a.credential_hint ?? 'none'} {!a.supported && '· no integration'}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">

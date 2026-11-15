@@ -12,7 +12,10 @@ import { textInput } from '@/onboarding/ui'
 import { ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { Page, Section, Table, Td } from '../shared/ui'
 
-const ROLES = Object.keys(ROLE_LABEL) as MemberRole[]
+/** Prefer relationship-handling roles first when inviting colleagues. */
+const ROLES = (['agent', 'sub_broker', 'representative', 'operations_admin', 'brokerage_admin', 'compliance_reviewer', 'read_only', 'brokerage_owner'] as MemberRole[]).filter(
+  (r) => r in ROLE_LABEL,
+)
 
 export default function TeamPage() {
   const { data, isLoading, error } = useTeam()
@@ -21,7 +24,7 @@ export default function TeamPage() {
   const change = useChangeMemberRole()
   const remove = useRemoveMember()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<MemberRole>('representative')
+  const [role, setRole] = useState<MemberRole>('agent')
   const [created, setCreated] = useState<CreatedInvitation | null>(null)
   if (isLoading) return <div className="p-6"><LoadingState /></div>
   if (error || !data) return <div className="p-6"><ErrorState message={error?.message ?? 'Could not load the team'} /></div>
@@ -36,7 +39,7 @@ export default function TeamPage() {
 
   return (
     <Page>
-      <PageHeader title="Team" description="People who work in this brokerage and their roles. Roles are enforced by the service layer on every call, not only in the screen." />
+      <PageHeader title="Team" description="People who work in this brokerage and their roles, including broker agents and sub-brokers who handle customer relationships. Roles are enforced by the service layer on every call, not only in the screen." />
       {actionError && <ErrorState message={actionError} />}
       <div className="panel overflow-hidden">
         <Table head={['Person', 'Role', 'Status', '']} minWidth={640}>

@@ -2,18 +2,19 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
-  BadgeCheck,
+  Briefcase,
   Building2,
   ChevronDown,
   Clock,
   HandCoins,
   Headphones,
   Scale,
-  ShieldCheck,
-  Sparkles,
   Star,
+  Store,
   User,
+  UserRound,
 } from 'lucide-react'
+import { useMe } from '@/api/hooks'
 import { insurers, personalProducts, type ProductSlug } from '../data/products'
 import { BUSINESS_COVER_AREAS, BUSINESS_INDUSTRIES, coverAreaHref, industryHref } from '../data/business'
 import { rand } from '../lib/quote'
@@ -83,162 +84,186 @@ const faqs = [
   { q: 'Will you help me if I need to claim?', a: 'Absolutely. Our claims team handles the process end-to-end and negotiates with the insurer to make sure you are treated fairly.' },
 ]
 
+const ZONES = [
+  {
+    key: 'client',
+    icon: UserRound,
+    title: 'Client zone',
+    body: 'Sign in and meet Ava. Your quotes, covers and messages live in My Area.',
+    primary: { to: '/sign-in?mode=sign_up&zone=client', label: 'Create client account' },
+    secondary: { to: '/sign-in?zone=client', label: 'Sign in' },
+    signedInTo: '/my',
+  },
+  {
+    key: 'broker',
+    icon: Briefcase,
+    title: 'Broker zone',
+    body: 'Brokerages, agents and BLP# identity. Invite your team and run the book.',
+    primary: { to: '/brokers/join', label: 'Join as a brokerage' },
+    secondary: { to: '/sign-in?zone=broker', label: 'Broker sign in' },
+    signedInTo: '/my',
+  },
+  {
+    key: 'marketplace',
+    icon: Store,
+    title: 'Insurance marketplace',
+    body: 'Compare personal and business cover with Ava before a licensed broker approves.',
+    primary: { to: '/assist', label: 'Find cover with Ava' },
+    secondary: { to: '/#personal', label: 'Browse products' },
+    signedInTo: '/assist',
+  },
+] as const
+
 export default function HomePage() {
   const navigate = useNavigate()
+  const { data: me } = useMe()
   const [segment, setSegment] = useState<Segment>('personal')
   const [pick, setPick] = useState<ProductSlug>('car')
   const [industry, setIndustry] = useState(HERO_INDUSTRIES[0].key)
   const [openFaq, setOpenFaq] = useState<number | null>(0)
+  const inClient = me?.role === 'customer'
+  const inBroker = Boolean(me?.member_role) || ['broker', 'manager', 'admin'].includes(me?.role ?? '')
 
   return (
     <>
-      {/* Hero */}
+      {/* Hero — brand + three entry zones */}
       <section className="relative overflow-hidden">
-        <div className="absolute -right-40 -top-40 h-[520px] w-[520px] rounded-full bg-gold-300/30 blur-3xl" aria-hidden />
-        <div className="absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-brand-200/40 blur-3xl" aria-hidden />
-
-        <div className="container-x relative grid grid-cols-1 items-center gap-12 py-16 lg:grid-cols-[1.1fr_1fr] lg:py-24">
-          <div className="animate-rise space-y-7">
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-800/10 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700">
-              <BadgeCheck className="h-4 w-4 text-brand-500" /> Independent brokerage · AI agents · human approval
-            </span>
-            <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-navy-900 sm:text-6xl">
-              Insurance that works for you.
-              <br />
-              <span className="text-brand-500">Intelligence that works behind the scenes.</span>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-gold-200/40 via-sand to-brand-50/50" aria-hidden />
+        <div className="container-x relative py-14 lg:py-20">
+          <div className="mx-auto max-w-3xl animate-rise text-center">
+            <p className="font-display text-sm font-semibold tracking-[0.2em] text-brand-600 uppercase">BCovered</p>
+            <h1 className="mt-3 font-display text-4xl leading-[1.08] font-bold tracking-tight text-navy-900 sm:text-5xl lg:text-6xl">
+              Choose how you enter
             </h1>
-            <p className="max-w-lg text-lg leading-relaxed text-ink/70">
-              Cover for you, your family and your business. Compare options, manage policies and get help when it matters – with intelligent
-              assistance and experienced brokers.
+            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-ink/70 sm:text-lg">
+              Client zone for your cover, broker zone for the practice, marketplace to compare options with Ava.
             </p>
-            <div className="flex flex-wrap gap-3">
-              <Link to="/assist" className="btn-primary">
-                Find My Cover <ArrowRight className="h-4 w-4" />
-              </Link>
-              <a href="#how-it-works" className="btn-ghost">See How It Works</a>
-            </div>
-
-            <div data-identity={segment} className="card max-w-xl border-t-4 border-t-brand-500 p-3 shadow-lg transition-colors">
-              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-sand p-1" role="tablist" aria-label="Who is the cover for?">
-                {SEGMENTS.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={segment === s.key}
-                    onClick={() => setSegment(s.key)}
-                    data-identity={s.key}
-                    className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                      segment === s.key ? 'bg-brand-500 text-white shadow-sm' : 'text-ink/60 hover:bg-brand-50 hover:text-brand-800'
-                    }`}
-                  >
-                    <s.icon className="h-4 w-4" />
-                    {s.label}
-                    <span className={`hidden text-[11px] font-normal sm:inline ${segment === s.key ? 'text-white/80' : 'text-ink/50'}`}>· {s.hint}</span>
-                  </button>
-                ))}
-              </div>
-
-              {segment === 'personal' ? (
-                <>
-                  <p className="px-2 pb-2 pt-3 text-sm font-medium text-ink/70">What would you like to insure?</p>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {personalProducts.map((p) => (
-                      <button
-                        key={p.slug}
-                        type="button"
-                        onClick={() => setPick(p.slug)}
-                        aria-pressed={pick === p.slug}
-                        className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-xs font-medium transition ${
-                          pick === p.slug ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-brand-50/60'
-                        }`}
-                      >
-                        <p.icon className="h-5 w-5" />
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={() => navigate(pick === 'car' ? '/assist' : `/quote?product=${pick}`)} className="btn-dark mt-3 w-full">
-                    {pick === 'car' ? 'Start with Ava' : 'Compare quotes'} <ArrowRight className="h-4 w-4" />
-                  </button>
-                  <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
-                    Motor runs through an AI-assisted assessment in this demo; other personal cover uses the quote form.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="px-2 pb-2 pt-3 text-sm font-medium text-ink/70">What kind of business do you run?</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {HERO_INDUSTRIES.map((i) => (
-                      <button
-                        key={i.key}
-                        type="button"
-                        onClick={() => setIndustry(i.key)}
-                        aria-pressed={industry === i.key}
-                        className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 text-center text-[11px] leading-tight font-medium transition sm:text-xs ${
-                          industry === i.key ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-brand-50/60'
-                        }`}
-                      >
-                        <i.icon className="h-5 w-5" />
-                        {i.short}
-                      </button>
-                    ))}
-                    <Link
-                      to="/business/industries"
-                      className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-brand-800/20 px-1 py-3 text-center text-[11px] leading-tight font-medium text-ink/60 transition hover:bg-brand-50/60 sm:text-xs"
-                    >
-                      <Building2 className="h-5 w-5" />
-                      {BUSINESS_INDUSTRIES.length - HERO_INDUSTRIES.length} more
-                    </Link>
-                  </div>
-                  <button onClick={() => navigate('/business/risk-review')} className="btn-dark mt-3 w-full">
-                    Start a business risk review <ArrowRight className="h-4 w-4" />
-                  </button>
-                  <p className="px-2 pt-2 text-center text-[11px] text-ink/50">
-                    <Link to={industryHref(industry)} className="font-semibold text-brand-600 hover:underline">
-                      See what a broker looks at for {BUSINESS_INDUSTRIES.find((i) => i.key === industry)?.label.toLowerCase()}
-                    </Link>
-                    {' · '}from sole traders to multi-site groups
-                  </p>
-                </>
-              )}
-            </div>
+            {me && (
+              <p className="mt-3 text-sm text-ink/60">
+                Signed in as <strong className="text-navy-900">{me.full_name}</strong>
+                {' · '}
+                <Link to="/my" className="font-semibold text-brand-600 underline">
+                  Continue to My Area
+                </Link>
+              </p>
+            )}
           </div>
 
-          <div className="relative hidden lg:block">
-            <img
-              src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=1100&q=70"
-              alt="An adviser helping a client"
-              className="aspect-[4/5] w-full rounded-[2rem] object-cover shadow-2xl"
-            />
-            <div className="card absolute -left-10 bottom-10 w-72 space-y-2.5 p-4 shadow-xl animate-rise">
-              <p className="flex items-center gap-2 text-xs font-semibold text-navy-900">
-                <Sparkles className="h-4 w-4 text-brand-500" /> Agent activity
-              </p>
-              {['Lead Agent · Customer profile created', 'Risk Agent · Risk assessment completed', 'Quote Agent · 3 simulated options prepared'].map((t) => (
-                <p key={t} className="flex items-center gap-2 text-xs text-ink/70">
-                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" /> {t}
-                </p>
-              ))}
-              <p className="flex items-center gap-2 text-xs font-medium text-amber-700">
-                <Clock className="h-3.5 w-3.5 shrink-0" /> Approval Engine · Waiting for broker approval
-              </p>
-            </div>
-            <div className="card absolute -right-4 top-10 p-4 shadow-xl">
-              <p className="text-xs text-ink/60">Example simulated option</p>
-              <p className="font-display text-xl font-bold text-brand-800">{rand(1090)} / month</p>
-              <p className="text-[11px] text-ink/50">Illustrative demo figure</p>
-            </div>
+          <div id="zones" className="mx-auto mt-10 grid max-w-5xl scroll-mt-28 grid-cols-1 gap-4 md:grid-cols-3">
+            {ZONES.map((z) => {
+              const signedInPath = z.key === 'client' && inClient ? z.signedInTo : z.key === 'broker' && inBroker ? z.signedInTo : null
+              return (
+                <article key={z.key} className="flex flex-col rounded-[1.5rem] border border-brand-800/10 bg-white/90 p-6 text-left shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand-50 text-brand-700">
+                    <z.icon className="h-5 w-5" />
+                  </span>
+                  <h2 className="mt-4 font-display text-xl font-bold text-navy-900">{z.title}</h2>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-ink/65">{z.body}</p>
+                  <div className="mt-5 flex flex-col gap-2">
+                    <Link to={signedInPath ?? z.primary.to} className="btn-dark w-full justify-center">
+                      {signedInPath ? 'Enter My Area' : z.primary.label} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                    {!signedInPath && (
+                      <Link to={z.secondary.to} className="btn-ghost w-full justify-center text-sm">
+                        {z.secondary.label}
+                      </Link>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
           </div>
+
+          <p className="mt-6 text-center text-sm text-ink/55">
+            Have an invite?{' '}
+            <Link to="/brokers/invite" className="font-semibold text-brand-600 underline">
+              Open your invitation
+            </Link>
+            {' · '}
+            Demo tip: use <strong className="text-navy-800">Demo as</strong> → Johan (client) or Thabo (broker)
+          </p>
         </div>
       </section>
 
-      {/* Insurer strip */}
-      <section className="border-y border-brand-800/10 bg-white py-8">
-        <div className="container-x">
-          <p className="mb-5 text-center text-xs font-semibold uppercase tracking-[0.18em] text-ink/40">
-            We compare cover from
-          </p>
+      {/* Marketplace quick start */}
+      <section id="marketplace" className="border-y border-brand-800/10 bg-white py-12">
+        <div className="container-x grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+          <div>
+            <p className="eyebrow mb-2">Insurance marketplace</p>
+            <h2 className="font-display text-3xl font-bold text-navy-900">Compare cover, then Ava hands it to a broker</h2>
+            <p className="mt-2 max-w-md text-sm text-ink/65">Start personal or business. Nothing is released until a licensed broker approves.</p>
+          </div>
+          <div data-identity={segment} className="rounded-[1.5rem] border border-brand-800/10 bg-sand/60 p-4 shadow-sm">
+            <div className="grid grid-cols-2 gap-1 rounded-2xl bg-white p-1" role="tablist" aria-label="Who is the cover for?">
+              {SEGMENTS.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={segment === s.key}
+                  onClick={() => setSegment(s.key)}
+                  data-identity={s.key}
+                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                    segment === s.key ? 'bg-brand-500 text-white shadow-sm' : 'text-ink/60 hover:bg-brand-50 hover:text-brand-800'
+                  }`}
+                >
+                  <s.icon className="h-4 w-4" />
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {segment === 'personal' ? (
+              <>
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {personalProducts.map((p) => (
+                    <button
+                      key={p.slug}
+                      type="button"
+                      onClick={() => setPick(p.slug)}
+                      aria-pressed={pick === p.slug}
+                      className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-xs font-medium transition ${
+                        pick === p.slug ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-white'
+                      }`}
+                    >
+                      <p.icon className="h-5 w-5" />
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => navigate(pick === 'car' ? '/assist' : `/quote?product=${pick}`)} className="btn-dark mt-3 w-full">
+                  {pick === 'car' ? 'Start with Ava' : 'Compare quotes'} <ArrowRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mt-3 grid grid-cols-4 gap-2">
+                  {HERO_INDUSTRIES.slice(0, 7).map((i) => (
+                    <button
+                      key={i.key}
+                      type="button"
+                      onClick={() => setIndustry(i.key)}
+                      aria-pressed={industry === i.key}
+                      className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 text-center text-[11px] leading-tight font-medium transition sm:text-xs ${
+                        industry === i.key ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-transparent text-ink/60 hover:bg-white'
+                      }`}
+                    >
+                      <i.icon className="h-5 w-5" />
+                      {i.short}
+                    </button>
+                  ))}
+                  <Link to="/business/industries" className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-brand-800/20 px-1 py-3 text-center text-[11px] font-medium text-ink/60 hover:bg-white sm:text-xs">
+                    <Building2 className="h-5 w-5" /> More
+                  </Link>
+                </div>
+                <button type="button" onClick={() => navigate('/business/risk-review')} className="btn-dark mt-3 w-full">
+                  Start a business risk review <ArrowRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="container-x mt-10">
+          <p className="mb-4 text-center text-xs font-semibold tracking-[0.18em] text-ink/40 uppercase">We compare cover from</p>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
             {insurers.map((i) => (
               <span key={i} className="font-display text-lg font-semibold text-ink/35">{i}</span>

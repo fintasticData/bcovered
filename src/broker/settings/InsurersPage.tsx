@@ -29,7 +29,7 @@ function AccessRow({ row, canManage, active }: { row: InsurerAccessView; canMana
             {row.insurer_name} · {MODULE_LABEL[row.product_module]}
           </p>
           <p className="text-xs text-navy-600">
-            Intermediary code {row.intermediary_code ?? '–'} · {row.supported ? row.integration_label : 'No integration available'}
+            Intermediary / BLP code {row.intermediary_code ?? '–'} · {row.supported ? row.integration_label : 'No integration available'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -85,9 +85,9 @@ export default function InsurersPage() {
 
   return (
     <Page>
-      <PageHeader title="Insurer access" description="Access to each insurer and product is configured separately from platform membership. Quoting only uses insurers whose access is enabled." />
+      <PageHeader title="Insurer access" description="Access to each insurer and product is configured separately from platform membership. Quoting only uses insurers whose access is enabled. Intermediary codes sit under your Broker Licence Plate (BLP#)." />
       <Notice>
-        Steps: {STEPS.join(' → ')}. Credentials are stored server-side (Vault in the target build) and shown only as a masked hint. They never appear in the browser after you submit them, in logs or in Russ. Only the simulated demo adapter exists today; every other insurer is shown as unsupported.
+        Steps: {STEPS.join(' → ')}. Credentials are stored server-side (Vault in the target build) and shown only as a masked hint. They never appear in the browser after you submit them, in logs or in Russ. Only the simulated demo adapter exists today; every other insurer is shown as unsupported. Your BLP# and FSP are summarised in My Area.
       </Notice>
       {!data.brokerage_active && <Notice tone="warning">Your brokerage is not active, so connections cannot be tested or enabled yet.</Notice>}
       <ul className="space-y-3">

@@ -69,6 +69,43 @@ export const STAFF_ROLES: Role[] = ['broker', 'manager', 'admin']
 /** A tenant id that owns nothing: people without a valid membership get a repository that sees no rows. */
 export const NO_TENANT = '00000000-0000-4000-8000-000000000000'
 
+/**
+ * Local Create-account signups used to land as visitors with no customer record, so My Area blocked them and they never
+ * appeared in Supabase Auth. Promote credentialed visitors (without brokerage membership or platform staff) into a
+ * BCovered customer so Client Zone works.
+ */
+export function ensureClientAccount(userId: string): AppUser | null {
+  const user = identity.user(userId)
+  if (!user) return null
+  if (user.role === 'customer' && user.customer_id) return user
+  if (user.role !== 'visitor') return user
+  if (identity.platformStaff(userId)) return user
+  if (identity.memberships(userId).some((m) => m.status === 'active')) return user
+  if (!identity.credentials(user.email)) return user
+  return db.transaction(() => {
+    const book = new Repo(TENANT_ID)
+    const customer =
+      (user.customer_id ? book.get('customers', user.customer_id) : undefined) ??
+      book.insert('customers', {
+        full_name: user.full_name,
+        email: user.email,
+        phone: null,
+        region: null,
+        customer_type: 'personal',
+        status: 'prospect',
+        is_synthetic: false,
+        created_by: null,
+      })
+    // Home tenant may still be NO_TENANT from an older Create-account path.
+    const home = new Repo(user.tenant_id)
+    return home.update('app_users', userId, {
+      role: 'customer',
+      customer_id: customer.id,
+      tenant_id: TENANT_ID,
+    })
+  })
+}
+
 /** Active access grants for a portal user, by scope type. */
 export function grantsFor(repo: Repo, userId: string): Grants {
   const grants: Grants = new Map()
@@ -169,10 +206,10 @@ export interface DemoIdentity {
   home: string
 }
 
-/** Where a staff member lands: the onboarding journey until their brokerage is active. */
+/** Where a staff member lands: My Area when active; onboarding until the brokerage is active. */
 function staffHome(p: Principal): string {
   if (!p.membership) return p.platform ? '/platform/onboarding' : '/'
-  return p.organisation?.lifecycle_status === 'active' ? '/broker' : '/onboarding'
+  return p.organisation?.lifecycle_status === 'active' ? '/my' : '/onboarding'
 }
 
 function bcoveredIdentities(): DemoIdentity[] {
@@ -202,14 +239,14 @@ function bcoveredIdentities(): DemoIdentity[] {
               : 'Licensed broker · short-term'
       const home =
         u.role !== 'customer'
-          ? '/broker'
+          ? '/my'
           : grants.has('employer')
             ? '/portal/employer'
             : grants.has('cell')
               ? '/portal/cell'
               : business
                 ? '/portal/business'
-                : '/portal'
+                : '/my'
       return { user_id: u.id, customer_id: u.customer_id, full_name: u.full_name, role: u.role, description, group: 'BCovered (first brokerage)', home }
     })
 }
@@ -261,7 +298,7 @@ export interface WorkspaceOption {
 export interface SessionView extends AppUser {
   member_role: MemberRole | null
   platform_role: PlatformRole | null
-  organisation: Pick<Organisation, 'id' | 'name' | 'kind' | 'lifecycle_status' | 'is_demo' | 'status_reason'> | null
+  organisation: Pick<Organisation, 'id' | 'name' | 'kind' | 'lifecycle_status' | 'is_demo' | 'status_reason' | 'blp_number' | 'fsp_number' | 'fsp_verified'> | null
   workspaces: WorkspaceOption[]
   capabilities: Capability[]
   read_only: boolean
@@ -270,6 +307,7 @@ export interface SessionView extends AppUser {
 }
 
 export function getSessionUser(auth: Auth): SessionView | null {
+  if (auth.userId) ensureClientAccount(auth.userId)
   const p = principal(auth)
   if (!p.user) return null
   const activeId = p.organisation?.id ?? null
@@ -287,12 +325,24 @@ export function getSessionUser(auth: Auth): SessionView | null {
     role: p.role,
     member_role: p.membership?.role ?? null,
     platform_role: p.platform?.role ?? null,
-    organisation: org ? { id: org.id, name: org.name, kind: org.kind, lifecycle_status: org.lifecycle_status, is_demo: org.is_demo, status_reason: org.status_reason } : null,
+    organisation: org
+      ? {
+          id: org.id,
+          name: org.name,
+          kind: org.kind,
+          lifecycle_status: org.lifecycle_status,
+          is_demo: org.is_demo,
+          status_reason: org.status_reason,
+          blp_number: org.blp_number,
+          fsp_number: org.fsp_number,
+          fsp_verified: org.fsp_verified,
+        }
+      : null,
     workspaces,
     capabilities: p.user.role === 'customer' ? [] : capabilitiesOf(p.membership?.role ?? null),
     read_only: Boolean(p.repo.options.readOnly),
     application_status: application?.status ?? null,
-    home: p.user.role === 'customer' ? '/portal' : staffHome(p),
+    home: p.user.role === 'customer' ? '/my' : staffHome(p),
   }
 }
 
@@ -373,7 +423,8 @@ const COMMERCIAL_COPILOT_GREETING =
 const GREETING: Record<Channel, string> = {
   public:
     'Hi, I’m Ava, BCovered’s AI assistant. Tell me what you’d like to insure and I’ll gather what our brokers need. I’m not a licensed adviser: a broker reviews every recommendation before you see it.',
-  portal: 'Hi, I’m Ava. I can help with a new motor comparison from here.',
+  portal:
+    'Welcome to My Area. I’m Ava — your quotes and covers are on the right. Tell me what you need next. I’m not a licensed adviser: a broker reviews every recommendation before you see it.',
   broker:
     'I’m Russ, B-Covered’s assistant. Ask me about work queues, comparisons, life advice, employee movements, contribution reconciliations, transfers, investments or cell captives. Results open on the right and every piece of work runs as a job you can monitor. I prepare; a licensed person approves.',
 }

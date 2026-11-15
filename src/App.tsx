@@ -90,8 +90,12 @@ const InvestigationPage = lazy(() => import('./broker/specialist/InvestigationPa
 const ExecutivePage = lazy(() => import('./broker/specialist/ExecutivePage'))
 const CompliancePage = lazy(() => import('./broker/specialist/CompliancePage'))
 const SignInPage = lazy(() => import('./pages/auth/SignInPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'))
 const JoinPage = lazy(() => import('./pages/brokers/JoinPage'))
 const InvitePage = lazy(() => import('./pages/brokers/InvitePage'))
+const InviteHelpPage = lazy(() => import('./pages/brokers/InviteHelpPage'))
+const MyAreaPage = lazy(() => import('./pages/my/MyAreaPage'))
 const OnboardingPage = lazy(() => import('./onboarding/OnboardingPage'))
 const PlatformLayout = lazy(() => import('./platform/PlatformLayout'))
 const QueuePage = lazy(() => import('./platform/QueuePage'))
@@ -196,8 +200,19 @@ export default function App() {
           <Route path="/updates" element={<UpdatesPage />} />
           <Route path="/legal" element={<LegalPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route
+            path="/my"
+            element={
+              <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Area">
+                <MyAreaPage />
+              </RequireRole>
+            }
+          />
           <Route path="/brokers/join" element={<JoinPage />} />
           <Route path="/brokers/signup" element={<BrokerSignUpPage />} />
+          <Route path="/brokers/invite" element={<InviteHelpPage />} />
           <Route path="/brokers/invite/:token" element={<InvitePage />} />
           <Route path="/team/join/:token" element={<TeamJoinPage />} />
           <Route path="/r/:code" element={<ReferralEnquiryPage />} />

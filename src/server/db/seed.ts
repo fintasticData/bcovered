@@ -135,6 +135,7 @@ export function seedTables(now = Date.now()): Tables {
         slug: 'bcovered',
         fsp_number: null,
         fsp_verified: false,
+        blp_number: 'BLP-BCV-0001',
         is_demo: true,
         kind: 'brokerage',
         legal_name: 'BCovered (Pty) Ltd (fictional)',

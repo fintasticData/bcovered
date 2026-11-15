@@ -48,6 +48,11 @@ export const supabaseAuth = {
     set({ status: 'signing_in', error: null })
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.session) return set({ status: 'error', error: error?.message ?? 'Sign-in failed', email: null, userId: null })
+    // Re-apply session so the next RPC definitely sends the user JWT (avoids anon/401 races).
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    })
     set({ status: 'signed_in', email: data.session.user.email ?? email, userId: data.session.user.id, error: null })
   },
   /** Signs the demo staff identity in to Supabase Auth with the seeded demo password. */

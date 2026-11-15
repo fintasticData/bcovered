@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Loader2, MailCheck, Share2, UserPlus, Users } from 'lucide-react'
+import { PasswordField } from '@/components/PasswordField'
 import { signUpBroker } from '@/lib/supabase/accounts'
 import { useSupabaseAuth } from '@/lib/supabase/client'
 
@@ -106,11 +107,16 @@ export default function BrokerSignUpPage() {
                 <label htmlFor="su-email" className="field-label">Work email</label>
                 <input id="su-email" type="email" className="field" value={form.email} onChange={set('email')} autoComplete="email" required />
               </div>
-              <div>
-                <label htmlFor="su-password" className="field-label">Password</label>
-                <input id="su-password" type="password" className="field" value={form.password} onChange={set('password')} autoComplete="new-password" minLength={8} required />
-                <p className="mt-1 text-xs text-ink/60">At least 8 characters.</p>
-              </div>
+              <PasswordField
+                id="su-password"
+                label="Password"
+                value={form.password}
+                onChange={set('password')}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                hint="At least 8 characters."
+              />
               {error && <p className="field-error" role="alert">{error}</p>}
               <button type="submit" className="btn-dark w-full" disabled={!valid || busy || auth.status === 'unconfigured'}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Create account and open my workspace

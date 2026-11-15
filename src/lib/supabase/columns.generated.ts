@@ -81,7 +81,7 @@ export const SUPABASE_COLUMNS: Record<string, readonly string[]> = {
   "organisation_commercial_terms":["id","tenant_id","package_key","terms","status","agreed_by","agreed_at","created_at"],
   "organisation_memberships":["id","tenant_id","user_id","role","status","invited_by","created_at","updated_at"],
   "organisation_product_modules":["tenant_id","module","status","decided_by","decided_at","created_at","updated_at"],
-  "organisations":["id","name","slug","fsp_number","fsp_verified","is_demo","created_at","updated_at","kind","legal_name","trading_name","registration_number","brokerage_type","lifecycle_status","status_reason","activated_at","suspended_at","retention_until"],
+  "organisations":["id","name","slug","fsp_number","fsp_verified","is_demo","created_at","updated_at","kind","legal_name","trading_name","registration_number","brokerage_type","lifecycle_status","status_reason","activated_at","suspended_at","retention_until","blp_number"],
   "person_relationships":["id","tenant_id","person_id","related_person_id","relationship","is_financial_dependant","effective_from","effective_to","source","created_at"],
   "persons":["id","tenant_id","first_names","surname","preferred_name","date_of_birth","gender","id_type","id_lookup_hash","id_last4","date_of_death","is_synthetic","created_at","updated_at","data_category","client_number"],
   "platform_staff":["user_id","role","granted_by","revoked_at","created_at"],

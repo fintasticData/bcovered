@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, UserCircle2 } from 'lucide-react'
+import { Check, ChevronDown, LogOut, UserCircle2 } from 'lucide-react'
 import { session } from '@/api/client'
-import { useIdentities, useMe } from '@/api/hooks'
+import { useIdentities, useMe, useSignOut } from '@/api/hooks'
+import { supabaseAuth } from '@/lib/supabase/client'
 import { PLATFORM_ROLE_LABEL, ROLE_LABEL } from '@/server/onboarding/config'
 import { humanise } from './StatusBadge'
 import { cn } from '@/lib/utils'
@@ -12,6 +13,7 @@ export function RoleSwitcher({ dark = false, align = 'right', compact = false }:
   const ref = useRef<HTMLDivElement>(null)
   const { data: identities = [] } = useIdentities()
   const { data: me } = useMe()
+  const signOut = useSignOut()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,6 +28,16 @@ export function RoleSwitcher({ dark = false, align = 'right', compact = false }:
     session.set(userId)
     setOpen(false)
     navigate(home)
+  }
+
+  const leave = () => {
+    setOpen(false)
+    signOut.mutate(undefined, {
+      onSuccess: () => {
+        void supabaseAuth.signOut().catch(() => undefined)
+        navigate('/')
+      },
+    })
   }
 
   const roleLabel = me?.platform_role ? PLATFORM_ROLE_LABEL[me.platform_role] : me?.member_role ? ROLE_LABEL[me.member_role] : me ? humanise(me.role) : ''
@@ -60,8 +72,20 @@ export function RoleSwitcher({ dark = false, align = 'right', compact = false }:
           )}
         >
           <p className="px-2 pb-2 pt-1 text-[11px] leading-snug text-navy-600">
-            Seeded demo identities. No passwords or real credentials are used.
+            Demo identities for the MVP. Client zone → Johan. Broker zone → Thabo.
           </p>
+          {me && (
+            <button
+              role="menuitem"
+              type="button"
+              onClick={leave}
+              disabled={signOut.isPending}
+              className="mb-1 flex w-full cursor-pointer items-center gap-2 rounded-lg border border-navy-800/10 bg-navy-50 px-2 py-2.5 text-left text-sm font-semibold text-navy-900 hover:bg-navy-100"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              Sign out
+            </button>
+          )}
           {identities.map((i, idx) => {
             const active = (me?.id ?? null) === i.user_id
             const heading = idx === 0 || identities[idx - 1].group !== i.group

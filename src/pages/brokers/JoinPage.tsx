@@ -66,7 +66,7 @@ export default function JoinPage() {
           {!signedIn ? (
             <>
               <p className="mt-1 mb-5 text-sm text-ink/70">Create an account first. You can leave at any point and resume later.</p>
-              <AuthForm defaultMode="sign_up" onDone={() => undefined} />
+              <AuthForm defaultMode="sign_up" onDone={() => window.location.reload()} />
             </>
           ) : isCustomer ? (
             <p className="mt-3 text-sm text-ink/70">You are signed in with a customer portal identity. Switch to “Public visitor” or sign out to apply as a brokerage.</p>

@@ -62,7 +62,7 @@ export default function InvitePage() {
             ) : !me ? (
               <div className="mt-6">
                 <p className="mb-4 text-sm text-ink/70">Create an account or sign in with the invited email address to accept.</p>
-                <AuthForm defaultMode="sign_up" email={invite.email} onDone={() => undefined} />
+                <AuthForm defaultMode="sign_up" email={invite.email} onDone={() => window.location.reload()} />
               </div>
             ) : !emailMatches ? (
               <div className="mt-6 space-y-3">

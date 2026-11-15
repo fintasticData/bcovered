@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Copy, Download, ExternalLink, FileUp, FlaskConical, Mail, Send, Trash2 } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, FileUp, FlaskConical, Mail, Send, Trash2 } from 'lucide-react'
 import type { CreatedInvitation, OnboardingView } from '@/api/client'
 import { api } from '@/api/client'
+import { ShareInvite } from '@/components/ShareInvite'
 import {
   useAgreeTerms,
   useDeclareInsurer,
@@ -233,18 +234,16 @@ export function TeamSection({ view }: { view: OnboardingView }) {
 }
 
 export function InvitationCreated({ created }: { created: CreatedInvitation }) {
-  const url = `${window.location.origin}${created.link}`
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900" role="status">
-      <p className="font-semibold">Invitation created for {created.email_preview.to}</p>
-      <p className="mt-1">Demo mode sends no email. Share this single-use link; it is shown only once:</p>
-      <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded bg-white px-2 py-1 text-[11px]">{url}</code>
-        <Button size="sm" variant="outline" onClick={() => void navigator.clipboard?.writeText(url)}>
-          <Copy /> Copy
-        </Button>
-      </div>
-      <p className="mt-2 text-emerald-800">
+    <div className="space-y-2">
+      <ShareInvite
+        url={created.link}
+        title={`Invitation created for ${created.email_preview.to}`}
+        hint="Demo mode sends no email. Share this single-use link; it is shown only once."
+        expiresAt={created.invitation.expires_at}
+        whatsappText={`${created.email_preview.subject}. Open ${typeof window !== 'undefined' ? window.location.origin : ''}${created.link}`}
+      />
+      <p className="text-xs text-navy-600">
         <strong>Email preview:</strong> {created.email_preview.subject}. {created.email_preview.body}
       </p>
     </div>

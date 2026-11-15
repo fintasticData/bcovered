@@ -96,13 +96,16 @@ let hydrateRun = 0
 async function hydrate() {
   if (!active()) return set({ status: 'local', category: dataCategory.get() })
   const run = ++hydrateRun
-  const category = dataCategory.get()
+  const me = await signedInWhoami(true)
+  // Portal customers always hydrate Live (their ensure_client_profile rows); staff keep Sample/Live.
+  const category: DataCategory = me && !me.isStaff && me.customerId ? 'live' : dataCategory.get()
   set({ status: 'hydrating', category, lastError: null })
-  const own = await signedInTenant(true)
+  const own = me?.tenantId ?? null
+  const tablesToLoad = me && !me.isStaff ? [...CLIENT_SYNC_TABLES].filter((t) => syncedTables.has(t)) : [...syncedTables]
   const loaded: Record<string, Record<string, unknown>[]> = {}
   const errors: string[] = []
   await Promise.all(
-    [...syncedTables].map(async (t) => {
+    tablesToLoad.map(async (t) => {
       try {
         loaded[t] = await loadTable(t, category)
       } catch (e) {
@@ -126,16 +129,54 @@ async function hydrate() {
 const queue: RowChange[] = []
 let draining = false
 
-let sessionTenant: { userId: string; tenantId: string | null; at: number } | null = null
-async function signedInTenant(fresh = false): Promise<string | null> {
+type Whoami = {
+  userId: string
+  tenantId: string | null
+  isStaff: boolean
+  customerId: string | null
+  at: number
+}
+
+const CLIENT_SYNC_TABLES = new Set(['customers', 'conversations', 'conversation_messages'])
+
+let sessionWhoami: Whoami | null = null
+async function signedInWhoami(fresh = false): Promise<Whoami | null> {
   const userId = supabaseAuth.get().userId
   if (!userId) return null
-  if (sessionTenant?.userId !== userId || (fresh && Date.now() - sessionTenant.at > 30_000)) {
+  if (sessionWhoami?.userId !== userId || (fresh && Date.now() - sessionWhoami.at > 30_000)) {
     const { data, error } = await supabase!.rpc('copilot_whoami')
-    const tenantId = error ? null : ((data as { tenant_id?: string | null } | null)?.tenant_id ?? null)
-    sessionTenant = { userId, tenantId, at: Date.now() }
+    const row = error ? null : (data as {
+      tenant_id?: string | null
+      is_staff?: boolean
+      customer_id?: string | null
+    } | null)
+    sessionWhoami = {
+      userId,
+      tenantId: row?.tenant_id ?? null,
+      isStaff: Boolean(row?.is_staff),
+      customerId: row?.customer_id ?? null,
+      at: Date.now(),
+    }
   }
-  return sessionTenant.tenantId
+  return sessionWhoami
+}
+
+async function signedInTenant(fresh = false): Promise<string | null> {
+  return (await signedInWhoami(fresh))?.tenantId ?? null
+}
+
+/** Portal customers only sync their own account rows; staff sync the brokerage book. */
+function clientMaySync(change: RowChange, me: Whoami): boolean {
+  if (!me.customerId || !CLIENT_SYNC_TABLES.has(change.table)) return false
+  if (change.table === 'customers') return change.row.id === me.customerId
+  if (change.table === 'conversations') return change.row.customer_id === me.customerId
+  if (change.table === 'conversation_messages') {
+    const conversationId = change.row.conversation_id as string | undefined
+    if (!conversationId) return false
+    const conversation = db.snapshot().conversations?.find((c) => c.id === conversationId)
+    return conversation?.customer_id === me.customerId
+  }
+  return false
 }
 
 function payloadFor(change: RowChange, category: DataCategory) {
@@ -156,9 +197,17 @@ async function drain() {
       // Rows of another tenant (such as the public site's customer chat while a broker is signed in) stay in browser
       // storage: row-level security only accepts the signed-in brokerage's rows.
       const rowTenant = typeof change.row.tenant_id === 'string' ? change.row.tenant_id : null
-      const own = await signedInTenant()
-      if (own && rowTenant && rowTenant !== own && (await signedInTenant(true)) !== rowTenant) continue
-      const category = dataCategory.get()
+      const me = await signedInWhoami()
+      if (!me) continue
+      if (me.tenantId && rowTenant && rowTenant !== me.tenantId && (await signedInTenant(true)) !== rowTenant) continue
+      // Clients are not staff: never push Ava prospect rows or brokerage tables they cannot own under RLS.
+      if (!me.isStaff) {
+        if (!clientMaySync(change, me)) continue
+      } else if (!me.tenantId) {
+        continue
+      }
+      // Portal customer rows are Live; staff keep the Sample/Live toggle.
+      const category: DataCategory = me.isStaff ? dataCategory.get() : 'live'
       const t = change.table as string
       const req =
         change.op === 'delete'
