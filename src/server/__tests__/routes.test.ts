@@ -193,6 +193,8 @@ describe('Route engine', () => {
       title: 'Quick sample quote',
       outcome: 'A follow-up after a quick comparison.',
       subject: 'client',
+      group: 'quotes',
+      eligible: ['client'],
       category: 'sample',
       intents: ['quick sample quote'],
       selectActionId: A.select,

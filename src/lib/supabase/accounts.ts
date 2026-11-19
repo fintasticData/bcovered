@@ -4,9 +4,29 @@ import { session } from '@/api/client'
 import { salesApi, type SalesProfile } from '@/copilot/salesApi'
 import { TENANT_ID } from '@/server/db/seed'
 import { db, identity, Repo } from '@/server/db/store'
-import type { MemberRole } from '@/server/db/onboardingSchema'
-import { LEGACY_ROLE } from '@/server/onboarding/config'
+import type { MemberRole, PlatformRole } from '@/server/db/onboardingSchema'
+import { faisDefaultsForRole, LEGACY_ROLE } from '@/server/onboarding/config'
+import { newId, nowIso } from '@/server/db/store'
 import { supabase, supabaseAuth } from './client'
+
+const PLATFORM_ROLES: PlatformRole[] = ['platform_admin', 'onboarding_reviewer', 'platform_read_only']
+
+function mirrorPlatformRole(userId: string, platformRole: string | null | undefined) {
+  const role = platformRole && PLATFORM_ROLES.includes(platformRole as PlatformRole) ? (platformRole as PlatformRole) : null
+  db.transaction(() => {
+    const repo = new Repo(TENANT_ID, { platform: true })
+    const row = repo.list('platform_staff', (s) => s.user_id === userId)[0]
+    if (!role) {
+      if (row && !row.revoked_at) repo.update('platform_staff', row.id, { revoked_at: nowIso() })
+      return
+    }
+    if (!row) {
+      repo.insert('platform_staff', { id: newId(), user_id: userId, role, granted_by: null, revoked_at: null })
+      return
+    }
+    repo.update('platform_staff', row.id, { role, revoked_at: null })
+  })
+}
 
 export interface ClientProfile {
   kind: 'client' | 'broker'
@@ -40,6 +60,7 @@ export function rememberDatabaseUser(userId: string) {
 
 /** Writes the signed-in database user, their active brokerage and membership into the in-browser identity store. */
 export function mirrorProfile(profile: SalesProfile, userId: string) {
+  mirrorPlatformRole(userId, profile.platform_role)
   const org = profile.brokerage
   if (!org || !profile.membership_role) return
   const role = profile.membership_role as MemberRole
@@ -61,12 +82,19 @@ export function mirrorProfile(profile: SalesProfile, userId: string) {
       repo.insert('app_users', {
         id: userId, email: profile.email ?? '', full_name: profile.name ?? profile.email ?? 'Broker', role: LEGACY_ROLE[role], customer_id: null, active_organisation_id: org.id,
       })
-    } else if (user.active_organisation_id !== org.id) {
-      new Repo(user.tenant_id).update('app_users', userId, { active_organisation_id: org.id })
+    } else {
+      new Repo(user.tenant_id).update('app_users', userId, {
+        active_organisation_id: org.id,
+        role: LEGACY_ROLE[role],
+        customer_id: null,
+        full_name: profile.name ?? user.full_name,
+        email: profile.email ?? user.email,
+      })
     }
     const membership = identity.memberships(userId).find((m) => m.tenant_id === org.id)
-    if (!membership) repo.insert('organisation_memberships', { user_id: userId, role, status: 'active', invited_by: null })
-    else if (membership.role !== role || membership.status !== 'active') repo.update('organisation_memberships', membership.id, { role, status: 'active' })
+    const fais = faisDefaultsForRole(role)
+    if (!membership) repo.insert('organisation_memberships', { user_id: userId, role, status: 'active', invited_by: null, ...fais })
+    else if (membership.role !== role || membership.status !== 'active') repo.update('organisation_memberships', membership.id, { role, status: 'active', ...fais })
   })
   rememberDatabaseUser(userId)
 }
@@ -147,6 +175,8 @@ export async function adoptDatabaseUser(): Promise<SalesProfile | null> {
     await supabase.auth.refreshSession()
     profile = await salesApi.profile()
   }
+  // Creator / platform staff with no brokerage yet still need the local platform_staff mirror for /platform.
+  if (profile.platform_role) mirrorPlatformRole(auth.userId, profile.platform_role)
   const demo = auth.email ? identity.userByEmail(auth.email) : undefined
   // Only keep seeded Demo-as staff identities — never divert a live Client Auth login.
   if (demo && demo.role !== 'customer' && !isDatabaseUser(demo.id) && demo.id !== auth.userId) {

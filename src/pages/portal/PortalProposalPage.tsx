@@ -1,21 +1,38 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Info } from 'lucide-react'
-import { usePortalProposal } from '@/api/hooks'
+import { useMe, usePortalProposal } from '@/api/hooks'
 import { CompareWithAi } from '@/components/CompareWithAi'
 import { QuoteComparisonTable } from '@/components/QuoteComparisonTable'
 import { SimulatedBadge, SimulationNotice } from '@/components/SimulatedBadge'
+import { fetchOrganisationMedia } from '@/lib/supabase/organisations'
 import { describeVehicle, formatMotorField } from '@/server/domain/motor'
 import { ErrorState, LoadingState } from '@/broker/PageHeader'
 
 export default function PortalProposalPage() {
   const { quoteId } = useParams()
   const { data, isLoading, error } = usePortalProposal(quoteId)
+  const { data: me } = useMe()
   const [highlight, setHighlight] = useState<string | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(me?.organisation?.logo_url ?? null)
+
+  useEffect(() => {
+    setLogoUrl(me?.organisation?.logo_url ?? null)
+    const id = me?.organisation?.id
+    if (!id) return
+    let cancelled = false
+    void fetchOrganisationMedia(id).then((media) => {
+      if (!cancelled && media?.logo_url) setLogoUrl(media.logo_url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [me?.organisation?.id, me?.organisation?.logo_url])
 
   if (isLoading) return <div className="container-x py-10"><LoadingState /></div>
   if (error || !data) return <div className="container-x py-10"><ErrorState message={error?.message ?? 'Proposal not found'} /></div>
   const v = data.quote.risk_summary.vehicle ?? {}
+  const brokerageName = me?.organisation?.name
 
   return (
     <div className="bg-mist">
@@ -23,6 +40,10 @@ export default function PortalProposalPage() {
         <Link to="/portal" className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
           <ArrowLeft className="h-3.5 w-3.5" /> My portal
         </Link>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          {logoUrl && <img src={logoUrl} alt="" className="h-10 w-10 rounded-xl object-cover ring-1 ring-navy-800/10" />}
+          {brokerageName && <p className="text-sm font-semibold text-navy-700">{brokerageName}</p>}
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-3xl font-bold text-navy-900">Your motor comparison</h1>
           <SimulatedBadge />

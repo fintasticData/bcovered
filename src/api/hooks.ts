@@ -39,11 +39,16 @@ export const useControlJob = () =>
 export const useLeads = () => useQuery({ queryKey: useKey('leads'), queryFn: api.leads })
 export const useLead = (id: string | undefined) =>
   useQuery({ queryKey: useKey('lead', id), queryFn: () => api.lead(id!), enabled: Boolean(id) })
+export const useCaptureLead = () => useInvalidatingMutation(api.captureLead)
+export const useCloseLead = () => useInvalidatingMutation(api.closeLead)
 export const useBulkLeads = () => useInvalidatingMutation(api.bulkLeads)
 
 export const useQuote = (id: string | undefined) =>
   useQuery({ queryKey: useKey('quote', id), queryFn: () => api.quote(id!), enabled: Boolean(id) })
+export const useCreateQuoteRequest = () => useInvalidatingMutation(api.createQuoteRequest)
 export const useAskQuote = (id: string) => useMutation({ mutationFn: (q: string) => api.askQuote(id, q) })
+export const useCreatePolicySpecialRequest = () => useInvalidatingMutation(api.createPolicySpecialRequest)
+export type { PolicySpecialRequestType } from '@/server/api'
 
 export const useApprovals = (status?: Parameters<typeof api.approvals>[0]) =>
   useQuery({ queryKey: useKey('approvals', status), queryFn: () => api.approvals(status) })
@@ -61,6 +66,7 @@ export const usePersonalLines = () => useQuery({ queryKey: useKey('personal-line
 export const useCommercialCover = () => useQuery({ queryKey: useKey('commercial-cover'), queryFn: api.shortTerm.commercialCover })
 export const useCommercialClient = (id: string | null | undefined) =>
   useQuery({ queryKey: useKey('commercial-client', id), queryFn: () => c.client(id!), enabled: Boolean(id) })
+export const useCreateCommercialClient = () => useInvalidatingMutation(c.createClient)
 export const useUpdateCommercialClient = () => useInvalidatingMutation(c.updateClient)
 export const useRiskTwinPortfolio = () => useQuery({ queryKey: useKey('risk-twins'), queryFn: c.riskTwins })
 export const useStartTwinBuild = () => useInvalidatingMutation(c.buildTwin)
@@ -205,6 +211,7 @@ export const useTeam = () => useQuery({ queryKey: useKey('team'), queryFn: o.tea
 export const useInviteMember = () => useInvalidatingMutation(o.invite)
 export const useRevokeInvitation = () => useInvalidatingMutation(o.revokeInvitation)
 export const useChangeMemberRole = () => useInvalidatingMutation(o.changeRole)
+export const useUpdateMemberFais = () => useInvalidatingMutation(o.updateFais)
 export const useRemoveMember = () => useInvalidatingMutation(o.removeMember)
 export const useBrokerageHome = (enabled = true) => useQuery({ queryKey: useKey('brokerage-home'), queryFn: o.home, enabled, retry: false })
 export const useRussPanel = () => useQuery({ queryKey: useKey('russ-panel'), queryFn: o.russPanel, retry: false })
@@ -234,7 +241,8 @@ export const useClientBookImport = (id: string | undefined) =>
 export const useClientBookAction = <V, R>(fn: (v: V) => Promise<R>) => useInvalidatingMutation(fn)
 
 const rt = api.routes
-export const useRoutes = () => useQuery({ queryKey: useKey('routes'), queryFn: rt.list })
+export const useRoutes = (scope?: 'mine' | 'team') =>
+  useQuery({ queryKey: useKey('routes', scope ?? 'team'), queryFn: () => rt.list(scope) })
 export const useRouteRun = (id: string | undefined) =>
   useQuery({ queryKey: useKey('route-run', id), queryFn: () => rt.progress(id!), enabled: Boolean(id), retry: false })
 export const useStartRoute = () => useInvalidatingMutation(rt.start)

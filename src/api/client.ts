@@ -113,9 +113,14 @@ export const api = {
   // /api/v1/leads, /api/v1/quotes
   leads: () => call(() => server.listLeads(auth())),
   lead: (id: string) => call(() => server.getLead(auth(), { lead_id: id })),
+  captureLead: (body: Parameters<typeof server.captureLead>[1]) => call(() => server.captureLead(auth(), body)),
+  closeLead: (body: Parameters<typeof server.closeLead>[1]) => call(() => server.closeLead(auth(), body)),
   bulkLeads: (body: Parameters<typeof server.bulkUpdateLeads>[1]) => call(() => server.bulkUpdateLeads(auth(), body)),
   quote: (id: string) => call(() => server.getQuote(auth(), { quote_id: id })),
+  createQuoteRequest: (body: { lead_id: string; covers?: string[] }) => call(() => server.createQuoteRequest(auth(), body)),
   askQuote: (id: string, question: string) => call(() => server.askQuote(auth(), { quote_id: id, question })),
+  createPolicySpecialRequest: (body: Parameters<typeof server.createPolicySpecialRequest>[1]) =>
+    call(() => server.createPolicySpecialRequest(auth(), body)),
 
   // /api/v1/approvals
   approvals: (status?: server.ApprovalView['approval']['status'][]) => call(() => server.listApprovals(auth(), { status })),
@@ -131,6 +136,7 @@ export const api = {
     industries: () => call(() => commercial.listIndustries()),
     clients: () => call(() => commercial.listBusinessProfiles(auth())),
     client: (id: string) => call(() => commercial.getBusinessProfile(auth(), { profile_id: id })),
+    createClient: (body: Parameters<typeof commercial.createBusinessClient>[1]) => call(() => commercial.createBusinessClient(auth(), body)),
     updateClient: (body: Parameters<typeof commercial.updateBusinessProfile>[1]) => call(() => commercial.updateBusinessProfile(auth(), body)),
     riskTwins: () => call(() => commercial.getRiskTwinPortfolio(auth())),
     buildTwin: (profileId: string) => call(() => commercial.startTwinBuildForProfile(auth(), { profile_id: profileId })),
@@ -322,6 +328,7 @@ export const api = {
     invite: (body: Parameters<typeof onboarding.createTeamInvitation>[1]) => call(() => onboarding.createTeamInvitation(auth(), body)),
     revokeInvitation: (invitationId: string) => call(() => onboarding.revokeInvitation(auth(), { invitation_id: invitationId })),
     changeRole: (body: Parameters<typeof onboarding.changeMemberRole>[1]) => call(() => onboarding.changeMemberRole(auth(), body)),
+    updateFais: (body: Parameters<typeof onboarding.updateMemberFais>[1]) => call(() => onboarding.updateMemberFais(auth(), body)),
     removeMember: (membershipId: string) => call(() => onboarding.removeMember(auth(), { membership_id: membershipId })),
     home: () => call(() => onboarding.getBrokerageHome(auth())),
     russPanel: () => call(() => onboardingRuss.russPanel(auth())),
@@ -353,6 +360,12 @@ export const api = {
     activate: (applicationId: string) => call(() => onboarding.activateBrokerage(auth(), { application_id: applicationId })),
     brokerages: () => call(() => onboarding.listBrokerages(auth())),
     brokerage: (organisationId: string) => call(() => onboarding.getBrokerageAdmin(auth(), { organisation_id: organisationId })),
+    updateBrokerage: (body: Parameters<typeof onboarding.updateBrokerageProfile>[1]) => call(() => onboarding.updateBrokerageProfile(auth(), body)),
+    addOrInviteMember: (body: Parameters<typeof onboarding.platformAddOrInviteMember>[1]) => call(() => onboarding.platformAddOrInviteMember(auth(), body)),
+    inviteTeamMember: (body: Parameters<typeof onboarding.platformInviteTeamMember>[1]) => call(() => onboarding.platformInviteTeamMember(auth(), body)),
+    changeMemberRole: (body: Parameters<typeof onboarding.platformChangeMemberRole>[1]) => call(() => onboarding.platformChangeMemberRole(auth(), body)),
+    removeMember: (body: Parameters<typeof onboarding.platformRemoveMember>[1]) => call(() => onboarding.platformRemoveMember(auth(), body)),
+    setModuleStatus: (body: Parameters<typeof onboarding.platformSetModuleStatus>[1]) => call(() => onboarding.platformSetModuleStatus(auth(), body)),
     suspend: (body: Parameters<typeof onboarding.suspendBrokerage>[1]) => call(() => onboarding.suspendBrokerage(auth(), body)),
     reinstate: (body: Parameters<typeof onboarding.reinstateBrokerage>[1]) => call(() => onboarding.reinstateBrokerage(auth(), body)),
     inviteOwner: (body: Parameters<typeof onboarding.createOwnerInvitation>[1]) => call(() => onboarding.createOwnerInvitation(auth(), body)),
@@ -375,10 +388,20 @@ export const api = {
 
   // /api/v1/routes: the guide's buttons and Russ (as: 'russ') run the same actions
   routes: {
-    list: () => call(() => routes.listRoutesFor(auth())),
+    list: (scope?: 'mine' | 'team') => call(() => routes.listRoutesFor(auth(), { scope })),
     progress: (runId: string) => call(() => routes.getRouteProgress(auth(), { run_id: runId })),
-    start: (body: { definition_id: string; person_id?: string | null; key: string }, as?: routes.RouteCaller) =>
-      call(() => routes.startRoute(auth(), body, supabaseRoutePort, as)),
+    start: (
+      body: {
+        definition_id: string
+        person_id?: string | null
+        policy_id?: string | null
+        claim_id?: string | null
+        business_key?: string | null
+        intent?: string | null
+        key: string
+      },
+      as?: routes.RouteCaller,
+    ) => call(() => routes.startRoute(auth(), body, supabaseRoutePort, as)),
     runAction: (body: Parameters<typeof routes.runRouteAction>[1], as?: routes.RouteCaller) =>
       call(() => routes.runRouteAction(auth(), body, supabaseRoutePort, as)),
     abandon: (runId: string) => call(() => routes.abandonRoute(auth(), { run_id: runId })),

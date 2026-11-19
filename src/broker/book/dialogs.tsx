@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { CheckCircle2, Loader2, MessageCircle, Search, UserPlus } from 'lucide-react'
+import { CheckCircle2, Loader2, MessageCircle, Plus, Search, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   newKey,
@@ -10,6 +10,7 @@ import {
   shareText,
   useBookGrid,
   useClientRecord,
+  useRefreshSales,
   useSalesMutation,
   whatsappUrl,
   type Frequency,
@@ -18,28 +19,147 @@ import {
 import { useDataCategory } from '@/lib/supabase/category'
 import { CategoryBadge, CopyButton, Dialog, ErrorText, Field, inputClass, money } from './bits'
 
-export const PRODUCTS = [
-  { id: 'motor', label: 'Motor' },
-  { id: 'home', label: 'Home (buildings)' },
-  { id: 'household_contents', label: 'Household contents' },
-  { id: 'life', label: 'Life cover' },
-  { id: 'funeral', label: 'Funeral cover' },
-  { id: 'business', label: 'Business cover' },
-  { id: 'other', label: 'Other' },
+const ESTIMATE_INSURER: Record<string, string> = {
+  motor: 'Santam',
+  home: 'OUTsurance',
+  household_contents: 'Hollard',
+  business: 'Santam',
+  life: 'Discovery',
+  funeral: 'Old Mutual',
+  other: 'Broker estimate',
+}
+
+export type CoverTerm = 'short' | 'long'
+
+export const PRODUCTS: Array<{
+  id: string
+  label: string
+  term: CoverTerm
+  /** Related insured items / risks the broker should capture next. */
+  related: string[]
+  /** Rough monthly estimate (ZAR) for SAMPLE / demo quotes. */
+  estimateMonthly: number
+}> = [
+  { id: 'motor', label: 'Motor', term: 'short', related: ['Vehicle (make / model / year)', 'Market value', 'Regular driver', 'Overnight parking'], estimateMonthly: 865 },
+  { id: 'home', label: 'Home (buildings)', term: 'short', related: ['Property address', 'Rebuild / sum insured', 'Construction type', 'Security'], estimateMonthly: 480 },
+  { id: 'household_contents', label: 'Household contents', term: 'short', related: ['Contents sum insured', 'High-value items', 'Alarm / security', 'Claim history'], estimateMonthly: 320 },
+  { id: 'business', label: 'Business cover', term: 'short', related: ['Create / link business record', 'Trading name', 'Premises / stock', 'Public liability', 'Turnover band'], estimateMonthly: 2_200 },
+  { id: 'life', label: 'Life cover', term: 'long', related: ['Sum assured', 'Beneficiary', 'Smoker status', 'Occupation'], estimateMonthly: 285 },
+  { id: 'funeral', label: 'Funeral cover', term: 'long', related: ['Cover amount', 'Family members', 'Waiting period notes'], estimateMonthly: 125 },
+  { id: 'other', label: 'Other', term: 'short', related: ['Describe the risk', 'Approximate value'], estimateMonthly: 500 },
 ]
+
+export const productById = (id: string) => PRODUCTS.find((p) => p.id === id)
+
+export function interestLabel(ids: string[]) {
+  return ids.map((id) => productById(id)?.label ?? id).join('; ')
+}
+
+function InterestMultiSelect({
+  selected,
+  onChange,
+  relatedChecked,
+  onRelatedChange,
+  title = 'Interested in',
+}: {
+  selected: string[]
+  onChange: (ids: string[]) => void
+  relatedChecked: string[]
+  onRelatedChange: (items: string[]) => void
+  title?: string
+}) {
+  const toggle = (id: string) => {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  }
+  const related = PRODUCTS.filter((p) => selected.includes(p.id)).flatMap((p) => p.related.map((label) => ({ key: `${p.id}:${label}`, label, product: p.label })))
+  const short = PRODUCTS.filter((p) => p.term === 'short')
+  const long = PRODUCTS.filter((p) => p.term === 'long')
+
+  const group = (title: string, items: typeof PRODUCTS) => (
+    <fieldset className="space-y-1.5">
+      <legend className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">{title}</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((p) => {
+          const on = selected.includes(p.id)
+          return (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(p.id)}
+              className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${on ? 'border-brand-500 bg-brand-50 text-brand-900' : 'border-navy-800/15 bg-white text-navy-700 hover:border-navy-400'}`}
+            >
+              {p.label}
+            </button>
+          )
+        })}
+      </div>
+    </fieldset>
+  )
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className="space-y-3 rounded-xl border border-navy-800/10 bg-white p-3">
+        <p className="text-xs font-semibold text-navy-900">{title} <span className="font-normal text-navy-500">(multi-select)</span></p>
+        {group('Short-term', short)}
+        {group('Long-term', long)}
+        {selected.length === 0 && <p className="text-[11px] text-amber-800">Select at least one cover type.</p>}
+      </div>
+      <div className="space-y-2 rounded-xl border border-navy-800/10 bg-navy-50/50 p-3">
+        <p className="text-xs font-semibold text-navy-900">Related items next</p>
+        <p className="text-[11px] text-navy-600">Tick what you will capture on the record after saving. These guide the quote estimate path.</p>
+        {related.length === 0 ? (
+          <p className="text-[11px] text-navy-500">Select covers on the left to see related items.</p>
+        ) : (
+          <ul className="max-h-40 space-y-1 overflow-y-auto">
+            {related.map((item) => {
+              const on = relatedChecked.includes(item.key)
+              return (
+                <li key={item.key}>
+                  <label className="flex cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-xs text-navy-800 hover:bg-white/80">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={on}
+                      onChange={() => onRelatedChange(on ? relatedChecked.filter((x) => x !== item.key) : [...relatedChecked, item.key])}
+                    />
+                    <span>
+                      <span className="font-medium">{item.label}</span>
+                      <span className="block text-[10px] text-navy-500">{item.product}</span>
+                    </span>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ------------------------------------------------------------------ Add client / capture an enquiry
 
+export type AddClientCreatedMeta = {
+  interests: string[]
+  first_names: string
+  surname: string
+  phone: string
+  email: string
+}
+
 export function AddClientDialog({ onClose, onCreated, team, me, canAssign }: {
   onClose: () => void
-  onCreated: (personId: string) => void
+  onCreated: (personId: string, meta: AddClientCreatedMeta) => void
   team: MemberRef[]
   me: MemberRef | null
   canAssign: boolean
 }) {
   const category = useDataCategory()
   const [key] = useState(newKey)
-  const [f, setF] = useState({ first_names: '', surname: '', phone: '', email: '', interest: 'motor', note: '', referral_code: '', assign_member_id: '' })
+  const [f, setF] = useState({ first_names: '', surname: '', phone: '', email: '', note: '', referral_code: '', assign_member_id: '' })
+  const [interests, setInterests] = useState<string[]>(['motor'])
+  const [relatedChecked, setRelatedChecked] = useState<string[]>([])
   const [code, setCode] = useState<{ state: 'idle' | 'checking' | 'valid' | 'invalid'; text?: string }>({ state: 'idle' })
   const [matches, setMatches] = useState<Array<Record<string, unknown>> | null>(null)
   const capture = useSalesMutation(salesApi.capture)
@@ -57,14 +177,36 @@ export function AddClientDialog({ onClose, onCreated, team, me, canAssign }: {
     }
   }
 
+  const interestText = interestLabel(interests)
+  const relatedNote = relatedChecked
+    .map((key) => key.split(':').slice(1).join(':'))
+    .filter(Boolean)
+  const noteParts = [f.note.trim(), relatedNote.length ? `Related items next: ${relatedNote.join('; ')}` : ''].filter(Boolean)
+
   const submit = (extra: { link_person_id?: string; force_new?: boolean } = {}) =>
     capture.mutate(
-      { ...f, interest: PRODUCTS.find((p) => p.id === f.interest)?.label ?? f.interest, assign_member_id: f.assign_member_id || undefined, referral_code: f.referral_code.trim() || undefined, key, ...extra },
+      {
+        ...f,
+        interest: interestText || undefined,
+        note: noteParts.join('\n') || undefined,
+        assign_member_id: f.assign_member_id || undefined,
+        referral_code: f.referral_code.trim() || undefined,
+        key,
+        ...extra,
+      },
       {
         onSuccess: (r) => {
           if (r.outcome === 'needs_input') return setMatches(r.choices ?? [])
           const id = (r.person_id as string) ?? (r.client_id as string)
-          if (id) onCreated(id)
+          if (id) {
+            onCreated(id, {
+              interests,
+              first_names: f.first_names.trim(),
+              surname: f.surname.trim(),
+              phone: f.phone.trim(),
+              email: f.email.trim(),
+            })
+          }
           onClose()
         },
       },
@@ -72,13 +214,13 @@ export function AddClientDialog({ onClose, onCreated, team, me, canAssign }: {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (code.state === 'invalid') return
+    if (code.state === 'invalid' || interests.length === 0) return
     submit()
   }
-  const valid = f.first_names.trim() && f.surname.trim() && (f.phone.trim() || f.email.trim())
+  const valid = f.first_names.trim() && f.surname.trim() && (f.phone.trim() || f.email.trim()) && interests.length > 0
 
   return (
-    <Dialog title="Add client or enquiry" onClose={onClose}
+    <Dialog title="Add client or enquiry" onClose={onClose} wide
       footer={
         matches ? null : (
           <>
@@ -123,11 +265,7 @@ export function AddClientDialog({ onClose, onCreated, team, me, canAssign }: {
             <Field label="Mobile" htmlFor="ac-phone"><input id="ac-phone" className={inputClass} value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="082 555 0101" /></Field>
             <Field label="Email" htmlFor="ac-email"><input id="ac-email" type="email" className={inputClass} value={f.email} onChange={set('email')} /></Field>
           </div>
-          <Field label="Interested in" htmlFor="ac-interest">
-            <select id="ac-interest" className={inputClass} value={f.interest} onChange={set('interest')}>
-              {PRODUCTS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
-          </Field>
+          <InterestMultiSelect selected={interests} onChange={setInterests} relatedChecked={relatedChecked} onRelatedChange={setRelatedChecked} />
           <Field label="Referral code (optional)" htmlFor="ac-code"
             hint={code.state === 'valid' ? <span className="font-semibold text-emerald-700">{code.text}</span> : code.state === 'invalid' ? <span className="font-semibold text-red-700">{code.text} Correct it or clear it.</span> : 'For a phone enquiry where the customer quotes a code. Leave blank to load it against yourself.'}>
             <div className="flex gap-2">
@@ -155,14 +293,30 @@ export function AddClientDialog({ onClose, onCreated, team, me, canAssign }: {
 
 // ------------------------------------------------------------------ Share my referral link
 
-export function ShareReferralDialog({ member: profileMember, onClose, live }: { member: MemberRef; onClose: () => void; live: boolean }) {
+export function ShareReferralDialog({
+  member: profileMember,
+  onClose,
+  live,
+  brokerage,
+}: {
+  member: MemberRef
+  onClose: () => void
+  live: boolean
+  brokerage?: { name?: string | null; logo_url?: string | null }
+}) {
   const category = useDataCategory()
   const member = { ...profileMember, referral_path: referralPathFor(profileMember.referral_code, category) }
   const url = referralUrl(member.referral_path)
-  const text = shareText(member)
+  const text = shareText(member, brokerage)
   return (
     <Dialog title="Share my referral link" onClose={onClose}>
       <div className="space-y-4">
+        {(brokerage?.logo_url || brokerage?.name) && (
+          <div className="flex items-center gap-3 rounded-xl border border-navy-800/10 bg-white px-3 py-2">
+            {brokerage.logo_url ? <img src={brokerage.logo_url} alt="" className="h-10 w-10 rounded-lg object-cover ring-1 ring-navy-800/10" /> : null}
+            <p className="text-sm font-semibold text-navy-900">{brokerage.name ?? 'Your brokerage'}</p>
+          </div>
+        )}
         <p className="text-sm text-navy-700">
           Customers who open this link see that <strong>{member.name}</strong> referred them and can send an enquiry. Only a submitted enquiry creates a prospect in your grid; opening or forwarding the link does nothing.
         </p>
@@ -260,7 +414,7 @@ export function CreateOfferDialog({ personId: initial, onClose, onCreated }: { p
               {(['quote', 'capture'] as const).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
                   className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold ${mode === m ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-600'}`}>
-                  {m === 'quote' ? `Use a saved quote (${quotes.length})` : 'Capture offer details'}
+                  {m === 'quote' ? `From saved quote (${quotes.length})` : 'Manual capture'}
                 </button>
               ))}
             </div>
@@ -300,10 +454,123 @@ export function CreateOfferDialog({ personId: initial, onClose, onCreated }: { p
             </div>
           )}
           <Field label="Notes (optional)" htmlFor="co-notes"><textarea id="co-notes" rows={2} className={inputClass} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
-          <p className="text-xs text-navy-600">Saved as a draft against the client and their responsible team member. You share it next and mark it <strong>Offer sent</strong> once it has gone out.</p>
+          <p className="text-xs text-navy-600">
+            Manual path: you type what an insurer quoted outside B-Covered. SAMPLE quote path: use <strong>Get quotes</strong> on the client first.
+            Saved as a draft — not cover. Mark <strong>Offer sent</strong> once it has gone out. Live insurer APIs are disabled in this build.
+          </p>
           <ErrorText error={create.error} />
         </div>
       )}
+    </Dialog>
+  )
+}
+
+/** Add one or more covers with reasonable estimate premiums (draft offers). */
+export function AddCoversDialog({
+  personId,
+  onClose,
+  onCreated,
+}: {
+  personId: string
+  onClose: () => void
+  onCreated?: () => void
+}) {
+  const category = useDataCategory()
+  const record = useClientRecord(personId)
+  const refresh = useRefreshSales()
+  const [selected, setSelected] = useState<string[]>(['motor'])
+  const [relatedChecked, setRelatedChecked] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const total = selected.reduce((sum, id) => sum + (productById(id)?.estimateMonthly ?? 0), 0)
+
+  const submit = async () => {
+    if (selected.length === 0 || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      for (const id of selected) {
+        const product = productById(id)
+        if (!product) continue
+        const related = relatedChecked
+          .filter((k) => k.startsWith(`${id}:`))
+          .map((k) => k.split(':').slice(1).join(':'))
+        await salesApi.createOffer(category, {
+          person_id: personId,
+          insurer_name: ESTIMATE_INSURER[id] ?? 'Broker estimate',
+          product: id,
+          premium_amount: product.estimateMonthly,
+          premium_frequency: 'monthly',
+          notes: [
+            `Estimate quote — reasonable first-pass for ${product.label} (${product.term}-term).`,
+            related.length ? `Related items next: ${related.join('; ')}` : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          key: newKey(),
+        })
+      }
+      refresh()
+      onCreated?.()
+      onClose()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog
+      title={record.data ? `Add covers for ${record.data.name}` : 'Add covers'}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="accent" disabled={selected.length === 0 || busy} onClick={() => void submit()}>
+            {busy ? <Loader2 className="animate-spin" /> : <Plus />} Save {selected.length || ''} estimate{selected.length === 1 ? '' : 's'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-navy-600">
+          Select one or more covers. Each saves as a <strong>draft offer</strong> with a reasonable monthly estimate — not confirmed cover.
+          Capture related items next so quotes stay grounded.
+        </p>
+        <InterestMultiSelect
+          title="Covers to add"
+          selected={selected}
+          onChange={setSelected}
+          relatedChecked={relatedChecked}
+          onRelatedChange={setRelatedChecked}
+        />
+        {selected.length > 0 && (
+          <div className="rounded-xl border border-navy-800/10 bg-white p-3">
+            <p className="text-xs font-semibold text-navy-900">Estimate preview</p>
+            <ul className="mt-2 space-y-1.5">
+              {selected.map((id) => {
+                const p = productById(id)!
+                return (
+                  <li key={id} className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      <span className="font-medium text-navy-900">{p.label}</span>
+                      <span className="ml-1.5 text-[11px] text-navy-500">{p.term}-term · {ESTIMATE_INSURER[id]}</span>
+                    </span>
+                    <span className="font-mono text-xs text-navy-800">{money(p.estimateMonthly)} / mo</span>
+                  </li>
+                )
+              })}
+            </ul>
+            <p className="mt-2 border-t border-navy-800/10 pt-2 text-xs font-semibold text-navy-900">
+              Combined estimate {money(total)} / month
+            </p>
+          </div>
+        )}
+        {error && <p className="text-xs font-semibold text-red-700">{error}</p>}
+      </div>
     </Dialog>
   )
 }

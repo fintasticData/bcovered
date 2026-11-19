@@ -20,8 +20,9 @@ export const PRODUCT_KEYS = Object.keys(PERSONAL_CATEGORIES) as PersonalProductK
 export const productForCategory = (category: string): PersonalProductKey | null => PRODUCT_KEYS.find((k) => PERSONAL_CATEGORIES[k].includes(category)) ?? null
 export const categoriesFor = (product: PersonalProductKey) => PERSONAL_CATEGORIES[product]
 
-const CLOSED_LEADS = ['won', 'lost']
+const CLOSED_LEADS = ['closed', 'live']
 const ACTIVE_POLICY = ['in_force', 'accepted', 'reinstated']
+const categoryOf = (c: string | null | undefined) => c ?? ''
 
 export interface ShortTermPolicyRow {
   policy: Policy
@@ -64,7 +65,7 @@ export function getPersonalLines(auth: Auth): PersonalLinesBook {
   const leads = p.repo.list('leads')
   const quotes = p.repo.list('quotes')
   const products = PRODUCT_KEYS.map((key) => {
-    const mine = leads.filter((l) => PERSONAL_CATEGORIES[key].includes(l.product_category))
+    const mine = leads.filter((l) => PERSONAL_CATEGORIES[key].includes(categoryOf(l.product_category)))
     const q = quotes.filter((x) => PERSONAL_CATEGORIES[key].includes(x.product_category))
     return {
       key,
@@ -79,7 +80,7 @@ export function getPersonalLines(auth: Auth): PersonalLinesBook {
   return {
     products,
     open_leads: leads.filter((l) => l.line === 'personal' && !CLOSED_LEADS.includes(l.status)).length,
-    other_open_leads: leads.filter((l) => l.line === 'personal' && !CLOSED_LEADS.includes(l.status) && !productForCategory(l.product_category)).length,
+    other_open_leads: leads.filter((l) => l.line === 'personal' && !CLOSED_LEADS.includes(l.status) && !productForCategory(categoryOf(l.product_category))).length,
     policies,
     active_policies: active.length,
     monthly_premium: active.filter((r) => r.policy.premium_frequency !== 'annually').reduce((s, r) => s + (r.policy.premium_amount ?? 0), 0),

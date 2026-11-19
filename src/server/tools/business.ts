@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import type { BusinessProfile, FieldSource } from '../db/commercialSchema'
 import type { Repo } from '../db/store'
+import { factsToProfileDraft } from '../domain/commercial/facts'
 import type { ProfileSnapshot } from '../domain/commercial/exposureRules'
+import { coverLabel } from '../domain/commercial/coverClasses'
+import { detectIndustry, FALLBACK_TEMPLATE_KEY } from '../domain/commercial/industryTemplates'
 import { ToolError } from '../lib/errors'
 import { defineTool, STAFF, type ToolDef } from './registry'
+import { templateFor } from './risk'
 
 const source = z.enum(['verified', 'declared', 'extracted', 'inferred', 'missing'])
 
@@ -123,6 +127,128 @@ export const businessTools = [
   }),
 
   defineTool({
+    name: 'business.create_client',
+    description:
+      'Create a commercial customer and a discovery-status business profile from a name. Contact details, industry, note and commercial cover interests are optional so brokers can open the book first and fill details later.',
+    allow: ['agent', ...STAFF],
+    sideEffect: true,
+    input: z.object({
+      name: z.string().trim().min(2).max(200),
+      trading_name: z.string().trim().min(2).max(200).nullable().optional(),
+      industry_key: z.string().min(2).optional(),
+      email: z.union([z.email(), z.null()]).optional(),
+      phone: z.string().trim().min(3).max(32).nullable().optional(),
+      contact_name: z.string().trim().min(2).max(120).nullable().optional(),
+      contact_role: z.string().trim().min(2).max(80).nullable().optional(),
+      note: z.string().trim().max(2000).nullable().optional(),
+      cover_interests: z
+        .array(
+          z.object({
+            key: z.string().trim().min(2).max(80),
+            related: z.array(z.string().trim().min(1).max(120)).max(20),
+          }),
+        )
+        .max(40)
+        .optional(),
+    }),
+    run: ({ repo, actor }, input) => {
+      const name = input.name.trim()
+      const q = name.toLowerCase().replace(/\(pty\)\s*ltd|\bltd\b|\bcc\b/g, '').trim()
+      const existing = repo
+        .list('business_profiles', (p) =>
+          [p.registered_name, p.trading_name ?? ''].some((v) => v && v.toLowerCase().replace(/\(pty\)\s*ltd|\bltd\b|\bcc\b/g, '').trim() === q),
+        )
+        .map((p) => ({ profile: p, customer: repo.require('customers', p.customer_id) }))[0]
+      if (existing) return { ...existing, created: false as const }
+
+      const templates = repo.list('industry_risk_templates', (t) => t.is_active)
+      const industry = input.industry_key ?? detectIndustry(name, templates) ?? FALLBACK_TEMPLATE_KEY
+      const template = templateFor(repo, industry)
+      const trading = input.trading_name?.trim() || name
+      const contactName = input.contact_name?.trim() || undefined
+      const draft = factsToProfileDraft(
+        { registered_name: name, trading_name: trading, industry_key: template.key },
+        {
+          full_name: contactName,
+          email: input.email ?? undefined,
+          phone: input.phone ?? undefined,
+        },
+        template.name,
+      )
+      if (draft.primary_contact && input.contact_role?.trim()) {
+        draft.primary_contact = { ...draft.primary_contact, role: input.contact_role.trim() }
+      }
+      const coverInterests = (input.cover_interests ?? []).map((c) => ({
+        key: c.key,
+        related: c.related,
+      }))
+      const relatedLabels = coverInterests.flatMap((c) => c.related)
+      const note = input.note?.trim()
+      const summaryParts = [
+        draft.activities_summary,
+        coverInterests.length
+          ? `Interested in: ${coverInterests.map((c) => coverLabel(c.key)).join('; ')}.`
+          : null,
+        relatedLabels.length ? `Related items next: ${relatedLabels.join('; ')}.` : null,
+        note ? `Broker note: ${note}` : null,
+      ].filter(Boolean)
+      const missing = [...draft.missing_info]
+      for (const label of relatedLabels) {
+        if (!missing.includes(label)) missing.push(label)
+      }
+
+      const customer = repo.insert('customers', {
+        customer_type: 'commercial',
+        full_name: name,
+        email: input.email?.toLowerCase() ?? null,
+        phone: input.phone ?? null,
+        region: draft.operating_regions[0] ?? null,
+        status: 'prospect',
+        is_synthetic: true,
+        created_by: actor.type === 'user' ? actor.id : null,
+      })
+      repo.insert('customer_consents', {
+        customer_id: customer.id,
+        purpose: 'processing',
+        granted: true,
+        source: 'broker_copilot',
+        notice_version: 'privacy-2026-01',
+        captured_at: new Date().toISOString(),
+        revoked_at: null,
+      })
+      const broker =
+        actor.type === 'user'
+          ? actor.id
+          : (repo.list('app_users', (u) => u.role === 'broker').sort((a, b) => a.created_at.localeCompare(b.created_at))[0]?.id ?? null)
+      const { legal_entities, locations, activities, assets, ...fields } = draft
+      const profile = repo.insert('business_profiles', {
+        ...fields,
+        activities_summary: summaryParts.join(' ') || fields.activities_summary,
+        missing_info: missing,
+        cover_interests: coverInterests,
+        customer_id: customer.id,
+        assigned_broker_id: broker,
+        status: 'discovery',
+        is_synthetic: true,
+        created_by: actor.type === 'user' ? actor.id : null,
+      })
+      const entityIds = legal_entities.map((e) => repo.insert('business_legal_entities', { ...e, business_profile_id: profile.id }).id)
+      const locIds = locations.map(
+        (l) => repo.insert('business_locations', { ...l, business_profile_id: profile.id, legal_entity_id: entityIds[0] ?? null }).id,
+      )
+      const at = (i: number | null) => (i === null ? null : (locIds[i] ?? null))
+      activities.forEach(({ location_index, ...a }) =>
+        repo.insert('business_activities', { ...a, business_profile_id: profile.id, location_id: at(location_index) }),
+      )
+      assets.forEach(({ location_index, ...a }) =>
+        repo.insert('commercial_assets', { ...a, business_profile_id: profile.id, location_id: at(location_index), valuation_date: null }),
+      )
+      return { profile, customer, created: true as const }
+    },
+    auditEntity: (r) => ({ table: 'business_profiles', id: r.profile.id }),
+  }),
+
+  defineTool({
     name: 'business.create_profile',
     description: 'Persist a structured business profile from discovery. Reuses the existing profile for the same customer.',
     allow: ['agent', ...STAFF],
@@ -135,6 +261,7 @@ export const businessTools = [
       const { legal_entities, locations, activities, assets, ...fields } = input
       const profile = repo.insert('business_profiles', {
         ...fields,
+        cover_interests: [],
         assigned_broker_id: fields.assigned_broker_id ?? null,
         status: 'discovery',
         is_synthetic: true,

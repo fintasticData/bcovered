@@ -5,9 +5,10 @@ import { useQuote } from '@/api/hooks'
 import { CompareWithAi } from '@/components/CompareWithAi'
 import { QuoteComparisonTable } from '@/components/QuoteComparisonTable'
 import { SimulatedBadge, SimulationNotice } from '@/components/SimulatedBadge'
-import { StatusBadge } from '@/components/StatusBadge'
+import { StatusBadge, humanise } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { describeVehicle, formatMotorField } from '@/server/domain/motor'
+import { coverLabel } from '@/server/domain/commercial/coverClasses'
 import { ErrorState, LoadingState, PageHeader } from './PageHeader'
 
 export default function BrokerQuotePage() {
@@ -19,7 +20,15 @@ export default function BrokerQuotePage() {
   if (error || !data) return <div className="p-6"><ErrorState message={error?.message ?? 'Quote not found'} /></div>
   const { quote, options, customer } = data
   const v = quote.risk_summary.vehicle ?? {}
+  const covers = quote.risk_summary.covers ?? []
+  const hasVehicle = Boolean(quote.risk_summary.vehicle)
   const pendingApproval = data.approvals.find((a) => a.status === 'pending')
+  const coverSummary = covers.length
+    ? covers.map((c) => (coverLabel(c) !== c ? coverLabel(c) : humanise(c))).join(', ')
+    : hasVehicle
+      ? formatMotorField('cover_type', v)
+      : humanise(quote.product_category)
+  const title = hasVehicle ? `${customer.full_name} · ${describeVehicle(v)}` : `${customer.full_name} · quote request`
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
@@ -29,11 +38,16 @@ export default function BrokerQuotePage() {
         </Link>
       )}
       <PageHeader
-        title={`${customer.full_name} · ${describeVehicle(v)}`}
+        title={title}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={quote.status} /> <SimulatedBadge /> {formatMotorField('cover_type', v)} · value{' '}
-            {formatMotorField('value', v)}
+            <StatusBadge status={quote.status} /> <SimulatedBadge /> {coverSummary}
+            {hasVehicle && (
+              <>
+                {' '}
+                · value {formatMotorField('value', v)}
+              </>
+            )}
           </span>
         }
         actions={
@@ -52,12 +66,33 @@ export default function BrokerQuotePage() {
         }
       />
       <SimulationNotice className="mb-5" />
+      {covers.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-2">
+          {covers.map((c) => (
+            <span key={c} className="rounded-lg border border-navy-800/10 bg-white px-2.5 py-1 text-xs font-medium text-navy-800">
+              {coverLabel(c) !== c ? coverLabel(c) : humanise(c)}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
         <section className="panel p-5">
-          <QuoteComparisonTable options={options} comparison={quote.proposal?.comparison} highlight={highlight} />
+          {options.length === 0 ? (
+            <div className="rounded-xl bg-mist/80 p-4 text-sm text-navy-700">
+              <p className="font-semibold text-navy-900">Quote request opened</p>
+              <p className="mt-1 text-xs leading-relaxed">
+                Chosen covers are on this request. Insurer comparison options will appear here once an adapter is available for this market.
+                {hasVehicle ? ' For motor sample quotes, run a comparison from Russ or the motor quote route.' : ''}
+              </p>
+            </div>
+          ) : (
+            <QuoteComparisonTable options={options} comparison={quote.proposal?.comparison} highlight={highlight} />
+          )}
         </section>
         <div className="space-y-5">
-          <CompareWithAi quoteId={quote.id} onHighlight={(label) => setHighlight(options.find((o) => o.option_label === label)?.id ?? null)} />
+          {options.length > 0 && (
+            <CompareWithAi quoteId={quote.id} onHighlight={(label) => setHighlight(options.find((o) => o.option_label === label)?.id ?? null)} />
+          )}
           {quote.proposal && (
             <section className="panel p-4">
               <h3 className="text-sm font-semibold text-navy-900">Russ summary</h3>

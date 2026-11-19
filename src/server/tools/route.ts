@@ -19,22 +19,37 @@ export const routeTools = [
     description: 'List the Routes (guided business processes) and the runs in this workspace.',
     allow: ['agent', ...STAFF],
     sideEffect: false,
-    input: z.object({}),
-    run: ({ repo }) => ({
-      routes: listRoutes().map((d) => ({ id: d.id, title: d.title, outcome: d.outcome, badge: d.badge ?? null, phases: d.phases.map((p) => ({ title: p.title, actions: p.actions.map((a) => a.label) })) })),
-      runs: listRuns(repo),
+    input: z.object({ scope: z.enum(['mine', 'team']).optional() }),
+    run: ({ repo, actor }, input) => ({
+      routes: listRoutes().map((d) => ({
+        id: d.id,
+        title: d.title,
+        outcome: d.outcome,
+        group: d.group,
+        eligible: d.eligible,
+        category: d.category,
+        badge: d.badge ?? null,
+        phases: d.phases.map((p) => ({ title: p.title, actions: p.actions.map((a) => a.label) })),
+      })),
+      runs: listRuns(repo, input.scope === 'mine' ? { mine: true, owner_id: actor.id } : undefined),
     }),
   }),
 
   defineTool({
     name: 'route.start',
-    description: 'Start a Route for a client, or resume the active run for the same Route and client.',
+    description: 'Start a Route for a client, or resume the active run for the same business intent.',
     allow: ['agent', ...STAFF],
     sideEffect: true,
-    input: z.object({ definition_id: z.string().min(1), subject_id: z.string().min(1).nullable().optional() }),
+    input: z.object({
+      definition_id: z.string().min(1),
+      subject_id: z.string().min(1).nullable().optional(),
+      policy_id: z.string().min(1).nullable().optional(),
+      claim_id: z.string().min(1).nullable().optional(),
+      business_key: z.string().min(1).nullable().optional(),
+    }),
     run: ({ repo, actor }, input) => {
       const { run, resumed } = startOrResume(repo, routeActor(repo, actor), input)
-      return { run_id: run.id, resumed, subject_id: run.subject_id }
+      return { run_id: run.id, resumed, subject_id: run.subject_id, policy_id: run.policy_id, claim_id: run.claim_id, business_key: run.business_key }
     },
     auditEntity: (r) => ({ table: 'route_runs', id: r.run_id }),
   }),

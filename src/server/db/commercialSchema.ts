@@ -43,6 +43,12 @@ export interface LossHistory {
   notes: string | null
 }
 
+/** Cover classes the broker flagged at enquiry time (keys match COVER_CLASSES). */
+export interface CoverInterest {
+  key: string
+  related: string[]
+}
+
 export interface BusinessProfile {
   id: UUID
   tenant_id: UUID
@@ -60,6 +66,8 @@ export interface BusinessProfile {
   primary_contact: ContactPerson | null
   existing_cover: ExistingCover | null
   loss_history: LossHistory | null
+  /** Commercial cover types flagged when the prospect was opened. */
+  cover_interests: CoverInterest[]
   field_sources: Record<string, FieldSource>
   missing_info: string[]
   status: 'discovery' | 'in_review' | 'active' | 'archived'

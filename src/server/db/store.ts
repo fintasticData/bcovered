@@ -4,7 +4,7 @@ import { GLOBAL_TABLES, type Row, type TableName, type Tables } from './schema'
 import { seedTables } from './seed'
 
 /** Bumped when stored rows gain required fields, so an older browser copy is replaced by fresh seed data. */
-const STORAGE_KEY = 'insureflow_demo_v6'
+const STORAGE_KEY = 'insureflow_demo_v7'
 
 /** Evidence must never change once captured. */
 const APPEND_ONLY: TableName[] = ['audit_evidence']

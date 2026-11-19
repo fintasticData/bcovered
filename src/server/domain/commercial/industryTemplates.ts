@@ -35,7 +35,7 @@ export const INDUSTRY_TEMPLATES: IndustryTemplateContent[] = [
     name: 'Restaurants and hospitality',
     version: 1,
     summary: 'Sit-down restaurants, cafés, takeaways and caterers with commercial kitchens, perishable stock and public access.',
-    keywords: ['restaurant', 'restaurants', 'café', 'cafe', 'bistro', 'eatery', 'takeaway', 'diner', 'catering', 'pizzeria', 'shisanyama'],
+    keywords: ['restaurant', 'restaurants', 'café', 'cafe', 'bistro', 'eatery', 'takeaway', 'diner', 'catering', 'pizzeria', 'shisanyama', 'burger', 'burgers'],
     activities: ['Commercial kitchen food preparation', 'Sit-down dining', 'Delivery and online orders', 'Bar service', 'Events and catering'],
     typical_assets: ['Kitchen equipment and extraction', 'Cold rooms and refrigeration', 'Perishable stock', 'POS terminals', 'Furniture and fittings', 'Delivery scooters'],
     exposure_rules: [...CORE_RULES, 'stock_deterioration', 'machinery_breakdown', 'products_liability', 'cyber_payments', 'delivery_motor', 'utility_dependency', 'supplier_dependency', 'fidelity'],

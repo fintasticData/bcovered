@@ -14,6 +14,7 @@ import { ageOn, today } from '../domain/life/identity'
 import { analyseNeeds, NEED_LABEL, priceFromRates, type ExistingCover } from '../domain/life/needs'
 import { ToolError } from '../lib/errors'
 import { randWhole } from '../lib/money'
+import { assertMemberFaisAppointment } from '../onboarding/faisAppointment'
 import { assertAuthorised, versionOn } from './adviser'
 import { registerApprovalSubject, requestApproval, requireApproved } from './approval'
 import { currentProfile, resolveOrCreatePerson } from './person'
@@ -336,7 +337,8 @@ export const lifeTools = [
     allow: ['agent', ...STAFF],
     sideEffect: true,
     input: z.object({ needs_analysis_id: z.uuid(), smoker: z.boolean().default(false) }),
-    run: ({ repo, jobId }, { needs_analysis_id, smoker }) => {
+    run: ({ repo, actor, jobId }, { needs_analysis_id, smoker }) => {
+      if (actor.type === 'user') assertMemberFaisAppointment(repo, actor.id, 'lt_b1')
       const analysis = repo.require('needs_analyses', needs_analysis_id)
       const person = repo.require('persons', analysis.person_id)
       if (!person.date_of_birth) throw new ToolError('validation', 'A date of birth is needed to quote')

@@ -11,20 +11,40 @@ const QUOTE_VALIDITY_DAYS = 30
 export const quoteTools = [
   defineTool({
     name: 'quote.create_request',
-    description: 'Open a simulated quote request from a qualified lead.',
+    description: 'Open a quote request from a lead. Cover types are chosen at request time; motor still uses vehicle details when present.',
     allow: ['agent', ...STAFF],
     sideEffect: true,
-    input: z.object({ lead_id: z.uuid() }),
-    run: ({ repo, actor }, { lead_id }) => {
+    input: z.object({
+      lead_id: z.uuid(),
+      covers: z.array(z.string().min(1)).max(20).optional(),
+    }),
+    run: ({ repo, actor }, { lead_id, covers }) => {
       const lead = repo.require('leads', lead_id)
-      if (!lead.qualification.vehicle?.value) {
-        throw new ToolError('validation', 'Lead has no vehicle value; gather it before requesting quotes')
+      const vehicle = lead.qualification.vehicle
+      const selected = (covers ?? []).map((c) => c.trim()).filter(Boolean)
+      const motorShaped = Boolean(vehicle) || lead.product_category === 'car' || lead.product_category === 'motorcycle'
+      if (motorShaped && !vehicle?.value && selected.length === 0) {
+        throw new ToolError('validation', 'Choose cover types, or capture the vehicle value, before requesting quotes')
+      }
+      if (!motorShaped && selected.length === 0 && !vehicle?.value) {
+        throw new ToolError('validation', 'Choose at least one cover type before requesting quotes')
+      }
+      const category = lead.product_category ?? selected[0] ?? (motorShaped ? 'motor' : null)
+      if (!category) throw new ToolError('validation', 'Choose a cover type before requesting quotes')
+      if (!lead.product_category) {
+        repo.update('leads', lead_id, { product_category: category, status: 'quoting' })
+      } else if (lead.status !== 'closed' && lead.status !== 'live') {
+        repo.update('leads', lead_id, { status: 'quoting' })
       }
       return repo.insert('quotes', {
         lead_id,
         customer_id: lead.customer_id,
-        product_category: lead.product_category,
-        risk_summary: { vehicle: lead.qualification.vehicle, risk: lead.qualification.risk },
+        product_category: category,
+        risk_summary: {
+          ...(vehicle ? { vehicle } : {}),
+          ...(lead.qualification.risk ? { risk: lead.qualification.risk } : {}),
+          ...(selected.length ? { covers: selected } : {}),
+        },
         status: 'comparing',
         proposal: null,
         released_at: null,

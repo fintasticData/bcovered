@@ -93,10 +93,12 @@ describe('copilot rule planner', () => {
 
   it('recognises the jobs and the parts of a note', () => {
     expect(intentOf('Add a note that Priya requested a callback on her motor renewal')).toBe('note')
+    expect(intentOf('Report a claim for Priya')).toBe('claim_report')
     expect(intentOf('Arrange a callback for Priya tomorrow')).toBe('task')
     expect(intentOf('show me her latest life application')).toBe('life_application_get')
     expect(intentOf('Start a life application for Priya')).toBe('life_application_create')
     expect(intentOf('Create a client called Sipho Dlamini')).toBe('create_client')
+    expect(intentOf('create a new business client: "Hondo\'s Burgers"')).toBe('create_business_client')
     expect(intentOf('Show the Karoo Logistics scheme members')).toBe('members')
     expect(noteBodyIn('Add a note that Priya requested a callback on her motor renewal')).toBe('Priya requested a callback on her motor renewal')
     expect(noteBodyIn('Add a note: asked about windscreen cover')).toBe('asked about windscreen cover')

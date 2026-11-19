@@ -73,7 +73,12 @@ export default function PlatformLayout() {
             ))}
           </nav>
           <p className="hidden text-xs text-navy-600 lg:block">
-            <strong className="text-navy-800">Platform staff access is explicit and audited.</strong> You see onboarding records only, never a brokerage’s clients or policies.
+            <strong className="text-navy-800">Platform staff access is explicit and audited.</strong>{' '}
+            {me.platform_role === 'platform_admin'
+              ? 'You can invite owners, edit brokerage details and team, suspend or reinstate, and disable insurer access. Client and policy records stay inside the brokerage workspace.'
+              : me.platform_role === 'onboarding_reviewer'
+                ? 'You can review onboarding and edit brokerage details and team on a brokerage page. Suspend, reinstate and owner invitations need a platform administrator.'
+                : 'Read-only platform access. You never open a brokerage’s clients or policies from here.'}
           </p>
           <RoleSwitcher compact />
         </header>

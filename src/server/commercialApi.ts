@@ -70,8 +70,12 @@ function businessRow(repo: Repo, profile: BusinessProfile): BusinessRow {
   const tasks = repo.list('tasks', (t) => t.subject_id === profile.id && t.status === 'open')
   const sub = latestSubmission(repo, profile.id)
   const job = activeCommercialJob(repo, profile.customer_id)
+  const normalised: BusinessProfile = {
+    ...profile,
+    cover_interests: profile.cover_interests ?? [],
+  }
   return {
-    profile,
+    profile: normalised,
     customer_name: repo.get('customers', profile.customer_id)?.full_name ?? 'Unknown',
     industry_name: templateFor(repo, profile.industry_key).name,
     location_count: repo.list('business_locations', (l) => l.business_profile_id === profile.id).length,
@@ -97,6 +101,41 @@ export function listBusinessProfiles(auth: Auth): BusinessRow[] {
     .map((b) => businessRow(p.repo, b))
 }
 
+/** Open a commercial client on the book from a name alone; industry, contacts and cover interests can be filled later. */
+export function createBusinessClient(
+  auth: Auth,
+  body: {
+    name: string
+    trading_name?: string | null
+    industry_key?: string
+    email?: string | null
+    phone?: string | null
+    contact_name?: string | null
+    contact_role?: string | null
+    note?: string | null
+    cover_interests?: Array<{ key: string; related: string[] }>
+  },
+): BusinessRow {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const { profile } = invokeTool<{ profile: BusinessProfile; customer: Customer; created: boolean }>(
+    'business.create_client',
+    {
+      name: body.name,
+      trading_name: body.trading_name ?? null,
+      industry_key: body.industry_key,
+      email: body.email ?? null,
+      phone: body.phone ?? null,
+      contact_name: body.contact_name ?? null,
+      contact_role: body.contact_role ?? null,
+      note: body.note ?? null,
+      cover_interests: body.cover_interests,
+    },
+    { repo: p.repo, actor: p.actor },
+  )
+  return businessRow(p.repo, profile)
+}
+
 export interface BusinessDetail {
   profile: BusinessProfile
   customer: Customer
@@ -118,7 +157,8 @@ export interface BusinessDetail {
 }
 
 export function businessDetail(repo: Repo, profileId: string): BusinessDetail {
-  const profile = repo.require('business_profiles', profileId)
+  const raw = repo.require('business_profiles', profileId)
+  const profile: BusinessProfile = { ...raw, cover_interests: raw.cover_interests ?? [] }
   const of = <T extends { business_profile_id: string }>(rows: T[]) => rows.filter((r) => r.business_profile_id === profileId)
   const twin = currentTwin(repo, profileId)
   const order = { high: 0, medium: 1, low: 2 }

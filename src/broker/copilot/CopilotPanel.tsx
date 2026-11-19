@@ -39,7 +39,11 @@ interface Conversation {
 
 const STARTERS: Record<CopilotId, string[]> = {
   ar: ['Find the Naidoo account, add a note to Priya’s motor policy and show me her latest life application', 'Show policies for CL-S1001', 'Find Priy'],
-  ava: ['Start a life application for Priyanka Naidu R650', 'Arrange a callback for Priya Naidoo tomorrow', 'Show history for Priya Naidoo'],
+  ava: [
+    'Set up Benoni Motors as a franchisee, add its Benoni outlet',
+    'Add Naledi as finance manager at Benoni Motors',
+    'Request a commercial property quote for Black Wolf',
+  ],
   russ: [
     'Find 20 motor repair workshops within 10 km of Carnival City, Brakpan, with public business emails. I want prospects for commercial property cover.',
     'Show Ubuntu Foods',
@@ -148,10 +152,14 @@ export function CopilotPanel({
     patch(agentId, { pending: true, error: undefined, request })
     try {
       const leadTurn =
-        (copilot === 'russ' || copilot === 'ar') && leadGenIntentOf(request.text)
+        (copilot === 'russ' || copilot === 'ar' || copilot === 'ava') && leadGenIntentOf(request.text)
           ? leadGenerationTurn({ copilot, category, text: request.text, context: request.context, message_id: request.message_id })
           : null
-      const routed = leadTurn ?? (copilot === 'russ' ? await routeTurn(request.text, request.context, category) : null)
+      const routed =
+        leadTurn ??
+        (copilot === 'russ' || copilot === 'ava'
+          ? await routeTurn(request.text, request.context, category, copilot === 'ava' ? 'ava' : 'russ')
+          : null)
       const result = routed ?? (await copilotApi.turn({ copilot, category, conversation_id: conversation.id, ...request }))
       patch(agentId, { pending: false, result })
       onContextChange(routed ? result.context : { ...result.context, route_run_id: request.context.route_run_id ?? null })

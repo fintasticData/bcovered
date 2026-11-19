@@ -1,11 +1,11 @@
 // Work surfaces for the Prepare motor quotes Route: each action's editor, reusing the private motor quote demo.
-import { useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, type FormEvent, type ReactNode } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CalendarClock, CheckCircle2, Loader2, Search, StickyNote } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Loader2, Plus, Search, StickyNote, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ActionOutcome, ActionProgress, RouteProgress } from '@/api/client'
-import { salesApi, useSalesProfile } from '@/copilot/salesApi'
+import { newKey, salesApi, useRefreshSales, useSalesProfile } from '@/copilot/salesApi'
 import { SAMPLE_MOTOR_REQUEST } from '@/data/qe/sampleMotorRequest'
 import { useSupabaseAuth } from '@/lib/supabase/client'
 import { buildMotorRequest, coverLabel, formatRand } from '@/lib/qe/sampleQuotes'
@@ -13,7 +13,7 @@ import type { MotorFormErrors, MotorQuoteForm } from '@/lib/qe/types'
 import { cn } from '@/lib/utils'
 import type { ActionInput } from '@/routes'
 import { A, CLIENT_FIELDS, cheapest, clientOf, draftOf, outcomeOf, quotedOf, quotesOf, VEHICLE_FIELDS, type MotorDraft } from '@/routes/motorQuotes'
-import { Field, inputClass, StageBadge, today } from '../book/bits'
+import { ErrorText, Field, inputClass, StageBadge, today } from '../book/bits'
 import { MotorRequestForm, type MotorFormSection } from '../quotes/MotorRequestForm'
 import { QeOfferDialog } from '../quotes/QeOfferDialog'
 import { QeQuoteComparison, SubmittedRequestSummary } from '../quotes/QeQuoteComparison'
@@ -39,8 +39,13 @@ function Note({ children }: { children: ReactNode }) {
 function SelectClient({ progress, busy, run }: SurfaceProps) {
   const auth = useSupabaseAuth()
   const profile = useSalesProfile()
+  const refresh = useRefreshSales()
   const scope = profile.data?.book_restricted ? 'mine' : 'team'
   const [query, setQuery] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [key, setKey] = useState(newKey)
+  const [form, setForm] = useState({ first_names: '', surname: '', phone: '', email: '' })
+  const [matches, setMatches] = useState<Array<Record<string, unknown>> | null>(null)
   const grid = useQuery({
     queryKey: ['supabase', auth.userId, 'sample', 'sales', 'route-client-picker', scope, query.trim()],
     queryFn: () => salesApi.grid('sample', { scope, query: query.trim() || null }),
@@ -48,23 +53,175 @@ function SelectClient({ progress, busy, run }: SurfaceProps) {
     retry: false,
     placeholderData: (prev) => prev,
   })
+  // Routes always run on Sample — never follow the workspace Live/Sample toggle for create here.
+  const create = useMutation({
+    mutationFn: (extra: { link_person_id?: string; force_new?: boolean } = {}) =>
+      salesApi.capture('sample', {
+        first_names: form.first_names.trim(),
+        surname: form.surname.trim(),
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        interest: 'Motor',
+        note: 'Created from Prepare motor quotes · Confirm client',
+        key,
+        ...extra,
+      }),
+    onSuccess: (r) => {
+      if (r.outcome === 'needs_input') {
+        setMatches(r.choices ?? [])
+        return
+      }
+      const personId = String(r.person_id ?? r.client_id ?? '')
+      void refresh()
+      setMatches(null)
+      setCreating(false)
+      setForm({ first_names: '', surname: '', phone: '', email: '' })
+      setKey(newKey())
+      if (personId) run({ person_id: personId })
+    },
+  })
   const current = progress.run.subject_id
+  const canCreate = auth.status === 'signed_in' && Boolean(profile.data?.member)
+  const valid = form.first_names.trim().length >= 1 && form.surname.trim().length >= 1 && (form.phone.trim() || form.email.trim())
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((x) => ({ ...x, [k]: e.target.value }))
+
+  const onCreate = (e: FormEvent) => {
+    e.preventDefault()
+    if (!valid || create.isPending || busy) return
+    create.mutate({})
+  }
+
+  const selectExisting = (personId: string) => {
+    setMatches(null)
+    setCreating(false)
+    run({ person_id: personId })
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Search className="h-4 w-4 text-navy-500" aria-hidden />
-        <input className={inputClass} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Sample clients by name or client number" aria-label="Search Sample clients" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Search className="h-4 w-4 shrink-0 text-navy-500" aria-hidden />
+        <input
+          className={`${inputClass} min-w-0 flex-1`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search Sample clients by name or client number"
+          aria-label="Search Sample clients"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant={creating ? 'accent' : 'outline'}
+          disabled={auth.status !== 'signed_in' || busy}
+          onClick={() => {
+            setCreating((v) => !v)
+            setMatches(null)
+          }}
+        >
+          <Plus /> New client
+        </Button>
       </div>
+
+      {creating && (
+        <div className="space-y-3 rounded-xl border border-brand-500/30 bg-brand-50/40 p-3">
+          {!canCreate && (
+            <Note>
+              {auth.status !== 'signed_in'
+                ? 'Sign in to create a Sample client here.'
+                : <>Set up your sales profile in <Link to="/broker/book" className="font-semibold text-brand-700 underline">My workspace</Link> first, then create clients here.</>}
+            </Note>
+          )}
+          {canCreate && matches ? (
+            <div className="space-y-3">
+              <p className="text-sm text-navy-800">
+                <strong>
+                  {form.first_names} {form.surname}
+                </strong>{' '}
+                may already be on your Sample book. Use the existing person for this quote, or confirm this is someone new.
+              </p>
+              <ul className="space-y-2">
+                {matches.map((m) => (
+                  <li key={String(m.id)} className="flex items-center justify-between gap-3 rounded-lg border border-navy-800/10 bg-white p-3">
+                    <span className="min-w-0 text-sm">
+                      <span className="block font-medium text-navy-900">
+                        {String(m.name)} <span className="font-mono text-xs text-navy-500">{String(m.number)}</span>
+                      </span>
+                      <span className="block text-xs text-navy-500">{String(m.detail ?? '')}</span>
+                    </span>
+                    <Button size="sm" disabled={busy || create.isPending} onClick={() => selectExisting(String(m.id))}>
+                      Use for quotes
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap justify-between gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMatches(null)}>
+                  Back
+                </Button>
+                <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => create.mutate({ force_new: true })}>
+                  {create.isPending ? <Loader2 className="animate-spin" /> : null} Create new person anyway
+                </Button>
+              </div>
+              <ErrorText error={create.error} />
+            </div>
+          ) : canCreate ? (
+            <form onSubmit={onCreate} className="space-y-3">
+              <p className="text-xs text-navy-600">Create a Sample person, then continue the quote with them selected.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="First names" htmlFor="mq-first">
+                  <input id="mq-first" className={inputClass} value={form.first_names} onChange={set('first_names')} autoFocus />
+                </Field>
+                <Field label="Surname" htmlFor="mq-surname">
+                  <input id="mq-surname" className={inputClass} value={form.surname} onChange={set('surname')} />
+                </Field>
+                <Field label="Mobile" htmlFor="mq-phone">
+                  <input id="mq-phone" className={inputClass} value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="082 555 0101" />
+                </Field>
+                <Field label="Email" htmlFor="mq-email">
+                  <input id="mq-email" type="email" className={inputClass} value={form.email} onChange={set('email')} />
+                </Field>
+              </div>
+              <p className="text-[11px] text-navy-500">Mobile or email is required so the client can be found again and quote details can pre-fill.</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)} disabled={create.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" variant="accent" disabled={!valid || create.isPending || busy}>
+                  {create.isPending ? <Loader2 className="animate-spin" /> : <UserPlus />} Create & select
+                </Button>
+              </div>
+              <ErrorText error={create.error} />
+            </form>
+          ) : null}
+        </div>
+      )}
+
       {auth.status !== 'signed_in' && <Note>Sign in to the database to list your Sample clients.</Note>}
-      {grid.isLoading && <p className="flex items-center gap-2 text-xs text-navy-600"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading Sample clients…</p>}
+      {grid.isLoading && (
+        <p className="flex items-center gap-2 text-xs text-navy-600">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading Sample clients…
+        </p>
+      )}
       {grid.error && <Note>{(grid.error as Error).message}</Note>}
-      {grid.data && grid.data.rows.length === 0 && <Note>No Sample clients yet. Add one in My workspace (Sample), then come back.</Note>}
-      <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1" aria-label="Sample clients">
+      {grid.data && grid.data.rows.length === 0 && !creating && (
+        <Note>
+          No Sample clients yet. Use <strong>New client</strong> above to create a person, then continue.
+        </Note>
+      )}
+      <ul className="max-h-64 space-y-1.5 overflow-y-auto pr-1" aria-label="Sample clients">
         {grid.data?.rows.map((c) => (
-          <li key={c.id} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm', c.id === current ? 'border-brand-500 bg-brand-50/60' : 'border-navy-800/10')}>
+          <li
+            key={c.id}
+            className={cn(
+              'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm',
+              c.id === current ? 'border-brand-500 bg-brand-50/60' : 'border-navy-800/10 bg-white',
+            )}
+          >
             <span className="min-w-0">
               <span className="block truncate font-medium text-navy-900">{c.name}</span>
-              <span className="flex items-center gap-1.5 text-xs text-navy-600"><span className="font-mono">{c.client_number}</span> <StageBadge stage={c.stage} /></span>
+              <span className="flex items-center gap-1.5 text-xs text-navy-600">
+                <span className="font-mono">{c.client_number}</span> <StageBadge stage={c.stage} />
+              </span>
             </span>
             <Button size="sm" variant={c.id === current ? 'outline' : 'accent'} disabled={busy} onClick={() => run({ person_id: c.id })}>
               {c.id === current ? 'Selected' : 'Select'}

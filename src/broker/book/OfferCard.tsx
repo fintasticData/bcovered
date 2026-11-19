@@ -106,6 +106,14 @@ export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; high
           ) : message.data ? (
             <>
               {sampleQuote && <p className="text-[11px] font-semibold text-amber-800">Sample: the message is labelled as a demonstration.</p>}
+              {(message.data.brokerage || message.data.logo_url) && (
+                <div className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 ring-1 ring-navy-800/10">
+                  {message.data.logo_url ? (
+                    <img src={message.data.logo_url} alt="" className="h-8 w-8 rounded-md object-cover" />
+                  ) : null}
+                  <span className="text-xs font-semibold text-navy-800">{message.data.brokerage ?? 'Your brokerage'}</span>
+                </div>
+              )}
               <pre className="font-sans text-xs whitespace-pre-wrap text-navy-800">{message.data.text}</pre>
               <div className="flex flex-wrap gap-2">
                 <CopyButton text={message.data.text} label="Copy message" />

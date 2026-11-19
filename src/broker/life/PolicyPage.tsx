@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { AskCopilotButton } from '../copilot/AskCopilotButton'
+import { PolicySpecialRequest } from '../shared/PolicySpecialRequest'
 import { BasisBadge, Notice, Page, Section, SourceBadge, Stat, Table, Td, zar } from '../shared/ui'
 
 export default function PolicyPage() {
@@ -38,7 +39,8 @@ export default function PolicyPage() {
           </>
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <PolicySpecialRequest policyId={policy.id} evidencePath={`/broker/life/policies/${policy.id}`} />
             <AskCopilotButton copilot="ava" kind="policy" id={policy.id} />
             <StatusBadge status={policy.status} />
           </div>

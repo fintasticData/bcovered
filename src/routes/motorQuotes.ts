@@ -103,9 +103,9 @@ export const selectClient: RouteAction = {
   kind: 'select',
   requires: [],
   russ: 'auto',
-  handover: 'Choose the Sample client to prepare motor quotes for.',
+  handover: 'Choose an existing Sample client, or create a new person with New client, then continue.',
   invalidates: { actions: [A.review, A.vehicle, A.cover, A.quotes, A.compare], reason: 'The client changed: review the details again' },
-  check: (_s, input) => (typeof input.person_id === 'string' && input.person_id ? { status: 'ok' } : { status: 'needs_input', reason: 'Choose a Sample client.' }),
+  check: (_s, input) => (typeof input.person_id === 'string' && input.person_id ? { status: 'ok' } : { status: 'needs_input', reason: 'Choose or create a Sample client.' }),
   async effect({ input, port }) {
     const c = await port.clientRecord(input.person_id as string)
     if (c.category !== 'sample') throw new Error('Routes run on Sample clients only. Choose a Sample client.')
@@ -297,13 +297,16 @@ export const markFollowUp: RouteAction = {
 
 export const MOTOR_QUOTES: RouteDefinition = registerRoute({
   id: 'motor_quotes',
-  title: 'Prepare motor quotes',
+  title: 'Demo Quotes',
   outcome: 'Three sample motor quotes compared, with the client’s preferred quote or a follow-up saved on their record.',
   subject: 'client',
+  group: 'quotes',
+  eligible: ['client', 'quote'],
   category: 'sample',
-  intents: ['prepare motor quotes', 'prepare motor quote', 'motor quotes', 'motor quote', 'quote her car', 'quote his car', 'car insurance quote'],
+  intents: ['prepare motor quotes', 'prepare motor quote', 'motor quotes', 'motor quote', 'demo quotes', 'quote her car', 'quote his car', 'car insurance quote'],
   selectActionId: A.select,
   badge: 'Demo · Sample quotes',
+  version: '1',
   phases: [
     { id: 'motor_quotes.client', title: 'Confirm client', complete: 'all', actions: [selectClient, reviewClient] },
     { id: 'motor_quotes.request', title: 'Prepare quote request', complete: 'all', actions: [reviewVehicle, chooseCover] },

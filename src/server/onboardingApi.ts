@@ -11,6 +11,8 @@ import type {
   BrokerageType,
   Document,
   ExtractedFieldProposal,
+  FaisAppointmentStatus,
+  FaisCapacity,
   InsurerAccess,
   MemberRole,
   OnboardingFeedback,
@@ -31,8 +33,11 @@ import {
   can,
   capabilitiesOf,
   DOCUMENT_LINK_TTL_MINUTES,
+  FAIS_CAPACITY_LABEL,
+  faisDefaultsForRole,
   INVITATION_TTL_DAYS,
   LEGACY_ROLE,
+  LICENCE_CATEGORIES,
   MAX_STORED_FILE_BYTES,
   MAX_UPLOAD_BYTES,
   PACKAGES,
@@ -62,10 +67,20 @@ import {
   type Readiness,
 } from './onboarding/domain'
 import { decodeText, proposeFromDocument } from './onboarding/extraction'
+import { membersMissingFaisAppointment } from './onboarding/faisAppointment'
 import { integrationFor, maskSecret, UNSUPPORTED_REASON, type InsurerAccessView } from './onboarding/insurers'
 import type { Actor } from './tools/registry'
 
-const MEMBER_ROLES: MemberRole[] = ['brokerage_owner', 'brokerage_admin', 'representative', 'operations_admin', 'compliance_reviewer', 'read_only']
+const MEMBER_ROLES: MemberRole[] = [
+  'brokerage_owner',
+  'brokerage_admin',
+  'representative',
+  'operations_admin',
+  'compliance_reviewer',
+  'read_only',
+  'sub_broker',
+  'agent',
+]
 const SECTION_KEYS = SECTIONS.map((s) => s.key)
 /** Records are kept for this long after suspension or closure; a placeholder until retention rules are agreed. */
 const RETENTION_YEARS = 5
@@ -275,8 +290,9 @@ export function acceptInvitation(auth: Auth, body: { token: string }): { organis
   db.transaction(() => {
     repo.update('brokerage_invitations', inv.id, { accepted_at: nowIso(), accepted_by: user.id })
     const existing = repo.find('organisation_memberships', (m) => m.user_id === user.id)
-    if (existing) repo.update('organisation_memberships', existing.id, { role: inv.role, status: 'active' })
-    else repo.insert('organisation_memberships', { user_id: user.id, role: inv.role, status: 'active', invited_by: inv.invited_by })
+    const fais = faisDefaultsForRole(inv.role)
+    if (existing) repo.update('organisation_memberships', existing.id, { role: inv.role, status: 'active', ...fais })
+    else repo.insert('organisation_memberships', { user_id: user.id, role: inv.role, status: 'active', invited_by: inv.invited_by, ...fais })
     const home = user.tenant_id === NO_TENANT
     repo.update('app_users', user.id, { active_organisation_id: inv.tenant_id, ...(home ? { tenant_id: inv.tenant_id, role: LEGACY_ROLE[inv.role] } : {}) })
     logEvent(repo, { type: 'user', id: user.id, role: LEGACY_ROLE[inv.role] }, 'invitation.accepted', { table: 'brokerage_invitations', id: inv.id }, { after: { role: inv.role } })
@@ -406,7 +422,13 @@ export function startApplication(auth: Auth, body: { brokerage_name: string; bro
   return db.transaction(() => {
     const org = createOrganisation(name, body.brokerage_type ?? null)
     const repo = new Repo(org.id)
-    repo.insert('organisation_memberships', { user_id: user.id, role: 'brokerage_owner', status: 'active', invited_by: null })
+    repo.insert('organisation_memberships', {
+      user_id: user.id,
+      role: 'brokerage_owner',
+      status: 'active',
+      invited_by: null,
+      ...faisDefaultsForRole('brokerage_owner'),
+    })
     repo.update('app_users', user.id, { active_organisation_id: org.id, ...(user.tenant_id === NO_TENANT ? { tenant_id: org.id, role: 'manager' as const } : {}) })
     const app = newApplication(repo, 'application', body.brokerage_type ?? null, null, name)
     repo.insert('onboarding_status_events', { application_id: app.id, from_status: null, to_status: 'draft', reason: 'Applied through Join as a broker', actor_id: user.id, actor_type: 'user' })
@@ -425,6 +447,11 @@ export interface TeamMemberView {
   role_label: string
   status: 'active' | 'suspended' | 'removed'
   is_you: boolean
+  fais_capacity: FaisCapacity | null
+  fais_capacity_label: string | null
+  fais_status: FaisAppointmentStatus | null
+  dofa_date: string | null
+  authorised_licence_categories: string[]
 }
 
 export interface InvitationView {
@@ -449,7 +476,22 @@ function teamView(repo: Repo, youId: string | null): TeamView {
       .list('organisation_memberships', (m) => m.status !== 'removed')
       .map((m) => {
         const u = identity.user(m.user_id)
-        return { membership_id: m.id, user_id: m.user_id, full_name: u?.full_name ?? 'Unknown', email: u?.email ?? '', role: m.role, role_label: ROLE_LABEL[m.role], status: m.status, is_you: m.user_id === youId }
+        const capacity = m.fais_capacity ?? null
+        return {
+          membership_id: m.id,
+          user_id: m.user_id,
+          full_name: u?.full_name ?? 'Unknown',
+          email: u?.email ?? '',
+          role: m.role,
+          role_label: ROLE_LABEL[m.role],
+          status: m.status,
+          is_you: m.user_id === youId,
+          fais_capacity: capacity,
+          fais_capacity_label: capacity ? FAIS_CAPACITY_LABEL[capacity] : null,
+          fais_status: m.fais_status ?? null,
+          dofa_date: m.dofa_date ?? null,
+          authorised_licence_categories: m.authorised_licence_categories ?? [],
+        }
       })
       .sort((a, b) => MEMBER_ROLES.indexOf(a.role) - MEMBER_ROLES.indexOf(b.role)),
     invitations: repo
@@ -855,8 +897,80 @@ export function changeMemberRole(auth: Auth, body: { membership_id: string; role
   const target = guardOwners(m.repo, body.membership_id, body.role)
   if ((target.role === 'brokerage_owner' || body.role === 'brokerage_owner') && m.role !== 'brokerage_owner') throw new ToolError('forbidden', 'Only an owner can change owners.')
   return db.transaction(() => {
-    const out = m.repo.update('organisation_memberships', target.id, { role: body.role })
+    const fais = faisDefaultsForRole(body.role)
+    const out = m.repo.update('organisation_memberships', target.id, {
+      role: body.role,
+      // Keep existing categories when changing role; refresh capacity/status defaults only if unset.
+      fais_capacity: target.fais_capacity ?? fais.fais_capacity,
+      fais_status: target.fais_status ?? fais.fais_status,
+    })
     logEvent(m.repo, m.actor, 'membership.role_changed', { table: 'organisation_memberships', id: target.id }, { before: { role: target.role }, after: { role: body.role } })
+    refresh(m.repo, currentApplication(m.repo))
+    return out
+  })
+}
+
+const FAIS_CAPACITIES: FaisCapacity[] = ['key_individual', 'representative', 'juristic_representative', 'non_advice']
+const FAIS_STATUSES: FaisAppointmentStatus[] = ['active', 'suspended', 'terminated']
+const LICENCE_KEYS = new Set(LICENCE_CATEGORIES.map((c) => c.value))
+
+/** Owner/admin records FAIS appointment details for a team member. */
+export function updateMemberFais(
+  auth: Auth,
+  body: {
+    membership_id: string
+    fais_capacity: FaisCapacity | null
+    fais_status: FaisAppointmentStatus | null
+    dofa_date: string | null
+    authorised_licence_categories: string[]
+  },
+) {
+  const m = member(auth)
+  requireCap(m, 'manage_team')
+  const target = m.repo.require('organisation_memberships', body.membership_id)
+  if (target.status === 'removed') throw new ToolError('conflict', 'That person is no longer on the team.')
+  if (body.fais_capacity !== null && !FAIS_CAPACITIES.includes(body.fais_capacity)) throw new ToolError('validation', 'Choose a FAIS capacity.')
+  if (body.fais_status !== null && !FAIS_STATUSES.includes(body.fais_status)) throw new ToolError('validation', 'Choose a FAIS appointment status.')
+  if (body.dofa_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.dofa_date)) throw new ToolError('validation', 'Enter DOFA as YYYY-MM-DD.')
+  const categories = [...new Set(body.authorised_licence_categories.map((c) => c.trim()).filter(Boolean))]
+  for (const c of categories) {
+    if (!LICENCE_KEYS.has(c)) throw new ToolError('validation', `Unknown licence category: ${c}`)
+  }
+  const app = currentApplication(m.repo)
+  const declared = (app?.sections.profile?.licence_categories as string[] | undefined) ?? []
+  if (declared.length && categories.some((c) => !declared.includes(c))) {
+    throw new ToolError('validation', 'Authorised categories must be within the brokerage’s declared licence categories.')
+  }
+  if (body.fais_capacity === 'non_advice' && categories.length) {
+    throw new ToolError('validation', 'Non-advice staff cannot hold authorised licence categories.')
+  }
+  return db.transaction(() => {
+    const out = m.repo.update('organisation_memberships', target.id, {
+      fais_capacity: body.fais_capacity,
+      fais_status: body.fais_status,
+      dofa_date: body.dofa_date,
+      authorised_licence_categories: body.fais_capacity === 'non_advice' ? [] : categories,
+    })
+    logEvent(
+      m.repo,
+      m.actor,
+      'membership.fais_updated',
+      { table: 'organisation_memberships', id: target.id },
+      {
+        before: {
+          fais_capacity: target.fais_capacity,
+          fais_status: target.fais_status,
+          dofa_date: target.dofa_date,
+          authorised_licence_categories: target.authorised_licence_categories,
+        },
+        after: {
+          fais_capacity: body.fais_capacity,
+          fais_status: body.fais_status,
+          dofa_date: body.dofa_date,
+          authorised_licence_categories: body.fais_capacity === 'non_advice' ? [] : categories,
+        },
+      },
+    )
     refresh(m.repo, currentApplication(m.repo))
     return out
   })
@@ -1284,6 +1398,21 @@ export interface BrokerageAdminView {
   terms: OrganisationCommercialTerms | null
   audit: Array<AuditEvent & { actor_name: string }>
   platform_role: PlatformRole
+  /** Platform admin or reviewer may edit profile, team and modules from this screen. */
+  can_manage: boolean
+  /** Suspend / reinstate / disable insurers: platform administrator only. */
+  can_access_actions: boolean
+}
+
+const PLATFORM_MANAGERS: PlatformRole[] = ['platform_admin', 'onboarding_reviewer']
+
+function requirePlatformManager(auth: Auth, organisationId: string) {
+  const p = principal(auth)
+  const staff = requirePlatform(p, PLATFORM_MANAGERS)
+  const repo = platformRepo(organisationId)
+  const org = repo.require('organisations', organisationId)
+  if (org.kind !== 'brokerage') throw new ToolError('not_found', 'That is not a brokerage.')
+  return { p, staff, repo, org }
 }
 
 export function getBrokerageAdmin(auth: Auth, body: { organisation_id: string }): BrokerageAdminView {
@@ -1300,7 +1429,195 @@ export function getBrokerageAdmin(auth: Auth, body: { organisation_id: string })
     terms: repo.list('organisation_commercial_terms', (t) => t.status === 'agreed')[0] ?? null,
     audit: platformAudit(org.id),
     platform_role: staff.role,
+    can_manage: PLATFORM_MANAGERS.includes(staff.role),
+    can_access_actions: staff.role === 'platform_admin',
   }
+}
+
+/** Platform staff update brokerage identity fields shown on the admin screen. */
+export function updateBrokerageProfile(
+  auth: Auth,
+  body: {
+    organisation_id: string
+    name: string
+    legal_name: string | null
+    trading_name: string | null
+    registration_number: string | null
+    fsp_number: string | null
+    blp_number: string | null
+    brokerage_type: BrokerageType | null
+    logo_url?: string | null
+    brand_image_url?: string | null
+    intro_video_url?: string | null
+    profile_doc_url?: string | null
+  },
+) {
+  const { p, repo, org } = requirePlatformManager(auth, body.organisation_id)
+  const name = body.name.trim()
+  if (name.length < 2) throw new ToolError('validation', 'Enter the brokerage name.')
+  const types: Array<BrokerageType | null> = [null, 'independent', 'juristic_representative_network', 'sole_proprietor', 'corporate_broker']
+  if (!types.includes(body.brokerage_type)) throw new ToolError('validation', 'Choose a brokerage type.')
+  return db.transaction(() => {
+    const out = repo.update('organisations', org.id, {
+      name,
+      legal_name: body.legal_name?.trim() || null,
+      trading_name: body.trading_name?.trim() || null,
+      registration_number: body.registration_number?.trim() || null,
+      fsp_number: body.fsp_number?.trim() || null,
+      blp_number: body.blp_number?.trim() || null,
+      brokerage_type: body.brokerage_type,
+      logo_url: body.logo_url === undefined ? org.logo_url ?? null : body.logo_url?.trim() || null,
+      brand_image_url: body.brand_image_url === undefined ? org.brand_image_url ?? null : body.brand_image_url?.trim() || null,
+      intro_video_url: body.intro_video_url === undefined ? org.intro_video_url ?? null : body.intro_video_url?.trim() || null,
+      profile_doc_url: body.profile_doc_url === undefined ? org.profile_doc_url ?? null : body.profile_doc_url?.trim() || null,
+    })
+    logEvent(
+      repo,
+      p.actor,
+      'brokerage.profile_updated',
+      { table: 'organisations', id: org.id },
+      {
+        before: {
+          name: org.name,
+          legal_name: org.legal_name,
+          trading_name: org.trading_name,
+          registration_number: org.registration_number,
+          fsp_number: org.fsp_number,
+          blp_number: org.blp_number,
+          brokerage_type: org.brokerage_type,
+          logo_url: org.logo_url ?? null,
+          brand_image_url: org.brand_image_url ?? null,
+          intro_video_url: org.intro_video_url ?? null,
+          profile_doc_url: org.profile_doc_url ?? null,
+        },
+        after: {
+          name: out.name,
+          legal_name: out.legal_name,
+          trading_name: out.trading_name,
+          registration_number: out.registration_number,
+          fsp_number: out.fsp_number,
+          blp_number: out.blp_number,
+          brokerage_type: out.brokerage_type,
+          logo_url: out.logo_url ?? null,
+          brand_image_url: out.brand_image_url ?? null,
+          intro_video_url: out.intro_video_url ?? null,
+          profile_doc_url: out.profile_doc_url ?? null,
+        },
+      },
+      'platform',
+    )
+    return out
+  })
+}
+
+/** Invite someone into an existing brokerage from platform administration. */
+export function platformInviteTeamMember(auth: Auth, body: { organisation_id: string; email: string; role: MemberRole }): CreatedInvitation {
+  const { p, repo, org } = requirePlatformManager(auth, body.organisation_id)
+  if (!MEMBER_ROLES.includes(body.role)) throw new ToolError('validation', 'Choose a role.')
+  if (org.lifecycle_status === 'suspended') throw new ToolError('forbidden', 'This brokerage is suspended.')
+  const email = body.email.trim().toLowerCase()
+  const existing = repo.list('organisation_memberships', (x) => x.status === 'active').find((x) => identity.user(x.user_id)?.email.toLowerCase() === email)
+  if (existing) throw new ToolError('conflict', 'That person is already on the team.')
+  return db.transaction(() => {
+    const created = issueInvitation(repo, p.actor, { email, role: body.role, kind: 'team', days: INVITATION_TTL_DAYS }, org.name, 'platform')
+    refresh(repo, currentApplication(repo))
+    return created
+  })
+}
+
+/**
+ * Add an existing account to the brokerage immediately, or invite them if no account exists yet.
+ * Used from the platform brokerage screen so staff do not need to switch into the brokerage workspace.
+ */
+export function platformAddOrInviteMember(
+  auth: Auth,
+  body: { organisation_id: string; email: string; role: MemberRole; full_name?: string },
+): { kind: 'added'; membership_id: string } | { kind: 'invited'; invitation: CreatedInvitation } {
+  const { p, repo, org } = requirePlatformManager(auth, body.organisation_id)
+  if (!MEMBER_ROLES.includes(body.role)) throw new ToolError('validation', 'Choose a role.')
+  if (org.lifecycle_status === 'suspended') throw new ToolError('forbidden', 'This brokerage is suspended.')
+  const email = body.email.trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ToolError('validation', 'Enter a valid email address.')
+  const already = repo.list('organisation_memberships', (x) => x.status === 'active').find((x) => identity.user(x.user_id)?.email.toLowerCase() === email)
+  if (already) throw new ToolError('conflict', 'That person is already on the team.')
+  const user = identity.userByEmail(email)
+  if (!user) {
+    return {
+      kind: 'invited',
+      invitation: db.transaction(() => {
+        const created = issueInvitation(repo, p.actor, { email, role: body.role, kind: 'team', days: INVITATION_TTL_DAYS }, org.name, 'platform')
+        refresh(repo, currentApplication(repo))
+        return created
+      }),
+    }
+  }
+  const removed = repo.find('organisation_memberships', (m) => m.user_id === user.id && m.status === 'removed')
+  return db.transaction(() => {
+    const fais = faisDefaultsForRole(body.role)
+    const membership = removed
+      ? repo.update('organisation_memberships', removed.id, { role: body.role, status: 'active', invited_by: p.user!.id, ...fais })
+      : repo.insert('organisation_memberships', { user_id: user.id, role: body.role, status: 'active', invited_by: p.user!.id, ...fais })
+    if (body.full_name?.trim() && body.full_name.trim() !== user.full_name) {
+      new Repo(user.tenant_id).update('app_users', user.id, { full_name: body.full_name.trim() })
+    }
+    logEvent(repo, p.actor, 'membership.added', { table: 'organisation_memberships', id: membership.id }, { after: { email, role: body.role } }, 'platform')
+    refresh(repo, currentApplication(repo))
+    return { kind: 'added' as const, membership_id: membership.id }
+  })
+}
+
+export function platformChangeMemberRole(auth: Auth, body: { organisation_id: string; membership_id: string; role: MemberRole }) {
+  const { p, repo } = requirePlatformManager(auth, body.organisation_id)
+  if (!MEMBER_ROLES.includes(body.role)) throw new ToolError('validation', 'Choose a role.')
+  const target = guardOwners(repo, body.membership_id, body.role)
+  return db.transaction(() => {
+    const fais = faisDefaultsForRole(body.role)
+    const out = repo.update('organisation_memberships', target.id, {
+      role: body.role,
+      fais_capacity: target.fais_capacity ?? fais.fais_capacity,
+      fais_status: target.fais_status ?? fais.fais_status,
+    })
+    logEvent(repo, p.actor, 'membership.role_changed', { table: 'organisation_memberships', id: target.id }, { before: { role: target.role }, after: { role: body.role } }, 'platform')
+    refresh(repo, currentApplication(repo))
+    return out
+  })
+}
+
+export function platformRemoveMember(auth: Auth, body: { organisation_id: string; membership_id: string }) {
+  const { p, repo } = requirePlatformManager(auth, body.organisation_id)
+  const target = guardOwners(repo, body.membership_id, null)
+  return db.transaction(() => {
+    const out = repo.update('organisation_memberships', target.id, { status: 'removed' })
+    logEvent(repo, p.actor, 'membership.removed', { table: 'organisation_memberships', id: target.id }, { before: { role: target.role } }, 'platform')
+    refresh(repo, currentApplication(repo))
+    return out
+  })
+}
+
+export function platformSetModuleStatus(
+  auth: Auth,
+  body: { organisation_id: string; module_id: string; status: OrganisationProductModule['status'] },
+) {
+  const { p, repo } = requirePlatformManager(auth, body.organisation_id)
+  const allowed: OrganisationProductModule['status'][] = ['declared', 'approved', 'enabled', 'disabled']
+  if (!allowed.includes(body.status)) throw new ToolError('validation', 'Choose a module status.')
+  const row = repo.require('organisation_product_modules', body.module_id)
+  return db.transaction(() => {
+    const out = repo.update('organisation_product_modules', row.id, {
+      status: body.status,
+      decided_by: p.user!.id,
+      decided_at: nowIso(),
+    })
+    logEvent(
+      repo,
+      p.actor,
+      'brokerage.module_status_changed',
+      { table: 'organisation_product_modules', id: row.id },
+      { before: { status: row.status, module: row.module }, after: { status: body.status, module: row.module } },
+      'platform',
+    )
+    return out
+  })
 }
 
 /** Suspension blocks operational access for every member while keeping all records for the retention period. */
@@ -1377,6 +1694,16 @@ export function homeTasks(repo: Repo, role: MemberRole): HomeTask[] {
   const team = teamView(repo, null)
   const reps = team.members.filter((x) => x.status === 'active' && x.role === 'representative').length
   if (can(role, 'manage_team') && reps === 0) tasks.push({ key: 'invite', label: 'Invite my team', detail: 'No representatives yet', to: '/broker/settings/team', tone: 'warning' })
+  const missingFais = membersMissingFaisAppointment(repo).length
+  if (can(role, 'manage_team') && missingFais) {
+    tasks.push({
+      key: 'fais_appointment',
+      label: 'Complete FAIS appointments',
+      detail: `${missingFais} team member(s) need FAIS capacity, active status or authorised categories`,
+      to: '/broker/settings/team',
+      tone: 'warning',
+    })
+  }
   const insurers = insurerViews(repo)
   const waiting = insurers.filter((a) => a.status === 'awaiting_credentials' || (a.status === 'testing' && a.supported))
   if (can(role, 'manage_insurers') && waiting.length) tasks.push({ key: 'insurers', label: 'Finish insurer access', detail: `${waiting.length} insurer connection(s) not yet enabled`, to: '/broker/settings/insurers', tone: 'warning' })

@@ -1,16 +1,22 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Loader2, Lock, PencilLine, Plus, Repeat2, Route as RouteIcon, ShieldCheck } from 'lucide-react'
-import { useStartRoute } from '@/api/hooks'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, CheckCircle2, ExternalLink, FileUp, Loader2, Lock, PencilLine, Plus, Repeat2, Route as RouteIcon, ShieldCheck } from 'lucide-react'
+import { usePerson, useStartRoute } from '@/api/hooks'
+import { MediaField } from '@/components/MediaField'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopilotError } from '@/copilot/api'
-import { newKey, salesApi, useClientRecord, useSalesMutation, type ClientRecord, type CommKind, type Communication, type Direction } from '@/copilot/salesApi'
+import { newKey, salesApi, useClientRecord, useSalesMutation, useSalesProfile, type ClientRecord, type CommKind, type Communication, type Direction } from '@/copilot/salesApi'
+import { listMediaAssets, resolveMediaUrl, type MediaAssetRow, type MediaBucket } from '@/lib/supabase/media'
 import { EmptyState, LoadingState } from '../PageHeader'
 import { CategoryBadge, CommIcon, ErrorText, EVENT_LABEL, Field, inputClass, KIND_LABEL, MemberLabel, StageBadge, dateTime, money, perFrequency, shortDate } from './bits'
-import { CreateOfferDialog } from './dialogs'
+import { AddCoversDialog, CreateOfferDialog } from './dialogs'
 import { OfferCard } from './OfferCard'
 import { EnquiryAttribution, FranchiseReferrer } from '../franchise/EnquiryAttribution'
+import { StatusBadge } from '@/components/StatusBadge'
+import { QuoteFlowPanel } from '../quotes/QuoteFlowPanel'
+import { ClientClaimsTab, ClientPoliciesTab } from '../policies/ClientPoliciesClaimsTabs'
 
 function Facts({ r }: { r: ClientRecord }) {
   const firstEnquiry = r.enquiries[r.enquiries.length - 1]
@@ -219,6 +225,352 @@ function Reassign({ r }: { r: ClientRecord }) {
   )
 }
 
+function ItemMediaUpload({
+  tenantId,
+  ownerTable,
+  ownerId,
+  compact = false,
+}: {
+  tenantId: string
+  ownerTable: 'sales_offers' | 'sales_sales' | 'persons'
+  ownerId: string
+  compact?: boolean
+}) {
+  const qc = useQueryClient()
+  const [url, setUrl] = useState<string | null>(null)
+  if (compact) {
+    return (
+      <MediaField
+        label="Upload"
+        tenantId={tenantId}
+        purpose="item_document"
+        accept="image/*,.pdf,.doc,.docx"
+        value={url}
+        ownerTable={ownerTable}
+        ownerId={ownerId}
+        onChange={setUrl}
+        onUploaded={() => {
+          void qc.invalidateQueries({ queryKey: ['media-assets', tenantId] })
+        }}
+      />
+    )
+  }
+  return (
+    <MediaField
+      label="Client document"
+      hint="Invoice, photo or schedule — stored on this client."
+      tenantId={tenantId}
+      purpose="item_document"
+      accept="image/*,.pdf,.doc,.docx"
+      value={url}
+      ownerTable={ownerTable}
+      ownerId={ownerId}
+      onChange={setUrl}
+      onUploaded={() => {
+        void qc.invalidateQueries({ queryKey: ['media-assets', tenantId] })
+      }}
+    />
+  )
+}
+
+function ClientDocuments({ r, tenantId }: { r: ClientRecord; tenantId: string | null }) {
+  const ownerIds = useMemo(() => [r.id, ...r.offers.map((o) => o.id), ...r.sales.map((s) => s.id)], [r.id, r.offers, r.sales])
+  const docs = useQuery({
+    queryKey: ['media-assets', tenantId, 'client', r.id, ownerIds.join(',')],
+    queryFn: () => listMediaAssets({ tenantId: tenantId!, ownerIds }),
+    enabled: Boolean(tenantId),
+  })
+  const [links, setLinks] = useState<Record<string, string | null>>({})
+
+  useEffect(() => {
+    const rows = docs.data ?? []
+    let cancelled = false
+    void Promise.all(
+      rows.map(async (row) => {
+        const url = row.public_url ?? (await resolveMediaUrl(row.bucket as MediaBucket, row.storage_path))
+        return [row.id, url] as const
+      }),
+    ).then((pairs) => {
+      if (cancelled) return
+      setLinks(Object.fromEntries(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [docs.data])
+
+  if (!tenantId) return null
+  if (docs.isLoading) return <p className="text-xs text-navy-500">Loading documents…</p>
+  if (docs.error) return <p className="text-xs text-red-600">{(docs.error as Error).message}</p>
+  const rows = docs.data ?? []
+  if (!rows.length) {
+    return (
+      <p className="rounded-xl border border-dashed border-navy-800/15 bg-navy-50/40 px-3 py-3 text-xs text-navy-600">
+        No invoices or item files yet. Upload from Items &amp; cover on an offer or sale.
+      </p>
+    )
+  }
+
+  const labelFor = (row: MediaAssetRow) => {
+    if (row.owner_table === 'sales_offers') return r.offers.find((o) => o.id === row.owner_id)?.reference ?? 'Offer'
+    if (row.owner_table === 'sales_sales') return r.sales.find((s) => s.id === row.owner_id)?.reference ?? 'Sale'
+    return 'Client'
+  }
+
+  return (
+    <ul className="space-y-2">
+      {rows.map((row) => (
+        <li key={row.id} className="flex items-center justify-between gap-3 rounded-xl border border-navy-800/10 bg-white px-3 py-2 text-sm">
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 font-medium text-navy-900">
+              <FileUp className="h-3.5 w-3.5 shrink-0 text-navy-400" />
+              <span className="truncate">{row.file_name}</span>
+            </span>
+            <span className="mt-0.5 block text-[11px] text-navy-500">
+              {labelFor(row)} · {row.purpose.replace(/_/g, ' ')} · {shortDate(row.created_at)}
+            </span>
+          </span>
+          {links[row.id] ? (
+            <a href={links[row.id]!} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline">
+              Open <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <span className="text-[11px] text-navy-400">…</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ItemsCoverTab({ r, onAddCovers }: { r: ClientRecord; onAddCovers: () => void }) {
+  const person = usePerson(r.id)
+  const profile = useSalesProfile()
+  const tenantId = profile.data?.brokerage?.id ?? null
+  const policies = person.data?.policies ?? []
+  const offerItems = r.offers
+  const hasAnything = policies.length > 0 || offerItems.length > 0 || r.sales.length > 0
+
+  if (person.isLoading) return <LoadingState label="Loading items and cover…" />
+
+  if (!hasAnything) {
+    return (
+      <div className="space-y-4">
+        <EmptyState title="Nothing to protect on record yet">
+          Add one or more insurance covers with estimate quotes, prepare motor quotes, or link an existing policy. Missing amounts stay blank — they are never shown as zero.
+        </EmptyState>
+        <Button size="sm" variant="accent" onClick={onAddCovers}><Plus /> Add covers</Button>
+        {tenantId && <ItemMediaUpload tenantId={tenantId} ownerTable="persons" ownerId={r.id} />}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="accent" onClick={onAddCovers}><Plus /> Add covers</Button>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-navy-800/10 bg-white">
+        <table className="w-full min-w-[820px] text-left text-sm">
+          <thead className="bg-navy-50/80 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">
+            <tr>
+              <th className="px-3 py-2">Item / risk / benefit</th>
+              <th className="px-3 py-2">Value / sum insured</th>
+              <th className="px-3 py-2">Premium</th>
+              <th className="px-3 py-2">Insurer / policy</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Next action</th>
+              <th className="px-3 py-2">Documents</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-navy-800/5">
+            {policies.map(({ policy, provider, benefits }) => {
+              const life = benefits.find((b) => b.benefit_type_key === 'life')
+              const sum = life?.sum_assured
+              const covered = ['in_force', 'accepted', 'reinstated'].includes(policy.status)
+              return (
+                <tr key={policy.id} className="align-top">
+                  <td className="px-3 py-2.5">
+                    <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
+                      {policy.line.replace(/_/g, ' ')}
+                    </Link>
+                    <span className="mt-0.5 block text-xs text-navy-500">{policy.policy_number ?? 'Application'}</span>
+                  </td>
+                  <td className="px-3 py-2.5">{sum != null ? money(sum) : <span className="text-navy-400">Not set</span>}</td>
+                  <td className="px-3 py-2.5">
+                    {policy.premium_amount != null ? (
+                      <>
+                        {money(policy.premium_amount)} <span className="text-[11px] text-navy-500">pm</span>
+                      </>
+                    ) : (
+                      <span className="text-navy-400">Not set</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs">{provider}</td>
+                  <td className="px-3 py-2.5">
+                    <StatusBadge status={policy.status} />
+                    {!covered && <span className="mt-1 block text-[11px] text-amber-800">Not confirmed cover</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-navy-700">
+                    {covered ? (
+                      <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
+                        Service policy
+                      </Link>
+                    ) : (
+                      <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
+                        Complete requirements
+                      </Link>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-navy-400">—</td>
+                </tr>
+              )
+            })}
+            {offerItems.map((o) => (
+              <tr key={o.id} className="align-top">
+                <td className="px-3 py-2.5">
+                  <span className="font-medium text-navy-900">{o.product || 'Offer'}</span>
+                  <span className="mt-0.5 block font-mono text-[11px] text-navy-500">{o.reference}</span>
+                  {o.from_sample_quote && <span className="mt-0.5 block text-[11px] font-semibold text-amber-800">DEMO · Sample quote</span>}
+                </td>
+                <td className="px-3 py-2.5"><span className="text-navy-400">Not set</span></td>
+                <td className="px-3 py-2.5">
+                  {money(o.premium_amount)} <span className="text-[11px] text-navy-500">{perFrequency(o.premium_frequency)}</span>
+                </td>
+                <td className="px-3 py-2.5 text-xs">{o.insurer}</td>
+                <td className="px-3 py-2.5 text-xs capitalize">{o.status.replace(/_/g, ' ')}</td>
+                <td className="px-3 py-2.5 text-xs text-navy-700">
+                  {o.status === 'sent' ? 'Follow up' : o.status === 'accepted' ? 'Record decision' : o.status === 'sold' ? 'Manage cover' : 'Complete offer'}
+                </td>
+                <td className="px-3 py-2.5">
+                  {tenantId ? (
+                    <ItemMediaUpload tenantId={tenantId} ownerTable="sales_offers" ownerId={o.id} compact />
+                  ) : (
+                    <span className="text-xs text-navy-400">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {r.sales.map((s) => (
+              <tr key={s.id} className="align-top">
+                <td className="px-3 py-2.5">
+                  <span className="font-medium text-navy-900">Confirmed cover</span>
+                  <span className="mt-0.5 block font-mono text-[11px] text-navy-500">{s.reference}</span>
+                </td>
+                <td className="px-3 py-2.5"><span className="text-navy-400">See policy</span></td>
+                <td className="px-3 py-2.5">
+                  {money(s.premium_amount)} <span className="text-[11px] text-navy-500">{perFrequency(s.premium_frequency)}</span>
+                </td>
+                <td className="px-3 py-2.5 text-xs">Insurer ref {s.insurer_reference}</td>
+                <td className="px-3 py-2.5 text-xs font-semibold text-emerald-800">Cover confirmed</td>
+                <td className="px-3 py-2.5 text-xs text-navy-700">Service from {shortDate(s.cover_start_date)}</td>
+                <td className="px-3 py-2.5">
+                  {tenantId ? (
+                    <ItemMediaUpload tenantId={tenantId} ownerTable="sales_sales" ownerId={s.id} compact />
+                  ) : (
+                    <span className="text-xs text-navy-400">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {person.error && (
+        <p className="text-xs text-navy-500">Life/policy hydrate unavailable for this person right now — offers and sales above still come from the live sales book.</p>
+      )}
+      <section>
+        <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Item documents</h3>
+        <ClientDocuments r={r} tenantId={tenantId} />
+      </section>
+    </div>
+  )
+}
+
+function ActivityDocumentsSection({ r }: { r: ClientRecord }) {
+  const profile = useSalesProfile()
+  const tenantId = profile.data?.brokerage?.id ?? null
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Documents</h3>
+      <ClientDocuments r={r} tenantId={tenantId} />
+    </section>
+  )
+}
+
+function QuotesDecisionsTab({ r, offerId, onCreate, onAddCovers }: { r: ClientRecord; offerId?: string | null; onCreate: () => void; onAddCovers: () => void }) {
+  const [quoteFlow, setQuoteFlow] = useState(false)
+  const canCompare = r.quotes.length >= 2
+  if (quoteFlow) {
+    return (
+      <QuoteFlowPanel
+        personId={r.id}
+        compact
+        onBack={() => setQuoteFlow(false)}
+      />
+    )
+  }
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-navy-800/10 bg-navy-50/50 p-3 text-xs text-navy-700">
+        <p className="font-semibold text-navy-900">Quote → offer → decision → cover</p>
+        <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+          <li>Get SAMPLE quotes (fixed or Russ / fal) or capture a Manual premium.</li>
+          <li>Save as a draft offer (not cover yet).</li>
+          <li>Mark Offer sent → Accepted → Record sale when the insurer confirms.</li>
+        </ol>
+        <p className="mt-1 text-amber-900">Live insurer APIs are shown in the quote picker but disabled in this build.</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-navy-600">Distinguish quote selected, application submitted and cover confirmed using the statuses below.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="accent" onClick={onAddCovers}><Plus /> Add covers</Button>
+          <Button size="sm" variant="outline" onClick={() => setQuoteFlow(true)}>Get quotes</Button>
+          {canCompare && (
+            <Button size="sm" variant="outline" onClick={() => setQuoteFlow(true)}>
+              Compare quotes ({r.quotes.length})
+            </Button>
+          )}
+          {r.category === 'sample' && <PrepareMotorQuotes personId={r.id} />}
+          <Button size="sm" variant="outline" asChild>
+            <Link to={`/broker/quotes/sample-motor?person=${r.id}`}>Open full quote page</Link>
+          </Button>
+          <Button size="sm" variant="outline" onClick={onCreate}><Plus /> Manual / saved offer</Button>
+        </div>
+      </div>
+      {r.quotes.length > 0 && (
+        <section>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Saved quote options</h3>
+            {canCompare && (
+              <Button size="sm" variant="ghost" onClick={() => setQuoteFlow(true)}>
+                Open compare
+              </Button>
+            )}
+          </div>
+          <ul className="space-y-2">
+            {r.quotes.map((q) => (
+              <li key={`${q.quote_id}-${q.option_id}`} className="rounded-xl border border-navy-800/10 bg-white px-3 py-2.5 text-sm">
+                <span className="font-medium text-navy-900">{q.label || q.product}</span>
+                <span className="mt-0.5 block text-xs text-navy-600">
+                  {q.insurer} · {money(q.monthly_premium)} / month · {q.status.replace(/_/g, ' ')}
+                  {q.is_sample ? ' · SAMPLE' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section>
+        <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Offers & decisions</h3>
+        {r.offers.length ? r.offers.map((o) => <OfferCard key={o.id} offer={o} highlighted={o.id === offerId} canWrite />) : (
+          <EmptyState title="No offers yet">Get SAMPLE quotes or capture a Manual offer. Cover is only confirmed after a recorded sale.</EmptyState>
+        )}
+      </section>
+    </div>
+  )
+}
+
 /** Starts (or resumes) the Prepare motor quotes Route with this client already selected. */
 function PrepareMotorQuotes({ personId }: { personId: string }) {
   const start = useStartRoute()
@@ -238,6 +590,7 @@ function PrepareMotorQuotes({ personId }: { personId: string }) {
 export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { personId: string; offerId?: string | null; onBack: () => void; tab: string; onTab: (t: string) => void }) {
   const q = useClientRecord(personId)
   const [creating, setCreating] = useState(false)
+  const [addingCovers, setAddingCovers] = useState(false)
   useEffect(() => {
     if (offerId && q.data) document.getElementById(`offer-${offerId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [offerId, q.data, tab])
@@ -261,22 +614,34 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
   const r = q.data
   const sold = r.sales[0]
   const accepted = r.offers.find((o) => o.status === 'accepted')
+  const itemCount = r.offers.length + r.sales.length
+  const coveredCount = r.sales.length + r.offers.filter((o) => o.status === 'sold').length
+  const attention = r.follow_ups.length + r.offers.filter((o) => o.status === 'sent' || o.status === 'accepted').length
+  const activeTab = tab === 'offers' ? 'quotes' : tab === 'comms' ? 'activity' : tab
 
   return (
     <div className="flex min-h-0 flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <Button size="sm" variant="ghost" className="-ml-2" onClick={onBack}><ArrowLeft /> Clients</Button>
-          <h2 className="mt-1 flex flex-wrap items-center gap-2 text-lg font-semibold text-navy-900">
+          <Button size="sm" variant="ghost" className="-ml-2" onClick={onBack}><ArrowLeft /> Queue</Button>
+          <p className="mt-1 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Customers / {r.name}</p>
+          <h2 className="mt-0.5 flex flex-wrap items-center gap-2 text-lg font-semibold text-navy-900">
             {r.name} <span className="font-mono text-sm font-normal text-navy-500">{r.client_number}</span>
             <StageBadge stage={r.stage} /> <CategoryBadge category={r.category} />
           </h2>
           <p className="text-xs text-navy-600">
-            {r.contact_stage === 'client' ? 'Client' : 'Prospect'} · assigned to {r.assigned?.name ?? 'nobody'}{r.referred_by ? ` · referred by ${r.referred_by.name} (${r.referred_by.referral_code})` : ''}
+            Broker {r.assigned?.name ?? 'unassigned'}
+            {r.account?.phone ? ` · ${r.account.phone}` : ''}
+            {r.referred_by ? ` · referred by ${r.referred_by.name}` : ''}
+          </p>
+          <p className="mt-1 text-xs text-navy-700">
+            {itemCount} item{itemCount === 1 ? '' : 's'} · {coveredCount} covered · {attention} need attention
+            {r.follow_ups[0] ? ` · Next: ${r.follow_ups[0].title}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {r.category === 'sample' && <PrepareMotorQuotes personId={r.id} />}
+          <Button size="sm" variant="outline" onClick={() => setAddingCovers(true)}><Plus /> Add covers</Button>
           <Button size="sm" variant="accent" onClick={() => setCreating(true)}><Plus /> Create offer</Button>
         </div>
       </div>
@@ -296,16 +661,19 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={onTab} className="mt-4 flex min-h-0 flex-col">
+      <Tabs value={activeTab} onValueChange={onTab} className="mt-4 flex min-h-0 flex-col">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="offers">Offers ({r.offers.length})</TabsTrigger>
-          <TabsTrigger value="comms">Communications ({r.communications.length})</TabsTrigger>
+          <TabsTrigger value="items">Items & cover</TabsTrigger>
+          <TabsTrigger value="policies">Policies</TabsTrigger>
+          <TabsTrigger value="claims">Claims</TabsTrigger>
+          <TabsTrigger value="quotes">Quotes & decisions ({r.offers.length})</TabsTrigger>
+          <TabsTrigger value="activity">Activity & documents ({r.communications.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-5 pt-4">
           <Facts r={r} />
           <section>
-            <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Open follow-ups</h3>
+            <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">What happens next</h3>
             <FollowUps r={r} />
           </section>
           {r.enquiries.length > 0 && (
@@ -335,19 +703,34 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
             </section>
           )}
         </TabsContent>
-        <TabsContent value="offers" className="space-y-3 pt-4">
-          {r.offers.length ? r.offers.map((o) => <OfferCard key={o.id} offer={o} highlighted={o.id === offerId} canWrite />) : (
-            <EmptyState title="No offers yet">Create an offer from a saved quote or capture insurer, product, premium and frequency.</EmptyState>
-          )}
+        <TabsContent value="items" className="pt-4">
+          <ItemsCoverTab r={r} onAddCovers={() => setAddingCovers(true)} />
         </TabsContent>
-        <TabsContent value="comms" className="space-y-4 pt-4">
+        <TabsContent value="policies" className="pt-4">
+          <ClientPoliciesTab personId={r.id} />
+        </TabsContent>
+        <TabsContent value="claims" className="pt-4">
+          <ClientClaimsTab personId={r.id} />
+        </TabsContent>
+        <TabsContent value="quotes" className="pt-4">
+          <QuotesDecisionsTab r={r} offerId={offerId} onCreate={() => setCreating(true)} onAddCovers={() => setAddingCovers(true)} />
+        </TabsContent>
+        <TabsContent value="activity" className="space-y-4 pt-4">
           <LogCommunication r={r} />
           <RetentionNotice r={r} />
+          <ActivityDocumentsSection r={r} />
           <Timeline r={r} />
         </TabsContent>
       </Tabs>
 
-      {creating && <CreateOfferDialog personId={r.id} onClose={() => setCreating(false)} onCreated={() => onTab('offers')} />}
+      {creating && <CreateOfferDialog personId={r.id} onClose={() => setCreating(false)} onCreated={() => onTab('quotes')} />}
+      {addingCovers && (
+        <AddCoversDialog
+          personId={r.id}
+          onClose={() => setAddingCovers(false)}
+          onCreated={() => onTab('quotes')}
+        />
+      )}
     </div>
   )
 }

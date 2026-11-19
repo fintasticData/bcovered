@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { FAIS_LABEL, type AdviserAuthorisation, type FaisCategory, type ProductVersion } from '../db/lifeSchema'
 import type { Repo } from '../db/store'
 import { ToolError } from '../lib/errors'
+import { checkMemberFaisAppointment } from '../onboarding/faisAppointment'
 import { defineTool, STAFF, type ToolDef } from './registry'
 
 const FAIS = Object.keys(FAIS_LABEL) as [FaisCategory, ...FaisCategory[]]
@@ -16,6 +17,10 @@ export interface AuthorisationCheck {
 export function checkAuthorisation(repo: Repo, userId: string, category: FaisCategory, onDate = new Date().toISOString().slice(0, 10)): AuthorisationCheck {
   const user = repo.get('app_users', userId)
   if (!user) return { authorised: false, authorisation: null, reason: 'Unknown user' }
+  const membershipGate = checkMemberFaisAppointment(repo, userId, category)
+  if (!membershipGate.authorised) {
+    return { authorised: false, authorisation: null, reason: membershipGate.reason }
+  }
   const rows = repo.list('adviser_authorisations', (a) => a.user_id === userId && a.product_category === category)
   const valid = rows.find((a) => ['active', 'under_supervision'].includes(a.status) && a.effective_from <= onDate && (!a.effective_to || a.effective_to >= onDate))
   if (valid) {

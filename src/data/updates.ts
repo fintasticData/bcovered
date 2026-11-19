@@ -46,6 +46,228 @@ export const KIND_LABEL: Record<UpdateKind, string> = {
 /** Newest first. The pinned thread is the standing overview of everything in the current build. */
 export const UPDATE_THREADS: UpdateThread[] = [
   {
+    id: 'policies-claims-routes',
+    date: '2026-11-19T09:00:00+02:00',
+    version: 'v1.8',
+    title: 'Policies, claims and guided Routes',
+    summary:
+      'Short-term policies and claims are first-class on the broker desk and in My area. Routes turn common jobs into step-by-step runs that sync to the database.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Policies workspace',
+        body: 'Brokerage-wide covers and service requests, including vehicle replacement. Open a policy or start a change from the queue.',
+        links: [
+          { to: '/broker/policies', label: 'Policies' },
+          { to: '/broker/policies/requests/new', label: 'Start a change request' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Claims queue and incident report',
+        body: 'Search and filter claims, draft Russ follow-ups for selected cases, or report an incident. Sample seed data is available for demos.',
+        links: [
+          { to: '/broker/claims', label: 'Claims' },
+          { to: '/broker/claims/new', label: 'Report an incident' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'agents',
+        title: 'Russ claim intake',
+        body: 'Russ can register a customer claim with idempotent replay, and help compare schedules on vehicle replacements.',
+        links: [
+          { to: '/broker/workspace', label: 'Ava · records' },
+          { to: '/my/claims/new', label: 'Customer claim form' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Routes hub',
+        body: 'Guided processes for Demo Quotes, policy set-up, change, renew and cancel, and claim register, progress and resolve. Runs persist; My work and Team work stay separate.',
+        points: [
+          'Demo Quotes stay Sample-only',
+          'Continue phrases resume the open run',
+        ],
+        links: [{ to: '/broker/routes', label: 'Routes' }],
+      },
+      {
+        kind: 'improved',
+        area: 'portals',
+        title: 'Claims on My cover',
+        body: 'Customers track reported incidents under My claims and can add context later with the broker.',
+        links: [{ to: '/my?tab=claims', label: 'My claims' }],
+      },
+    ],
+  },
+  {
+    id: 'customer-area-pipeline',
+    date: '2026-11-18T21:00:00+02:00',
+    version: 'v1.7',
+    title: 'Customer Area home, person-first leads and business cover interests',
+    summary:
+      'The broker home is Customer Area: people and businesses in one place with Ava. Leads no longer require cover up front, and commercial prospects can flag cover interests at enquiry.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Customer Area',
+        body: 'Search people and businesses, open the record, and take the next action with Ava on the side. Franchisees appear as ordinary businesses with roles. Demo clients and import sit on the same screen.',
+        points: [
+          'Expand editor / Show Ava',
+          'Sample and Live switch',
+          'Party links between people and businesses',
+        ],
+        links: [{ to: '/broker/customers', label: 'Customer Area' }],
+      },
+      {
+        kind: 'improved',
+        area: 'broker',
+        title: 'Person-first lead pipeline',
+        body: 'Capture a person or business before cover is known. Stages run lead → quoting → accepted or closed, with closed reason and optional policy link for Live.',
+        links: [
+          { to: '/broker/leads', label: 'Leads' },
+          { to: '/broker/overview', label: 'Overview' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'business',
+        title: 'Cover interests on business prospects',
+        body: 'When opening a commercial prospect, flag the cover classes that matter; they stay on the business profile for follow-up.',
+        links: [
+          { to: '/broker/commercial/clients', label: 'Business clients' },
+          { to: '/broker/commercial/cover', label: 'Commercial cover' },
+        ],
+      },
+      {
+        kind: 'improved',
+        area: 'agents',
+        title: 'Create a business client with the copilot',
+        body: 'Ava or Russ can create a commercial client on the database with the same Sample/Live rules as the rest of the book.',
+        links: [
+          { to: '/broker/customers', label: 'Customer Area' },
+          { to: '/broker/workspace', label: 'Ava · records' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'client-auth-media-brand',
+    date: '2026-11-16T18:00:00+02:00',
+    version: 'v1.6',
+    title: 'Real customer sign-in, My cover, branding and FAIS appointments',
+    summary:
+      'Customers sign in with Supabase Auth and land in My area. Brokerages upload logos for referrals and offers, and team FAIS appointments sit next to platform roles.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Customer sign-in and My area',
+        body: 'Sign up or sign in creates a client profile on the B-Covered book. My area shows cover items, quotes and claims tabs; classic portal stays available.',
+        points: [
+          'Demo mode still works with “Demo as …”',
+          'Live customers only see their own rows',
+        ],
+        links: [
+          { to: '/sign-in', label: 'Sign in' },
+          { to: '/my', label: 'My area' },
+          { to: '/portal', label: 'Classic portal' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Report an incident from My cover',
+        body: 'Customers can open a claim from an insured item; the broker sees it in Claims. Public /claims now routes into My area claims.',
+        links: [
+          { to: '/my?tab=claims', label: 'My claims' },
+          { to: '/my/claims/new', label: 'Report an incident' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Media library for logos and files',
+        body: 'Image, video and document buckets store brokerage media by tenant path. Forms keep the returned URL on the organisation.',
+        links: [{ to: '/broker/settings/profile', label: 'Logo and brand image' }],
+      },
+      {
+        kind: 'improved',
+        area: 'broker',
+        title: 'FAIS appointment on Team',
+        body: 'Capacity, status, DOFA and authorised licence categories are recorded per member, separate from platform access role.',
+        links: [{ to: '/broker/settings/team', label: 'Team' }],
+      },
+      {
+        kind: 'improved',
+        area: 'portals',
+        title: 'Referral and offer branding',
+        body: 'Resolved referral pages and shareable offer messages show the brokerage logo when one is uploaded.',
+        links: [{ to: '/broker/settings/profile', label: 'Brokerage branding' }],
+      },
+    ],
+  },
+  {
+    id: 'franchise-sales-desk',
+    date: '2026-11-15T20:00:00+02:00',
+    version: 'v1.5',
+    title: 'Franchise channel, My workspace and Russ lead search',
+    summary:
+      'Brokers can run a franchise sales channel and a personal sales desk on the live database. Russ can generate commercial lead prospects from published web evidence, still clearly Sample or Live.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Franchise outlets and enquiries',
+        body: 'Set up franchisees and outlets, track uncontacted → sold enquiries, and work outlet performance with Russ. Outlet staff use a separate portal, not the broker desk.',
+        points: [
+          'Outlet and staff referral codes',
+          'Write-once origin on each enquiry',
+          'Sample/Live reporting',
+        ],
+        links: [
+          { to: '/broker/franchise', label: 'Franchise' },
+          { to: '/outlet', label: 'Outlet portal' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'My workspace sales desk',
+        body: 'One desk for your clients, offers, referrals and team view, with Russ beside the queue. Brokerage logo shows when branding is set.',
+        links: [{ to: '/broker/book', label: 'My workspace' }],
+      },
+      {
+        kind: 'new',
+        area: 'agents',
+        title: 'Russ “Generate leads”',
+        body: 'Ask Russ to search an area and cover type. Each run is a durable job; prospects are deduplicated and appear in Leads with evidence links.',
+        links: [
+          { to: '/broker/workspace', label: 'Ava · records' },
+          { to: '/broker/leads', label: 'Leads' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'platform',
+        title: 'Broker Licence Plate',
+        body: 'Each brokerage can show a BLP display number, separate from FSP and insurer intermediary codes.',
+        links: [{ to: '/broker/settings/profile', label: 'Brokerage settings' }],
+      },
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Referral enquiry pages',
+        body: 'Public /r/… and /enquire pages resolve member or outlet codes and start a labelled enquiry for the brokerage.',
+        links: [{ to: '/enquire', label: 'Enquire' }],
+      },
+    ],
+  },
+  {
     id: 'systems-live-erd',
     date: '2026-11-14T17:45:00+02:00',
     version: 'v1.4',
@@ -181,30 +403,35 @@ export const UPDATE_THREADS: UpdateThread[] = [
         kind: 'overview',
         area: 'broker',
         title: 'Broker workspace',
-        body: 'Copilot on the left, results and editors on the right, so the broker discusses the task and then reviews the outcome.',
+        body: 'Customer Area is the home: people and businesses with Ava beside the record. Policies, claims and Routes sit next to the sales book.',
         points: [
+          'Customer Area, My workspace, Franchise, Leads and Approvals',
+          'Policies queue, Claims queue and guided Routes for common jobs',
           'AI Workspace and Commercial workspace, each with its own Copilot',
-          'Leads, business clients, Risk Twins and submission packs',
-          'Approvals with Current and Suggested views, pinned to the exact payload',
-          'Tasks & Jobs: pause, resume, cancel, retry and a full agent and tool trace',
+          'Approvals with Current and Suggested views; Tasks & Jobs with a full agent and tool trace',
         ],
         links: [
-          { to: '/broker', label: 'Broker overview' },
-          { to: '/broker/approvals', label: 'Approvals' },
+          { to: '/broker/customers', label: 'Customer Area' },
+          { to: '/broker/policies', label: 'Policies' },
+          { to: '/broker/claims', label: 'Claims' },
+          { to: '/broker/routes', label: 'Routes' },
         ],
       },
       {
         kind: 'overview',
         area: 'portals',
         title: 'Customer and business portals',
-        body: 'Customers see only what a broker has approved and released, clearly labelled as simulated.',
+        body: 'Customers sign in to My area for cover, quotes and claims. Classic portals and outlet staff portals stay available.',
         points: [
-          'Personal portal: released comparisons, messages and work in progress',
-          'Business portal: review status, risk profile with provenance labels and document requests',
+          'My area: cover items, quotes, claims and report an incident',
+          'Classic personal and business portals for released comparisons and risk review',
+          'Outlet portal for franchise staff; public enquire and referral pages',
         ],
         links: [
-          { to: '/portal', label: 'My portal' },
+          { to: '/my', label: 'My area' },
+          { to: '/portal', label: 'Classic portal' },
           { to: '/portal/business', label: 'Business portal' },
+          { to: '/outlet', label: 'Outlet portal' },
         ],
       },
       {
@@ -213,7 +440,8 @@ export const UPDATE_THREADS: UpdateThread[] = [
         title: 'Platform foundations and guardrails',
         body: 'The rules that hold across every service.',
         points: [
-          '45 typed tools: validated, role-checked, audited and deduplicated',
+          'Live Supabase book with Sample and Live kept apart; BLP identity per brokerage',
+          'Typed tools: validated, role-checked, audited and deduplicated',
           'Durable jobs that survive a reload and stop all side effects when cancelled',
           'POPIA consent before contact details; marketing consent separate and optional',
           'Nothing is bound or sent to an insurer; emails are preview-only drafts',

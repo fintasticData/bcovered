@@ -49,7 +49,7 @@ export function runCommercialSummaryStep(ctx: StepContext): StepOutcome {
   const summary = composeCommercialSummary(s, templateFor(ctx.repo, s.profile.industry_key).name, exposures, sections, submission.completeness, docs, lastNote)
   ctx.call('underwriting.set_broker_summary', { submission_id: submissionId, broker_summary: summary })
   const leadId = reviewOutputs(ctx).discover?.lead_id
-  if (leadId) ctx.call('lead.update_status', { lead_id: leadId, status: 'qualified' })
+  if (leadId) ctx.call('lead.update_status', { lead_id: leadId, status: 'contacted' })
   return { kind: 'done', output: { summary: 'Broker review summary written', broker_summary: summary } }
 }
 

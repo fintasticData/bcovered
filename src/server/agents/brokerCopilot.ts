@@ -62,7 +62,7 @@ export function runApprovalStep(ctx: StepContext): StepOutcome {
       { label: 'Quote', ref: quote.id },
     ],
   })
-  ctx.call('lead.update_status', { lead_id: lead.id, status: 'proposal_pending' })
+  ctx.call('lead.update_status', { lead_id: lead.id, status: 'quoting' })
   return { kind: 'await_approval', approval_id: approval.id, output: { approval_id: approval.id, summary: 'Broker approval requested' } }
 }
 

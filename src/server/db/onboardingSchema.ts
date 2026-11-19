@@ -21,6 +21,10 @@ export type MemberRole =
   | 'agent'
 export type PlatformRole = 'platform_admin' | 'onboarding_reviewer' | 'platform_read_only'
 
+/** FAIS appointment capacity under the brokerage FSP (separate from platform access role). */
+export type FaisCapacity = 'key_individual' | 'representative' | 'juristic_representative' | 'non_advice'
+export type FaisAppointmentStatus = 'active' | 'suspended' | 'terminated'
+
 export interface OrganisationMembership {
   id: UUID
   tenant_id: UUID
@@ -28,6 +32,13 @@ export interface OrganisationMembership {
   role: MemberRole
   status: 'active' | 'suspended' | 'removed'
   invited_by: UUID | null
+  /** FAIS capacity; null until the brokerage records the appointment. */
+  fais_capacity: FaisCapacity | null
+  fais_status: FaisAppointmentStatus | null
+  /** Date of first appointment (DOFA), YYYY-MM-DD. */
+  dofa_date: string | null
+  /** Categories this member may advise on; empty means not authorised for advice products. */
+  authorised_licence_categories: string[]
   created_at: ISODate
   updated_at: ISODate
 }

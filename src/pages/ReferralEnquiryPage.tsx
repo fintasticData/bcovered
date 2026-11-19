@@ -67,7 +67,11 @@ export default function ReferralEnquiryPage() {
           <p className="mt-4 text-lg text-ink/70">Send your details and the person who referred you will come back to you with options. There is no obligation.</p>
           {r?.valid && (
             <div className="mt-6 flex items-center gap-3 rounded-2xl border border-brand-500/20 bg-brand-50 p-4">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-500 text-white"><UserRound className="h-5 w-5" /></span>
+              {r.logo_url ? (
+                <img src={r.logo_url} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-brand-500/20" />
+              ) : (
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-500 text-white"><UserRound className="h-5 w-5" /></span>
+              )}
               <span>
                 <span className="block text-sm text-ink/60">Referred by</span>
                 <span className="block text-lg font-semibold text-brand-900">{via}</span>

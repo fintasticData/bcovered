@@ -8,8 +8,20 @@ import { CategoryBadge } from './identity'
 /** The records the copilot is working on, shown above the composer so the broker can see or change them. */
 export function ContextBar({ context, category, onChange, onClear }: { context: TurnContext; category: DataCategory; onChange: () => void; onClear: () => void }) {
   const items = [
-    context.person && { key: 'person', icon: UserRound, label: context.person.name, number: context.person.number, to: context.person.open_path ?? `/broker/people/${context.person.id}` },
-    context.account && { key: 'account', icon: Building2, label: context.account.name, number: context.account.number, to: context.account.open_path ?? `/broker/accounts/${context.account.id}` },
+    context.person && {
+      key: 'person',
+      icon: UserRound,
+      label: context.person.name,
+      number: context.person.number,
+      to: context.person.open_path ?? `/broker/customers/people/${context.person.id}`,
+    },
+    context.account && {
+      key: 'account',
+      icon: Building2,
+      label: context.account.name,
+      number: context.account.number,
+      to: context.account.open_path ?? `/broker/accounts/${context.account.id}`,
+    },
     context.policy && {
       key: 'policy',
       icon: FileText,

@@ -90,6 +90,13 @@ export default function InsurersPage() {
         Steps: {STEPS.join(' → ')}. Credentials are stored server-side (Vault in the target build) and shown only as a masked hint. They never appear in the browser after you submit them, in logs or in Russ. Only the simulated demo adapter exists today; every other insurer is shown as unsupported. Your BLP# and FSP are summarised in My Area.
       </Notice>
       {!data.brokerage_active && <Notice tone="warning">Your brokerage is not active, so connections cannot be tested or enabled yet.</Notice>}
+      {!data.can_manage && (
+        <Notice tone="warning">
+          You can view insurer relationships, but only a <strong>brokerage owner</strong> or <strong>brokerage administrator</strong> can add,
+          store credentials, test, enable or disable them. Switch to Naledi (owner) under Signed in as, or ask an owner to grant you that role under
+          Brokerage settings → Team.
+        </Notice>
+      )}
       <ul className="space-y-3">
         {data.rows.map((r) => (
           <AccessRow key={r.id} row={r} canManage={data.can_manage} active={data.brokerage_active} />

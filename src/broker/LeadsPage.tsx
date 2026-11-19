@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Building2, Car, ChevronRight, ClipboardCopy, ExternalLink, Mail, Plus, X } from 'lucide-react'
+import { Building2, Car, ChevronRight, ClipboardCopy, ExternalLink, Mail, Phone, Plus, X } from 'lucide-react'
 import { useBulkLeads, useLeads } from '@/api/hooks'
-import { StatusBadge, humanise } from '@/components/StatusBadge'
+import { humanise } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { useTeam } from '@/copilot/salesApi'
 import { products } from '@/data/products'
@@ -12,20 +12,29 @@ import { useDataCategory } from '@/lib/supabase/category'
 import { formatDateTime } from '@/lib/utils'
 import type { LeadRow } from '@/server/api'
 import type { LeadStatus, ProspectStatus } from '@/server/db/schema'
+import { LEAD_PIPELINE_STAGES } from '@/server/db/schema'
 import { categoriesFor, PRODUCT_KEYS } from '@/server/shortTermApi'
 import { CategoryBadge } from './copilot/identity'
+import { LeadProgressBar } from './leads/LeadProgressBar'
 import { AreaFindings, SampleDataBadge } from './leads/LeadRunViews'
+import { NewLeadModal } from './leads/NewLeadModal'
 import { DemoSampleBadge } from './quotes/shared'
 import { DataGrid, type CsvColumn } from './shared/DataGrid'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from './PageHeader'
 
 const VIEWS = [
-  { id: 'open', label: 'Open', match: (s: string) => !['won', 'lost', 'proposal_released'].includes(s) },
-  { id: 'released', label: 'Proposal released', match: (s: string) => s === 'proposal_released' },
+  { id: 'open', label: 'Open', match: (s: string) => !['live', 'closed'].includes(s) },
+  { id: 'live', label: 'Live', match: (s: string) => s === 'live' },
+  { id: 'closed', label: 'Closed', match: (s: string) => s === 'closed' },
   { id: 'all', label: 'All', match: () => true },
 ]
 
-const STATUSES: LeadStatus[] = ['new', 'qualifying', 'qualified', 'quoting', 'proposal_pending', 'proposal_released', 'won', 'lost']
+const STATUSES: LeadStatus[] = [...LEAD_PIPELINE_STAGES, 'closed']
+const TYPE_FILTERS = [
+  { id: 'all', label: 'All types' },
+  { id: 'people', label: 'People' },
+  { id: 'businesses', label: 'Businesses' },
+] as const
 
 const hostLabel = (url: string) => {
   try {
@@ -122,11 +131,14 @@ export default function LeadsPage() {
   const bulk = useBulkLeads()
   const [params, setParams] = useSearchParams()
   const [notice, setNotice] = useState<string | null>(null)
+  const [newLeadOpen, setNewLeadOpen] = useState(false)
 
   const view = VIEWS.find((v) => v.id === params.get('view')) ?? VIEWS[0]
+  const typeFilter = TYPE_FILTERS.find((t) => t.id === params.get('type')) ?? TYPE_FILTERS[0]
   const product = PRODUCT_KEYS.find((k) => k === params.get('product')) ?? null
   const market = params.get('market') === 'personal' || params.get('market') === 'commercial' ? params.get('market') : null
   const runId = params.get('run')
+  const stageFilter = params.get('stage') ?? ''
   const f = { source: params.get('source') ?? '', cover: params.get('cover') ?? '', industry: params.get('industry') ?? '', fn: params.get('fn') ?? '', area: params.get('area') ?? '' }
   const hasEmail = params.get('email') === '1'
 
@@ -152,16 +164,19 @@ export default function LeadsPage() {
       all.filter(
         (l) =>
           (runId ? l.run_ids.includes(runId) : view.match(l.status)) &&
-          (!product || categoriesFor(product).includes(l.product_category)) &&
+          (typeFilter.id === 'all' ||
+            (typeFilter.id === 'people' ? l.customer_type === 'personal' : l.customer_type === 'commercial')) &&
+          (!stageFilter || l.status === stageFilter) &&
+          (!product || (l.product_category && categoriesFor(product).includes(l.product_category))) &&
           (!market || l.line === market) &&
           (!f.source || l.source === f.source) &&
           (!f.cover || l.product_category === f.cover) &&
           (!f.industry || l.prospect?.industry === f.industry) &&
           (!f.fn || l.prospect?.business_function === f.fn) &&
           (!f.area || l.prospect?.area === f.area) &&
-          (!hasEmail || Boolean(l.prospect?.email)),
+          (!hasEmail || Boolean(l.prospect?.email ?? l.customer_email)),
       ),
-    [all, runId, view, product, market, f.source, f.cover, f.industry, f.fn, f.area, hasEmail],
+    [all, runId, view, typeFilter, stageFilter, product, market, f.source, f.cover, f.industry, f.fn, f.area, hasEmail],
   )
   const scope = product ? (products.find((p) => p.slug === product)?.name ?? product) : market === 'personal' ? 'Personal lines' : market === 'commercial' ? 'Commercial' : null
   const anyResearch = all.some((l) => l.prospect)
@@ -170,55 +185,84 @@ export default function LeadsPage() {
     () => [
       {
         id: 'customer',
-        header: 'Customer',
+        header: 'Lead',
         accessorFn: (l) => l.customer_name,
-        cell: ({ row: { original: l } }) => (
-          <div className="min-w-[12rem]">
-            <span className="flex flex-wrap items-center gap-1.5">
-              <Link to={`/broker/leads/${l.id}`} className="font-medium text-navy-900 hover:text-brand-600">
-                {l.customer_name}
-              </Link>
-              {l.prospect?.is_sample && <SampleDataBadge />}
-              {l.prospect?.status && l.prospect.status !== 'active' && <span className="rounded bg-navy-100 px-1 text-[10px] font-semibold text-navy-700 uppercase">{humanise(l.prospect.status)}</span>}
-            </span>
-            <p className="max-w-xs truncate text-[11px] text-navy-500">{l.match?.cover_fit ?? l.qualification.summary}</p>
-          </div>
-        ),
+        cell: ({ row: { original: l } }) => {
+          const kind = l.customer_type === 'commercial' ? 'Business' : 'Person'
+          const cover = l.product_category ? humanise(l.product_category) : null
+          return (
+            <div className="min-w-[12rem]">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <Link to={`/broker/leads/${l.id}`} className="font-medium text-navy-900 hover:text-brand-600">
+                  {l.customer_name}
+                </Link>
+                {l.prospect?.is_sample && <SampleDataBadge />}
+                {l.prospect?.status && l.prospect.status !== 'active' && (
+                  <span className="rounded bg-navy-100 px-1 text-[10px] font-semibold text-navy-700 uppercase">{humanise(l.prospect.status)}</span>
+                )}
+              </span>
+              <p className="text-[11px] text-navy-500">
+                {kind}
+                {cover ? ` · ${cover}` : ''}
+              </p>
+              <p className="max-w-xs truncate text-[11px] text-navy-500">{l.match?.cover_fit ?? l.qualification.summary}</p>
+            </div>
+          )
+        },
       },
       {
         id: 'email',
-        header: 'Email',
-        accessorFn: (l) => l.prospect?.email ?? '',
-        cell: ({ row: { original: l } }) =>
-          l.prospect ? (
+        header: 'Contact',
+        accessorFn: (l) => l.prospect?.email ?? l.customer_email ?? l.customer_phone ?? '',
+        cell: ({ row: { original: l } }) => {
+          const phone = l.prospect?.phone ?? l.customer_phone
+          const email = l.prospect?.email ?? l.customer_email
+          if (!phone && !email) return <span className="text-xs text-navy-400">–</span>
+          return (
             <div className="space-y-0.5 text-xs">
-              <a href={`mailto:${l.prospect.email}`} className="flex items-center gap-1 font-medium text-navy-900 hover:underline">
-                <Mail className="h-3 w-3" aria-hidden /> {l.prospect.email}
-              </a>
+              {phone && (
+                <a href={`tel:${phone}`} className="flex items-center gap-1 font-medium text-navy-900 hover:underline">
+                  <Phone className="h-3 w-3" aria-hidden /> {phone}
+                </a>
+              )}
+              {email && (
+                <a href={`mailto:${email}`} className="flex items-center gap-1 text-navy-800 hover:underline">
+                  <Mail className="h-3 w-3" aria-hidden /> {email}
+                </a>
+              )}
               {l.match?.evidence.email_source_url && (
                 <a href={l.match.evidence.email_source_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand-700 hover:underline" title="The public page that shows this email">
                   <ExternalLink className="h-3 w-3" aria-hidden /> {hostLabel(l.match.evidence.email_source_url)}
                 </a>
               )}
             </div>
-          ) : (
-            <span className="text-xs text-navy-400">–</span>
-          ),
+          )
+        },
       },
       { id: 'area', header: 'Area', accessorFn: (l) => l.prospect?.area ?? '', cell: ({ getValue }) => <span className="text-xs text-navy-700">{(getValue() as string) || '–'}</span> },
       { id: 'industry', header: 'Industry', accessorFn: (l) => l.prospect?.industry ?? '', cell: ({ getValue }) => <span className="text-xs text-navy-700">{(getValue() as string) || '–'}</span> },
       { id: 'function', header: 'Function', accessorFn: (l) => l.prospect?.business_function ?? '', cell: ({ getValue }) => <span className="text-xs text-navy-700">{(getValue() as string) || '–'}</span> },
       {
         id: 'product',
-        header: 'Product',
-        accessorFn: (l) => l.product_category,
+        header: 'Cover',
+        accessorFn: (l) => l.product_category ?? '',
+        cell: ({ row: { original: l } }) =>
+          l.product_category ? (
+            <span className="text-navy-700">
+              {humanise(l.product_category)} <span className="text-[11px] text-navy-500">· {l.line}</span>
+            </span>
+          ) : (
+            <span className="text-xs text-navy-400">No cover yet</span>
+          ),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        accessorFn: (l) => STATUSES.indexOf(l.status),
         cell: ({ row: { original: l } }) => (
-          <span className="text-navy-700">
-            {humanise(l.product_category)} <span className="text-[11px] text-navy-500">· {l.line}</span>
-          </span>
+          <LeadProgressBar status={l.status} closedReason={l.closed_reason} closedAtStage={l.closed_at_stage} compact />
         ),
       },
-      { id: 'status', header: 'Status', accessorFn: (l) => STATUSES.indexOf(l.status), cell: ({ row: { original: l } }) => <StatusBadge status={l.status} /> },
       {
         id: 'urgency',
         header: 'Urgency',
@@ -271,8 +315,10 @@ export default function LeadsPage() {
   )
 
   const csv: CsvColumn<LeadRow>[] = [
-    { header: 'Customer', value: (l) => l.customer_name },
-    { header: 'Email', value: (l) => l.prospect?.email },
+    { header: 'Lead', value: (l) => l.customer_name },
+    { header: 'Type', value: (l) => (l.customer_type === 'commercial' ? 'Business' : 'Person') },
+    { header: 'Phone', value: (l) => l.prospect?.phone ?? l.customer_phone },
+    { header: 'Email', value: (l) => l.prospect?.email ?? l.customer_email },
     { header: 'Email source', value: (l) => l.match?.evidence.email_source_url },
     { header: 'Website', value: (l) => l.prospect?.website },
     { header: 'Address', value: (l) => l.prospect?.address },
@@ -282,6 +328,8 @@ export default function LeadsPage() {
     { header: 'Cover', value: (l) => l.product_category },
     { header: 'Cover fit', value: (l) => l.match?.cover_fit ?? l.qualification.summary },
     { header: 'Status', value: (l) => l.status },
+    { header: 'Closed reason', value: (l) => l.closed_reason },
+    { header: 'Closed at stage', value: (l) => l.closed_at_stage },
     { header: 'Source', value: (l) => l.source },
     { header: 'Retrieved', value: (l) => l.match?.retrieved_at },
     { header: 'Sample data', value: (l) => (l.prospect?.is_sample ? 'yes' : '') },
@@ -299,9 +347,10 @@ export default function LeadsPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 sm:p-6">
+      <NewLeadModal open={newLeadOpen} onClose={() => setNewLeadOpen(false)} />
       <PageHeader
         title="Leads"
-        description="Enquiries captured by Ava, the web form and the Copilot, plus businesses Russ researched with published emails. Agents keep these records current as they work."
+        description="People and businesses captured by brokers, Ava, the web form, the Copilot and Russ. Each row is an opportunity with its own progress."
         actions={
           <>
             {!runId &&
@@ -321,10 +370,13 @@ export default function LeadsPage() {
                 <Building2 /> Find leads with Russ
               </Link>
             </Button>
-            <Button variant="accent" size="sm" asChild>
+            <Button size="sm" variant="outline" asChild>
               <Link to="/broker/quotes/sample-motor">
                 <Plus /> New motor quote
               </Link>
+            </Button>
+            <Button variant="accent" size="sm" onClick={() => setNewLeadOpen(true)}>
+              <Plus /> New lead
             </Button>
           </>
         }
@@ -371,14 +423,33 @@ export default function LeadsPage() {
           getRowId={(l) => l.id}
           storageKey="broker-leads"
           searchPlaceholder="Search name, email, area or summary"
-          searchText={(l) => [l.customer_name, l.qualification.summary, l.product_category, l.source, l.prospect?.email, l.prospect?.area, l.prospect?.industry, l.prospect?.business_function, l.prospect?.address].filter(Boolean).join(' ')}
+          searchText={(l) =>
+            [l.customer_name, l.customer_email, l.customer_phone, l.qualification.summary, l.product_category, l.source, l.prospect?.email, l.prospect?.phone, l.prospect?.area, l.prospect?.industry, l.prospect?.business_function, l.prospect?.address]
+              .filter(Boolean)
+              .join(' ')
+          }
           initialSort={[{ id: 'created', desc: true }]}
-          defaultHidden={anyResearch ? ['industry', 'assigned', 'tasks'] : ['email', 'area', 'industry', 'function', 'run', 'assigned', 'tasks']}
+          defaultHidden={anyResearch ? ['industry', 'assigned', 'tasks'] : ['area', 'industry', 'function', 'run', 'assigned', 'tasks']}
           minWidth={1100}
           csv={{ filename: runId ? `russ-leads-${runId.slice(0, 8)}` : 'leads', columns: csv }}
-          empty={<EmptyState title="No leads in this view">Change the filters, or ask Russ to find businesses in an area.</EmptyState>}
+          empty={<EmptyState title="No leads in this view">Add a lead, change the filters, or ask Russ to find businesses in an area.</EmptyState>}
           toolbar={
             <>
+              <select value={typeFilter.id} onChange={(e) => setParam('type', e.target.value === 'all' ? null : e.target.value)} aria-label="Lead type" className="field max-w-[11rem] py-1.5 text-xs">
+                {TYPE_FILTERS.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <select value={stageFilter} onChange={(e) => setParam('stage', e.target.value || null)} aria-label="Stage" className="field max-w-[12rem] py-1.5 text-xs">
+                <option value="">Stage: all</option>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {humanise(s)}
+                  </option>
+                ))}
+              </select>
               <FilterSelect label="Source" value={f.source} options={distinct((l) => l.source)} onChange={(v) => setParam('source', v)} />
               <FilterSelect label="Cover" value={f.cover} options={distinct((l) => l.product_category)} onChange={(v) => setParam('cover', v)} />
               {anyResearch && (
@@ -417,7 +488,7 @@ export default function LeadsPage() {
                   className="field py-1 text-xs"
                 >
                   <option value="">Change status…</option>
-                  {STATUSES.map((s) => (
+                  {LEAD_PIPELINE_STAGES.map((s) => (
                     <option key={s} value={s}>
                       {humanise(s)}
                     </option>
@@ -475,13 +546,23 @@ export default function LeadsPage() {
               <input type="checkbox" checked={sel.selected} onChange={sel.toggle} aria-label={`Select ${l.customer_name}`} className="mt-1" />
               <Link to={`/broker/leads/${l.id}`} className="min-w-0 flex-1 active:bg-mist">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0 font-medium text-navy-900">{l.customer_name}</span>
-                  <StatusBadge status={l.status} />
+                  <span className="min-w-0">
+                    <span className="font-medium text-navy-900">{l.customer_name}</span>
+                    <span className="mt-0.5 block text-[11px] text-navy-500">
+                      {l.customer_type === 'commercial' ? 'Business' : 'Person'}
+                      {l.product_category ? ` · ${humanise(l.product_category)}` : ''}
+                    </span>
+                  </span>
+                  <LeadProgressBar status={l.status} closedReason={l.closed_reason} closedAtStage={l.closed_at_stage} compact />
                 </div>
-                {l.prospect && <p className="mt-0.5 truncate text-xs text-navy-700">{l.prospect.email} · {l.prospect.area}</p>}
+                {(l.customer_phone || l.customer_email || l.prospect) && (
+                  <p className="mt-0.5 truncate text-xs text-navy-700">
+                    {[l.prospect?.phone ?? l.customer_phone, l.prospect?.email ?? l.customer_email, l.prospect?.area].filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 <p className="mt-1 line-clamp-2 text-xs text-navy-600">{l.match?.cover_fit ?? l.qualification.summary}</p>
                 <p className="mt-2 text-[11px] text-navy-500">
-                  {humanise(l.product_category)} · {l.line} · {l.missing_info.length ? `${l.missing_info.length} missing` : 'complete'} · {formatDateTime(l.created_at)}
+                  {l.product_category ? humanise(l.product_category) : 'No cover yet'} · {l.line} · {l.missing_info.length ? `${l.missing_info.length} missing` : 'complete'} · {formatDateTime(l.created_at)}
                 </p>
               </Link>
             </div>

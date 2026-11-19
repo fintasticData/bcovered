@@ -195,7 +195,13 @@ function TwinResult({ view }: { view: Extract<CopilotView, { kind: 'twin' }> }) 
 function ClientList({ ids }: { ids: string[] }) {
   const { data = [] } = useCommercialClients()
   const rows = data.filter((r) => ids.includes(r.profile.id))
-  if (!rows.length) return <EmptyState title="No commercial clients yet">Run the Restaurant Group scenario in Demo Studio.</EmptyState>
+  if (!rows.length) {
+    return (
+      <EmptyState title="No commercial clients yet">
+        Ask Russ to create one (e.g. create a new business client: “Hondo’s Burgers”), or run the Restaurant Group scenario in Demo Studio.
+      </EmptyState>
+    )
+  }
   return (
     <ul className="divide-y divide-navy-800/5">
       {rows.map((r) => (

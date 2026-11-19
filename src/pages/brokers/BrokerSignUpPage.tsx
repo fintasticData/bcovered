@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Loader2, MailCheck, Share2, UserPlus, Users } from 'lucide-react'
+import { ArrowRight, ImageIcon, Loader2, MailCheck, Share2, UserPlus, Users } from 'lucide-react'
 import { PasswordField } from '@/components/PasswordField'
 import { signUpBroker } from '@/lib/supabase/accounts'
 import { useSupabaseAuth } from '@/lib/supabase/client'
+import { uploadMedia } from '@/lib/supabase/media'
+import { patchOrganisationMedia } from '@/lib/supabase/organisations'
 
 const STEPS = [
   { icon: UserPlus, title: 'Create your login and brokerage', body: 'Your workspace opens straight away with Sample records so you can run the full journey.' },
@@ -15,6 +17,8 @@ export default function BrokerSignUpPage() {
   const navigate = useNavigate()
   const auth = useSupabaseAuth()
   const [form, setForm] = useState({ full_name: '', email: '', password: '', brokerage_name: '', phone: '', service_area: '' })
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const logoRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState(false)
@@ -30,7 +34,18 @@ export default function BrokerSignUpPage() {
     try {
       const res = await signUpBroker(form)
       if (res.status === 'needs_confirmation') setConfirm(true)
-      else navigate('/broker/book', { replace: true })
+      else {
+        const orgId = res.profile.brokerage?.id
+        if (orgId && logoFile) {
+          try {
+            const uploaded = await uploadMedia({ tenantId: orgId, file: logoFile, purpose: 'logo', kind: 'image', ownerTable: 'organisations', ownerId: orgId })
+            await patchOrganisationMedia(orgId, { logo_url: uploaded.url })
+          } catch {
+            // Workspace is ready; branding can be finished under Settings → Brokerage profile.
+          }
+        }
+        navigate('/broker/book', { replace: true })
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -92,6 +107,24 @@ export default function BrokerSignUpPage() {
               <div>
                 <label htmlFor="su-brokerage" className="field-label">Brokerage name</label>
                 <input id="su-brokerage" className="field" value={form.brokerage_name} onChange={set('brokerage_name')} autoComplete="organization" required />
+              </div>
+              <div>
+                <label htmlFor="su-logo" className="field-label">Brokerage logo (optional)</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={logoRef}
+                    id="su-logo"
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                  />
+                  <button type="button" className="btn-ghost inline-flex items-center gap-2" onClick={() => logoRef.current?.click()}>
+                    <ImageIcon className="h-4 w-4" /> {logoFile ? 'Replace logo' : 'Choose logo'}
+                  </button>
+                  {logoFile && <span className="truncate text-xs text-ink/60">{logoFile.name}</span>}
+                </div>
+                <p className="mt-1 text-[11px] text-ink/55">Uploaded after your workspace is created. You can change it later under Settings.</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>

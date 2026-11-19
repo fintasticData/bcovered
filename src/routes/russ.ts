@@ -2,7 +2,7 @@
 // on its own one at a time through the same route operations as the guide's buttons, and pauses at the first action
 // that needs the broker.
 import type { ActionInput, ActionOutcome, RouteProgress } from '.'
-import { getRoute, isContinueIntent, routeIntentOf, type RouteDefinition } from './definitions'
+import { getRoute, isContinueIntent, listRoutes, routeIntentOf, type RouteDefinition } from './definitions'
 
 interface ActionResponse {
   outcome: ActionOutcome
@@ -11,7 +11,13 @@ interface ActionResponse {
 
 /** The route operations Russ uses: api.routes in the browser (as Russ), the routesApi functions in tests. */
 export interface RouteOps {
-  start(body: { definition_id: string; person_id?: string | null; key: string }): Promise<ActionResponse>
+  start(body: {
+    definition_id: string
+    person_id?: string | null
+    policy_id?: string | null
+    claim_id?: string | null
+    key: string
+  }): Promise<ActionResponse>
   progress(runId: string): Promise<RouteProgress>
   runAction(body: { run_id: string; action_id: string; input?: ActionInput; key: string }): Promise<ActionResponse>
 }
@@ -26,6 +32,7 @@ export interface RussRouteTurn {
   reply: string
   /** Deep link to the guide, opened on the action that needs the broker. */
   guide_path: string
+  plan?: Array<{ definition_id: string; title: string; status: 'started' | 'resumed' | 'needs_input' }>
 }
 
 const MAX_STEPS = 12
@@ -38,26 +45,46 @@ export function routeTurnFor(text: string, runId?: string | null): RouteDefiniti
   return routeIntentOf(text) ?? (runId && isContinueIntent(text) ? 'continue' : null)
 }
 
-export async function runRussRouteTurn(
-  ops: RouteOps,
-  req: { text: string; run_id?: string | null; person_id?: string | null },
-): Promise<RussRouteTurn | null> {
-  const asked = routeTurnFor(req.text, req.run_id)
-  if (!asked) return null
+/** All route definitions whose intents appear in the text (for multi-instruction plans). */
+export function routeIntentsIn(text: string): RouteDefinition[] {
+  const t = text.toLowerCase().replace(/\s+/g, ' ')
+  const found: RouteDefinition[] = []
+  for (const d of listRoutes()) {
+    if (d.intents.some((phrase) => t.includes(phrase)) && !found.some((x) => x.id === d.id)) found.push(d)
+  }
+  return found
+}
 
+async function runOne(
+  ops: RouteOps,
+  def: RouteDefinition,
+  req: { text: string; run_id?: string | null; person_id?: string | null; policy_id?: string | null; claim_id?: string | null },
+  asked: RouteDefinition | 'continue',
+): Promise<RussRouteTurn> {
   let progress: RouteProgress | null = req.run_id ? await ops.progress(req.run_id).catch(() => null) : null
-  const def = asked === 'continue' ? (progress ? getRoute(progress.route.id)! : null) : asked
-  if (!def) return null
   const notes: string[] = []
+  let planStatus: 'started' | 'resumed' | 'needs_input' = 'started'
 
   const sameRun = progress && progress.route.id === def.id && !progress.complete && progress.run.status === 'active'
   const otherClient = sameRun && req.person_id && progress!.run.subject_id && progress!.run.subject_id !== req.person_id && asked !== 'continue'
   if (!sameRun || otherClient) {
-    const started = await ops.start({ definition_id: def.id, person_id: req.person_id ?? null, key: turnKey('start', 0) })
+    const started = await ops.start({
+      definition_id: def.id,
+      person_id: req.person_id ?? null,
+      policy_id: req.policy_id ?? null,
+      claim_id: req.claim_id ?? null,
+      key: turnKey('start', 0),
+    })
     progress = started.progress
-    if (started.outcome.status !== 'done') notes.push(started.outcome.message)
-    else notes.push(started.outcome.message.startsWith('Resumed') ? started.outcome.message : `Started ${def.title}${progress.run.subject_label ? ` for ${progress.run.subject_label}` : ''}.`)
+    planStatus = started.outcome.message.startsWith('Resumed') ? 'resumed' : 'started'
+    if (started.outcome.status !== 'done') {
+      notes.push(started.outcome.message)
+      planStatus = 'needs_input'
+    } else {
+      notes.push(started.outcome.message.startsWith('Resumed') ? started.outcome.message : `Started ${def.title}${progress.run.subject_label ? ` for ${progress.run.subject_label}` : ''}.`)
+    }
   } else {
+    planStatus = 'resumed'
     notes.push(`Resumed ${def.title}${progress!.run.subject_label ? ` for ${progress!.run.subject_label}` : ''}.`)
   }
 
@@ -68,17 +95,20 @@ export async function runRussRouteTurn(
     const action = progress!.phases.flatMap((p) => p.actions).find((a) => a.id === next.id)!
     if (next.russ === 'person') {
       paused = { id: next.id, label: next.label, handover: next.handover, reason: action.reason }
+      planStatus = 'needs_input'
       break
     }
     const input: ActionInput = next.id === def.selectActionId ? (req.person_id ? { person_id: req.person_id } : {}) : {}
     if (next.id === def.selectActionId && !req.person_id) {
-      paused = { id: next.id, label: next.label, handover: next.handover, reason: 'Open a Sample client in My workspace, or pick one in the guide.' }
+      paused = { id: next.id, label: next.label, handover: next.handover, reason: 'Open a client in My workspace, or pick one in the guide.' }
+      planStatus = 'needs_input'
       break
     }
     const r = await ops.runAction({ run_id: progress!.run.id, action_id: next.id, input, key: turnKey(progress!.run.id, step) })
     progress = r.progress
     if (r.outcome.status !== 'done') {
       paused = { id: next.id, label: next.label, handover: next.handover, reason: r.outcome.message }
+      planStatus = 'needs_input'
       break
     }
     ran.push({ action_id: next.id, label: next.label, summary: r.outcome.message })
@@ -97,5 +127,38 @@ export async function runRussRouteTurn(
     progress: p,
     reply: notes.join(' '),
     guide_path: guidePath(p.run.id, paused?.id ?? null),
+    plan: [{ definition_id: def.id, title: def.title, status: planStatus }],
   }
+}
+
+export async function runRussRouteTurn(
+  ops: RouteOps,
+  req: { text: string; run_id?: string | null; person_id?: string | null; policy_id?: string | null; claim_id?: string | null },
+): Promise<RussRouteTurn | null> {
+  const multi = routeIntentsIn(req.text)
+  const asked = routeTurnFor(req.text, req.run_id)
+  if (!asked && multi.length === 0) return null
+
+  if (multi.length > 1) {
+    const plan: NonNullable<RussRouteTurn['plan']> = []
+    const replies: string[] = [`Plan (${multi.length} jobs):`]
+    let last: RussRouteTurn | null = null
+    for (const def of multi) {
+      const turn = await runOne(ops, def, { ...req, run_id: null }, def)
+      plan.push(...(turn.plan ?? []))
+      replies.push(`· ${def.title} (${turn.plan?.[0]?.status ?? 'started'}) — ${turn.guide_path}`)
+      last = turn
+    }
+    return {
+      ...(last as RussRouteTurn),
+      reply: replies.join(' '),
+      plan,
+    }
+  }
+
+  const def = asked === 'continue'
+    ? (req.run_id ? getRoute((await ops.progress(req.run_id)).route.id) : null)
+    : asked ?? multi[0]
+  if (!def) return null
+  return runOne(ops, def, req, asked ?? def)
 }

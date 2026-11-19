@@ -32,6 +32,14 @@ export interface Organisation {
   activated_at: ISODate | null
   suspended_at: ISODate | null
   retention_until: string | null
+  /** Public URL from media-images (logo). */
+  logo_url?: string | null
+  /** Public URL from media-images (brand / cover). */
+  brand_image_url?: string | null
+  /** Path or URL in media-videos. */
+  intro_video_url?: string | null
+  /** Path or URL in media-docs (profile PDF). */
+  profile_doc_url?: string | null
   created_at: ISODate
   updated_at: ISODate
 }
@@ -102,6 +110,14 @@ export interface Conversation {
   channel: Channel
   assistant: string
   context: Record<string, Json>
+  /** Responsible broker (sales_team_members) from the first saved message. */
+  responsible_member_id?: UUID | null
+  /** Actual employee who acted (may differ from responsible broker when an assistant acts for them). */
+  created_by_user_id?: UUID | null
+  /** customer = customer-facing; internal = staff/copilot only. */
+  visibility?: 'customer' | 'internal'
+  person_id?: UUID | null
+  business_customer_id?: UUID | null
   created_at: ISODate
   updated_at: ISODate
 }
@@ -116,15 +132,25 @@ export interface ConversationMessage {
   created_at: ISODate
 }
 
+/** Person-first opportunity stages. Closed is terminal with reason + stopped stage. */
 export type LeadStatus =
-  | 'new'
-  | 'qualifying'
-  | 'qualified'
+  | 'lead'
+  | 'contacted'
   | 'quoting'
-  | 'proposal_pending'
   | 'proposal_released'
-  | 'won'
-  | 'lost'
+  | 'accepted'
+  | 'live'
+  | 'closed'
+
+export const LEAD_OPEN_STAGES: LeadStatus[] = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted']
+export const LEAD_PIPELINE_STAGES: Exclude<LeadStatus, 'closed'>[] = [
+  'lead',
+  'contacted',
+  'quoting',
+  'proposal_released',
+  'accepted',
+  'live',
+]
 
 export interface MotorDetails {
   make?: string
@@ -167,7 +193,8 @@ export interface Lead {
   customer_id: UUID
   conversation_id: UUID | null
   line: 'personal' | 'commercial'
-  product_category: string
+  /** Cover for this opportunity; null when captured before cover is known. */
+  product_category: string | null
   status: LeadStatus
   urgency: 'low' | 'medium' | 'high' | null
   qualification: LeadQualification
@@ -180,6 +207,11 @@ export interface Lead {
   /** Set on leads Russ found by research: the business and the run that found it. */
   prospect_id?: UUID | null
   source_job_id?: UUID | null
+  closed_reason?: string | null
+  closed_at_stage?: Exclude<LeadStatus, 'closed'> | null
+  closed_at?: ISODate | null
+  /** Linked in-force policy that marks this opportunity Live. */
+  policy_id?: UUID | null
 }
 
 export type ProspectStatus = 'active' | 'archived' | 'do_not_contact'
@@ -274,7 +306,7 @@ export interface Quote {
   lead_id: UUID | null
   customer_id: UUID
   product_category: string
-  risk_summary: { vehicle?: MotorDetails; risk?: RiskAssessment }
+  risk_summary: { vehicle?: MotorDetails; risk?: RiskAssessment; covers?: string[] }
   status: QuoteStatus
   proposal: ProposalPayload | null
   released_at: ISODate | null

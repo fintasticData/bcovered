@@ -20,27 +20,37 @@ import { lifeTools } from './life'
 import { personTools } from './person'
 import { routeTools } from './route'
 
-registerTools([
-  ...personTools,
-  ...routeTools,
-  ...adviserTools,
-  ...lifeTools,
-  ...controlsTools,
-  ...fundsTools,
-  ...specialistTools,
-  ...customerTools,
-  ...leadTools,
-  ...quoteTools,
-  ...approvalTools,
-  ...communicationTools,
-  ...jobTools,
-  ...businessTools,
-  ...riskTools,
-  ...twinTools,
-  ...assessmentTools,
-  ...coverageTools,
-  ...underwritingTools,
-  ...taskTools,
-])
+function boot() {
+  registerTools([
+    ...personTools,
+    ...routeTools,
+    ...adviserTools,
+    ...lifeTools,
+    ...controlsTools,
+    ...fundsTools,
+    ...specialistTools,
+    ...customerTools,
+    ...leadTools,
+    ...quoteTools,
+    ...approvalTools,
+    ...communicationTools,
+    ...jobTools,
+    ...businessTools,
+    ...riskTools,
+    ...twinTools,
+    ...assessmentTools,
+    ...coverageTools,
+    ...underwritingTools,
+    ...taskTools,
+  ])
+}
+
+boot()
+
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    boot()
+  })
+}
 
 export { invokeTool, listTools } from './registry'

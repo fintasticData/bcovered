@@ -46,11 +46,25 @@ const KIND_TONE: Record<UpdateKind, 'success' | 'info' | 'warning' | 'accent'> =
 const COLLAPSE_AFTER = 4
 
 const formatWhen = (iso: string) =>
-  new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' }).format(
-    new Date(iso),
-  )
+  new Intl.DateTimeFormat('en-ZA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Africa/Johannesburg',
+  }).format(new Date(iso))
 
-const postMatches = (q: string, p: UpdatePost) => !q || [p.title, p.body, ...(p.points ?? [])].join(' ').toLowerCase().includes(q)
+const formatWhenShort = (iso: string) =>
+  new Intl.DateTimeFormat('en-ZA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Africa/Johannesburg',
+  }).format(new Date(iso))
+
+const postMatches = (q: string, p: UpdatePost) =>
+  !q || [p.title, p.body, ...(p.points ?? [])].join(' ').toLowerCase().includes(q)
 
 export default function UpdatesPage() {
   const [area, setArea] = useState<UpdateArea | 'all'>('all')
@@ -70,51 +84,94 @@ export default function UpdatesPage() {
 
   return (
     <div className="bg-mist">
-      <div className="container-x py-10 sm:py-12">
+      <div className="container-x py-8 sm:py-12">
         <p className="eyebrow mb-1 flex items-center gap-1.5">
           <Newspaper className="h-3.5 w-3.5" /> System updates
         </p>
-        <h1 className="font-display text-3xl font-bold text-navy-900 sm:text-4xl">What’s new on InsureFlow AI</h1>
-        <p className="mt-2 max-w-2xl text-sm text-navy-600">
-          Every release as a thread, newest first, with a pinned overview of all services, products, features and capabilities in the current build.
+        <h1 className="font-display text-[1.75rem] leading-tight font-bold text-navy-900 sm:text-4xl">
+          What’s new on InsureFlow AI
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-navy-600">
+          Every release as a thread, newest first, with a pinned overview of all services, products, features and
+          capabilities in the current build.
         </p>
 
-        <label className="mt-6 flex max-w-xl items-center gap-2 rounded-full bg-white px-4 py-3 ring-1 ring-navy-800/10 focus-within:ring-brand-500">
+        <label className="mt-5 flex w-full max-w-xl items-center gap-2 rounded-2xl bg-white px-4 py-3.5 ring-1 ring-navy-800/10 focus-within:ring-2 focus-within:ring-brand-500 sm:mt-6 sm:rounded-full sm:py-3">
           <Search className="h-4 w-4 shrink-0 text-navy-500" />
           <span className="sr-only">Search updates</span>
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search updates, for example “approval” or “mobile”"
-            className="w-full bg-transparent text-base text-navy-900 outline-none placeholder:text-navy-500 sm:text-sm"
+            placeholder="Search updates…"
+            className="w-full min-w-0 bg-transparent text-base text-navy-900 outline-none placeholder:text-navy-500 sm:text-sm"
           />
         </label>
 
-        <div className="scroll-x -mx-5 mt-4 flex gap-2 px-5 sm:mx-0 sm:flex-wrap sm:px-0" role="tablist" aria-label="Filter by area">
-          <FilterChip active={area === 'all'} onClick={() => setArea('all')} label="Everything" />
-          {counts.map(({ area: a, count }) => (
-            <FilterChip key={a} active={area === a} onClick={() => setArea(a)} label={AREA_LABEL[a]} count={count} icon={AREA_ICON[a]} />
-          ))}
+        <div className="relative mt-4">
+          <div
+            className="scroll-x -mx-5 flex gap-2 px-5 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0"
+            role="tablist"
+            aria-label="Filter by area"
+          >
+            <FilterChip active={area === 'all'} onClick={() => setArea('all')} label="Everything" />
+            {counts.map(({ area: a, count }) => (
+              <FilterChip
+                key={a}
+                active={area === a}
+                onClick={() => setArea(a)}
+                label={AREA_LABEL[a]}
+                count={count}
+                icon={AREA_ICON[a]}
+              />
+            ))}
+          </div>
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-mist to-transparent sm:hidden"
+            aria-hidden
+          />
         </div>
+        <p className="mt-1.5 text-[11px] text-navy-500 sm:hidden">Swipe filters sideways for more areas</p>
 
         <details className="panel mt-4 lg:hidden">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-navy-900">Jump to a release ({releases.length})</summary>
-          <ol className="space-y-2 border-t border-navy-800/10 px-4 py-3">
+          <summary className="cursor-pointer px-4 py-3.5 text-sm font-semibold text-navy-900">
+            Jump to a release ({releases.length})
+          </summary>
+          <ol className="space-y-1 border-t border-navy-800/10 px-2 py-2">
             {releases.map((r) => (
               <li key={r.id}>
-                <a href={`#${r.id}`} className="flex gap-2 text-sm">
-                  <span className="shrink-0 rounded bg-navy-50 px-1.5 py-0.5 text-[11px] font-semibold text-navy-700">{r.version}</span>
-                  <span className="font-medium text-navy-900">{r.title}</span>
+                <a
+                  href={`#${r.id}`}
+                  className="flex flex-col gap-1 rounded-xl px-3 py-3 active:bg-navy-50 sm:flex-row sm:items-start sm:gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="shrink-0 rounded bg-navy-50 px-1.5 py-0.5 text-[11px] font-semibold text-navy-700">
+                      {r.version}
+                    </span>
+                    <span className="text-[11px] text-navy-500">{formatWhenShort(r.date)}</span>
+                  </span>
+                  <span className="text-sm leading-snug font-medium text-navy-900">{r.title}</span>
                 </a>
               </li>
             ))}
           </ol>
+          <div className="flex flex-col gap-2 border-t border-navy-800/10 px-4 py-3 text-sm">
+            <p className="font-semibold text-navy-900">Questions about a change?</p>
+            <Link to="/faq" className="font-semibold text-brand-600">
+              FAQ
+            </Link>
+            <Link to="/help" className="font-semibold text-brand-600">
+              Help centre
+            </Link>
+            <Link to="/demo" className="font-semibold text-brand-600">
+              Try it in Demo Studio
+            </Link>
+          </div>
         </details>
 
-        <div className="mt-6 grid grid-cols-1 gap-8 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="min-w-0 space-y-6">
-            {threads.length === 0 && <div className="panel p-6 text-sm text-navy-600">No updates match your filters.</div>}
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
+          <div className="min-w-0 space-y-5 sm:space-y-6">
+            {threads.length === 0 && <div className="panel p-5 text-sm text-navy-600 sm:p-6">No updates match your filters.</div>}
             {threads.map((t) => (
               <Thread key={t.id} thread={t} filtered={area !== 'all' || Boolean(q)} />
             ))}
@@ -132,7 +189,9 @@ export default function UpdatesPage() {
                           <span className="rounded bg-navy-50 px-1.5 py-0.5 font-semibold text-navy-700">{r.version}</span>
                           {formatWhen(r.date)}
                         </span>
-                        <span className="mt-0.5 block text-sm leading-snug font-medium text-navy-900 group-hover:text-brand-600">{r.title}</span>
+                        <span className="mt-0.5 block text-sm leading-snug font-medium text-navy-900 group-hover:text-brand-600">
+                          {r.title}
+                        </span>
                       </a>
                     </li>
                   ))}
@@ -141,9 +200,15 @@ export default function UpdatesPage() {
               <div className="panel p-4 text-sm">
                 <p className="font-semibold text-navy-900">Questions about a change?</p>
                 <div className="mt-2 flex flex-col gap-1.5">
-                  <Link to="/faq" className="font-semibold text-brand-600">FAQ</Link>
-                  <Link to="/help" className="font-semibold text-brand-600">Help centre</Link>
-                  <Link to="/demo" className="font-semibold text-brand-600">Try it in Demo Studio</Link>
+                  <Link to="/faq" className="font-semibold text-brand-600">
+                    FAQ
+                  </Link>
+                  <Link to="/help" className="font-semibold text-brand-600">
+                    Help centre
+                  </Link>
+                  <Link to="/demo" className="font-semibold text-brand-600">
+                    Try it in Demo Studio
+                  </Link>
                 </div>
               </div>
             </div>
@@ -154,7 +219,19 @@ export default function UpdatesPage() {
   )
 }
 
-function FilterChip({ active, onClick, label, count, icon: Icon }: { active: boolean; onClick: () => void; label: string; count?: number; icon?: LucideIcon }) {
+function FilterChip({
+  active,
+  onClick,
+  label,
+  count,
+  icon: Icon,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count?: number
+  icon?: LucideIcon
+}) {
   return (
     <button
       type="button"
@@ -165,13 +242,15 @@ function FilterChip({ active, onClick, label, count, icon: Icon }: { active: boo
         e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
       }}
       className={cn(
-        'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold ring-1 transition',
+        'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2.5 text-xs font-semibold ring-1 transition sm:py-2',
         active ? 'bg-brand-800 text-white ring-brand-800' : 'bg-white text-navy-700 ring-navy-800/10 hover:text-brand-700',
       )}
     >
       {Icon && <Icon className="h-3.5 w-3.5" />}
       {label}
-      {count !== undefined && <span className={cn('rounded-full px-1.5 text-[10px]', active ? 'bg-white/20' : 'bg-navy-50')}>{count}</span>}
+      {count !== undefined && (
+        <span className={cn('rounded-full px-1.5 text-[10px]', active ? 'bg-white/20' : 'bg-navy-50')}>{count}</span>
+      )}
     </button>
   )
 }
@@ -183,14 +262,18 @@ function Thread({ thread, filtered }: { thread: UpdateThread; filtered: boolean 
   const hidden = thread.posts.length - posts.length
 
   return (
-    <article id={thread.id} className={cn('panel scroll-mt-24 overflow-hidden', thread.pinned && 'border-brand-500/40')}>
+    <article id={thread.id} className={cn('panel scroll-mt-28 overflow-hidden sm:scroll-mt-24', thread.pinned && 'border-brand-500/40')}>
       <header className="flex gap-3 p-4 sm:p-5">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-800 text-xs font-bold text-white">IF</span>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-800 text-xs font-bold text-white">
+          IF
+        </span>
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-navy-500">
             <span className="font-semibold text-navy-900">InsureFlow product team</span>
-            <span>·</span>
-            <time dateTime={thread.date}>{formatWhen(thread.date)}</time>
+            <span className="hidden sm:inline">·</span>
+            <time dateTime={thread.date} className="w-full sm:w-auto">
+              {formatWhen(thread.date)}
+            </time>
             <span className="rounded bg-navy-50 px-1.5 py-0.5 font-semibold text-navy-700">{thread.version}</span>
             {thread.pinned && (
               <Badge tone="accent">
@@ -198,8 +281,8 @@ function Thread({ thread, filtered }: { thread: UpdateThread; filtered: boolean 
               </Badge>
             )}
           </p>
-          <h2 className="mt-1 text-lg leading-snug font-semibold text-navy-900">{thread.title}</h2>
-          <p className="mt-1 text-sm text-navy-700">{thread.summary}</p>
+          <h2 className="mt-1.5 text-base leading-snug font-semibold text-navy-900 sm:mt-1 sm:text-lg">{thread.title}</h2>
+          <p className="mt-1 text-sm leading-relaxed text-navy-700">{thread.summary}</p>
           <p className="mt-2 text-xs text-navy-500">
             {thread.posts.length} {thread.posts.length === 1 ? 'update' : 'updates'} in this thread
           </p>
@@ -207,17 +290,17 @@ function Thread({ thread, filtered }: { thread: UpdateThread; filtered: boolean 
       </header>
 
       {posts.length > 0 && (
-        <ol className="border-t border-navy-800/10 bg-mist/60 px-4 py-4 sm:px-5">
+        <ol className="border-t border-navy-800/10 bg-mist/60 px-3 py-4 sm:px-5">
           {posts.map((p, i) => {
             const Icon = AREA_ICON[p.area]
             const last = i === posts.length - 1 && hidden === 0
             return (
-              <li key={p.title} className="relative flex gap-3 pb-5 last:pb-0">
-                {!last && <span className="absolute top-9 bottom-0 left-[17px] w-px bg-navy-800/15" aria-hidden />}
-                <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-brand-600 ring-1 ring-navy-800/10">
-                  <Icon className="h-4 w-4" />
+              <li key={p.title} className="relative flex gap-2.5 pb-5 last:pb-0 sm:gap-3">
+                {!last && <span className="absolute top-9 bottom-0 left-[15px] w-px bg-navy-800/15 sm:left-[17px]" aria-hidden />}
+                <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-brand-600 ring-1 ring-navy-800/10 sm:h-9 sm:w-9">
+                  <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </span>
-                <div className="min-w-0 flex-1 rounded-xl bg-white p-3.5 ring-1 ring-navy-800/5">
+                <div className="min-w-0 flex-1 rounded-xl bg-white p-3 ring-1 ring-navy-800/5 sm:p-3.5">
                   <p className="flex flex-wrap items-center gap-1.5">
                     <Badge tone={KIND_TONE[p.kind]}>{KIND_LABEL[p.kind]}</Badge>
                     <span className="text-[11px] font-medium text-navy-500">{AREA_LABEL[p.area]}</span>
@@ -225,19 +308,23 @@ function Thread({ thread, filtered }: { thread: UpdateThread; filtered: boolean 
                   <h3 className="mt-1.5 text-sm font-semibold text-navy-900">{p.title}</h3>
                   <p className="mt-1 text-sm leading-relaxed text-navy-700">{p.body}</p>
                   {p.points && (
-                    <ul className="mt-2 space-y-1 text-sm text-navy-700">
+                    <ul className="mt-2 space-y-1.5 text-sm text-navy-700">
                       {p.points.map((pt) => (
                         <li key={pt} className="flex gap-2">
                           <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
-                          {pt}
+                          <span className="min-w-0">{pt}</span>
                         </li>
                       ))}
                     </ul>
                   )}
                   {p.links && (
-                    <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                    <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
                       {p.links.map((l) => (
-                        <Link key={l.to} to={l.to} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-800">
+                        <Link
+                          key={l.to}
+                          to={l.to}
+                          className="inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-800 sm:min-h-0"
+                        >
                           {l.label} <ArrowRight className="h-3 w-3" />
                         </Link>
                       ))}
@@ -248,9 +335,13 @@ function Thread({ thread, filtered }: { thread: UpdateThread; filtered: boolean 
             )
           })}
           {hidden > 0 && (
-            <li className="flex gap-3 pt-1">
-              <span className="w-9 shrink-0" />
-              <button type="button" onClick={() => setExpanded(true)} className="cursor-pointer text-sm font-semibold text-brand-600 hover:text-brand-800">
+            <li className="flex gap-2.5 pt-1 sm:gap-3">
+              <span className="w-8 shrink-0 sm:w-9" />
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="min-h-10 cursor-pointer text-left text-sm font-semibold text-brand-600 hover:text-brand-800"
+              >
                 Show {hidden} more in this thread
               </button>
             </li>

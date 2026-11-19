@@ -3,9 +3,12 @@
 // Packages and terms are placeholders until B-Covered agrees its commercial model.
 import type {
   BrokerageType,
+  FaisAppointmentStatus,
+  FaisCapacity,
   MemberRole,
   OnboardingRequirement,
   OnboardingSection,
+  OrganisationMembership,
   PlatformRole,
   ProductModule,
 } from '../db/onboardingSchema'
@@ -58,7 +61,7 @@ export interface FieldDef {
   format?: 'email' | 'phone' | 'company_registration' | 'fsp_number'
 }
 
-const LICENCE_CATEGORIES = [
+export const LICENCE_CATEGORIES = [
   { value: 'st_personal', label: 'Short-term personal lines' },
   { value: 'st_commercial', label: 'Short-term commercial lines' },
   { value: 'lt_a', label: 'Long-term category A' },
@@ -118,7 +121,14 @@ const REQUIREMENT_SEEDS: RequirementSeed[] = [
   { key: 'org_contacts', section: 'organisation', kind: 'field', label: 'Primary and finance contacts' },
   { key: 'profile_fsp', section: 'profile', kind: 'field', label: 'FSP number and declared licence categories', guidance: 'Declared details are checked by B-Covered staff; approval is not regulatory authorisation.' },
   { key: 'profile_key_individual', section: 'profile', kind: 'field', label: 'Key individual and compliance officer' },
-  { key: 'team_owner', section: 'team', kind: 'task', label: 'Owner and at least one representative on the team', guidance: 'Invite a representative, or the owner can act as one in a sole-proprietor brokerage.' },
+  {
+    key: 'team_owner',
+    section: 'team',
+    kind: 'task',
+    label: 'Owner and at least one FAIS-appointed representative on the team',
+    guidance:
+      'Invite a representative with an active FAIS appointment (capacity and authorised categories), or the owner can act as key individual / representative in a sole-proprietor brokerage.',
+  },
   { key: 'products_scope', section: 'products', kind: 'field', label: 'Product modules you intend to use' },
   { key: 'insurer_relationships', section: 'insurer_access', kind: 'field', label: 'Insurer relationships and intermediary codes', guidance: 'Each insurer is configured and enabled separately after activation.', is_required: false },
   { key: 'doc_cipc', section: 'documents', kind: 'document', label: 'Company registration certificate (CIPC)' },
@@ -181,6 +191,32 @@ export const ROLE_LABEL: Record<MemberRole, string> = {
   read_only: 'Read-only user',
   sub_broker: 'Sub-broker',
   agent: 'Agent',
+}
+
+export const FAIS_CAPACITY_LABEL: Record<FaisCapacity, string> = {
+  key_individual: 'Key individual',
+  representative: 'Representative',
+  juristic_representative: 'Juristic representative',
+  non_advice: 'Non-advice staff',
+}
+
+export const FAIS_STATUS_LABEL: Record<FaisAppointmentStatus, string> = {
+  active: 'Active appointment',
+  suspended: 'Suspended',
+  terminated: 'Terminated',
+}
+
+/** Default FAIS appointment fields when a membership is created for a role. Categories start empty until set. */
+export function faisDefaultsForRole(
+  role: MemberRole,
+): Pick<OrganisationMembership, 'fais_capacity' | 'fais_status' | 'dofa_date' | 'authorised_licence_categories'> {
+  if (role === 'brokerage_owner') {
+    return { fais_capacity: 'key_individual', fais_status: 'active', dofa_date: null, authorised_licence_categories: [] }
+  }
+  if (role === 'representative' || role === 'agent' || role === 'sub_broker') {
+    return { fais_capacity: 'representative', fais_status: 'active', dofa_date: null, authorised_licence_categories: [] }
+  }
+  return { fais_capacity: 'non_advice', fais_status: 'active', dofa_date: null, authorised_licence_categories: [] }
 }
 
 export const PLATFORM_ROLE_LABEL: Record<PlatformRole, string> = {

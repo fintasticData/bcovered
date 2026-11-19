@@ -34,7 +34,7 @@ export default function SystemsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="Systems" />}
+      {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="Systems" showQueue={false} />}
       <div className={cn('grid min-h-0 flex-1 grid-cols-1 gap-4 p-3 sm:p-4', !expanded && 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
         {!expanded && (
           <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>

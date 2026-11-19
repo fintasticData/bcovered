@@ -26,6 +26,8 @@ export interface SalesProfile {
   name?: string
   email?: string
   membership_role?: string | null
+  /** From platform_staff when the Auth user is B-Covered staff (e.g. creator / platform_admin). */
+  platform_role?: 'platform_admin' | 'onboarding_reviewer' | 'platform_read_only' | null
   book_restricted?: boolean
   can_manage_team?: boolean
   brokerage?: { id: string; name: string; lifecycle_status: string; live_available: boolean }
@@ -166,6 +168,8 @@ export interface OfferMessage {
   email: string | null
   email_subject: string
   category: DataCategory
+  brokerage?: string | null
+  logo_url?: string | null
 }
 
 /** A saved receipt (or a question back) from a sales write. */
@@ -192,7 +196,7 @@ export async function salesRpc<T>(fn: string, args: Record<string, unknown>, cat
 export const referralApi = {
   resolve: (code: string) =>
     salesRpc<{
-      valid: boolean; code: string; reason?: string; referrer_name?: string; role_label?: string; brokerage?: string; live_accepting?: boolean
+      valid: boolean; code: string; reason?: string; referrer_name?: string; role_label?: string; brokerage?: string; logo_url?: string | null; live_accepting?: boolean
       kind?: 'member' | 'outlet'; outlet_label?: string; outlet_name?: string; partner_name?: string; service_area?: string | null; category?: DataCategory
     }>('referral_resolve', { p_code: code }, null),
   submit: (a: { code: string; first_names: string; surname: string; phone: string; email: string; interest: string; message: string; consent: boolean; client_key: string; category: DataCategory }) =>
@@ -297,7 +301,11 @@ export function useFunnel(enabled = true) {
 /** Refreshes every database-backed view after a sales write, whether it came from a button or a copilot. */
 export function useRefreshSales() {
   const qc = useQueryClient()
-  return () => qc.invalidateQueries({ queryKey: ['supabase'] })
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['supabase'] })
+    // Book RPCs write Postgres directly; re-hydrate the in-browser Repo so People / Life screens match.
+    void import('@/lib/supabase/sync').then(({ supabaseSync }) => supabaseSync.refresh())
+  }
 }
 
 /** A sales write bound to the active category, refreshing the book when it succeeds. */
@@ -310,5 +318,11 @@ export function useSalesMutation<A, R>(fn: (category: DataCategory, args: A) => 
 export const referralUrl = (path: string) => `${window.location.origin}${path}`
 /** Sample links create Sample enquiries, so a brokerage can demonstrate the journey before it is activated. */
 export const referralPathFor = (code: string, category: DataCategory) => `/r/${code}${category === 'sample' ? '?mode=sample' : ''}`
-export const shareText = (m: Pick<MemberRef, 'name' | 'referral_path'>) =>
-  `Hi, I'm ${m.name.split(' ')[0]}. Tell me what cover you need and I'll come back to you with options: ${referralUrl(m.referral_path)}`
+export const shareText = (
+  m: Pick<MemberRef, 'name' | 'referral_path'>,
+  brokerage?: { name?: string | null; logo_url?: string | null },
+) => {
+  const from = brokerage?.name?.trim() ? ` from ${brokerage.name.trim()}` : ''
+  const logo = brokerage?.logo_url ? `\n${brokerage.logo_url}` : ''
+  return `Hi, I'm ${m.name.split(' ')[0]}${from}. Tell me what cover you need and I'll come back to you with options: ${referralUrl(m.referral_path)}${logo}`
+}

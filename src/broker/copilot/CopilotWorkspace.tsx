@@ -74,7 +74,7 @@ function useLaunchContext(ctx: string | null): TurnContext | null {
 
 export function CopilotWorkspace() {
   const [params, setParams] = useSearchParams()
-  const copilot: CopilotId = COPILOT_IDS.includes(params.get('copilot') as CopilotId) ? (params.get('copilot') as CopilotId) : 'ar'
+  const copilot: CopilotId = COPILOT_IDS.includes(params.get('copilot') as CopilotId) ? (params.get('copilot') as CopilotId) : 'ava'
   const workflows = params.get('mode') === 'workflows' || params.has('lens')
   const category = useDataCategory()
   const ctxParam = params.get('ctx')
@@ -172,7 +172,7 @@ export function CopilotWorkspace() {
         </div>
       ) : (
         <>
-          {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="Record" />}
+          {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="Record" showQueue={false} />}
           <div className={cn('grid min-h-0 flex-1 gap-4 p-3 sm:p-4', 'grid-cols-1', !expanded && 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
             {!expanded && (
               <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>

@@ -68,13 +68,36 @@ export function OutletReceipt({ r }: { r: SetupReceipt }) {
 }
 
 /** One step: franchisee + outlet + routing + manager. With a partner preset it adds another outlet to that franchisee. */
-export function SetupFranchiseDialog({ partner, onClose, onDone }: { partner?: { id: string; name: string } | null; onClose: () => void; onDone: (outletId: string) => void }) {
+export function SetupFranchiseDialog({
+  partner,
+  defaultPartnerName,
+  customerId,
+  onClose,
+  onDone,
+}: {
+  partner?: { id: string; name: string } | null
+  /** Prefill when adding the franchisee role from an existing business record. */
+  defaultPartnerName?: string
+  /** Link the franchisee role to this commercial customer account. */
+  customerId?: string
+  onClose: () => void
+  onDone: (outletId: string) => void
+}) {
   const category = useDataCategory()
   const team = useTeam(true)
   const members = (team.data ?? []).filter((m) => m.status !== 'suspended')
   const me = members.find((m) => m.is_me) ?? null
   const [key] = useState(newKey)
-  const [f, setF] = useState({ partner_name: '', outlet_name: '', service_area: '', receiving: '', sales_mode: 'refer' as SalesMode, manager_name: '', manager_email: '', manager_phone: '' })
+  const [f, setF] = useState({
+    partner_name: defaultPartnerName ?? '',
+    outlet_name: '',
+    service_area: '',
+    receiving: '',
+    sales_mode: 'refer' as SalesMode,
+    manager_name: '',
+    manager_email: '',
+    manager_phone: '',
+  })
   const receiving = f.receiving || me?.member_id || members[0]?.member_id || ''
   const save = useFranchiseMutation(category, franchiseApi.setup)
   const r = save.data
@@ -85,7 +108,8 @@ export function SetupFranchiseDialog({ partner, onClose, onDone }: { partner?: {
     save.mutate({
       partner_name: partner ? undefined : f.partner_name.trim(), partner_id: partner?.id, outlet_name: f.outlet_name.trim() || undefined,
       service_area: f.service_area.trim() || undefined, receiving_member_id: receiving, sales_mode: f.sales_mode,
-      manager_name: f.manager_name.trim() || undefined, manager_email: f.manager_email.trim() || undefined, manager_phone: f.manager_phone.trim() || undefined, key,
+      manager_name: f.manager_name.trim() || undefined, manager_email: f.manager_email.trim() || undefined, manager_phone: f.manager_phone.trim() || undefined,
+      customer_id: customerId, key,
     })
   }
   const title = partner ? `Add an outlet to ${partner.name}` : 'Set up a franchisee'

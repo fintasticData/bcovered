@@ -200,17 +200,25 @@ export function onboardingSeed(now: number, refs: Refs): OnboardingSeed {
     user(U.highveldRep, O.highveld, 'neo.sebego@highveldadvisory.example.demo', 'Neo Sebego', 'broker'),
   ]
 
+  const ADVICE_CATS = ['st_personal', 'st_commercial', 'lt_b1']
   let mid = 500
-  const member = (tenant_id: string, user_id: string, role: MemberRole, invited_by: string | null = null): OrganisationMembership => ({
-    id: ob(mid++),
-    tenant_id,
-    user_id,
-    role,
-    status: 'active',
-    invited_by,
-    created_at: ts,
-    updated_at: ts,
-  })
+  const member = (tenant_id: string, user_id: string, role: MemberRole, invited_by: string | null = null): OrganisationMembership => {
+    const advice = role === 'brokerage_owner' || role === 'representative' || role === 'agent' || role === 'sub_broker'
+    return {
+      id: ob(mid++),
+      tenant_id,
+      user_id,
+      role,
+      status: 'active',
+      invited_by,
+      fais_capacity: role === 'brokerage_owner' ? 'key_individual' : advice ? 'representative' : 'non_advice',
+      fais_status: 'active',
+      dofa_date: '2021-06-01',
+      authorised_licence_categories: advice ? [...ADVICE_CATS] : [],
+      created_at: ts,
+      updated_at: ts,
+    }
+  }
   const organisation_memberships: OrganisationMembership[] = [
     member(refs.bcoveredTenant, refs.bcoveredOwner, 'brokerage_owner'),
     ...refs.bcoveredReps.map((id) => member(refs.bcoveredTenant, id, 'representative', refs.bcoveredOwner)),
@@ -298,7 +306,7 @@ export function onboardingSeed(now: number, refs: Refs): OnboardingSeed {
       conversation_id: null,
       line: 'personal',
       product_category: 'motor',
-      status: 'qualified',
+      status: 'contacted',
       urgency: 'medium',
       qualification: {
         vehicle: { make: 'Toyota', model: 'Corolla', year: 2022, value: 320000, condition: 'used', usage: 'private', parking: 'garage', tracker: true, driver_age: 31, licence_years: 9, claims_last_3_years: 0, cover_type: 'comprehensive' },
@@ -309,6 +317,10 @@ export function onboardingSeed(now: number, refs: Refs): OnboardingSeed {
       created_by: U.acaciaRep,
       created_at: iso(3),
       updated_at: iso(3),
+      closed_reason: null,
+      closed_at_stage: null,
+      closed_at: null,
+      policy_id: null,
     },
   ]
 

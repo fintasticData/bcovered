@@ -195,8 +195,8 @@ export default function SignInPage() {
     zone === 'broker'
       ? 'Broker zone sign-in uses the live database. After you authenticate you land in My Area with your BLP# and workspace shortcuts.'
       : zone === 'client'
-        ? 'Client zone create/sign-in checks Supabase Auth. After you authenticate Ava welcomes you in My Area.'
-        : 'Sign in against the live database. You land in My Area with Ava.'
+        ? 'Client zone create/sign-in checks Supabase Auth. After you authenticate Russ welcomes you in My Area.'
+        : 'Sign in against the live database. You land in My Area with Russ.'
   return (
     <div className="container-x grid min-h-[70vh] place-items-center py-12">
       <div className="card w-full max-w-md p-8">

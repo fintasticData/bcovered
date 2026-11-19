@@ -24,6 +24,7 @@ export const CONTROLS_HUB: Hub = {
 export const SETTINGS_HUB: Hub = {
   label: 'Brokerage settings',
   tabs: [
+    { to: '/broker/settings/profile', label: 'Brokerage profile' },
     { to: '/broker/settings/team', label: 'Team' },
     { to: '/broker/settings/insurers', label: 'Insurer access' },
     { to: '/broker/imports/client-book', label: 'Client-book import' },

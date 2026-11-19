@@ -8,7 +8,21 @@ import { PLATFORM_ROLE_LABEL, ROLE_LABEL } from '@/server/onboarding/config'
 import { humanise } from './StatusBadge'
 import { cn } from '@/lib/utils'
 
-export function RoleSwitcher({ dark = false, align = 'right', compact = false }: { dark?: boolean; align?: 'left' | 'right'; compact?: boolean }) {
+type MenuPlacement = 'below' | 'above' | 'aside'
+
+export function RoleSwitcher({
+  dark = false,
+  align = 'right',
+  compact = false,
+  menuPlacement = 'below',
+  fullWidth = false,
+}: {
+  dark?: boolean
+  align?: 'left' | 'right'
+  compact?: boolean
+  menuPlacement?: MenuPlacement
+  fullWidth?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const { data: identities = [] } = useIdentities()
@@ -44,21 +58,21 @@ export function RoleSwitcher({ dark = false, align = 'right', compact = false }:
   const current = me ? `${me.full_name} · ${roleLabel}` : 'Public visitor'
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={cn('relative', fullWidth && 'w-full')} ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
-          'flex max-w-[11rem] cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition sm:py-1.5',
-          compact ? 'xl:max-w-[15rem]' : 'sm:max-w-[15rem]',
+          'flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition sm:py-1.5',
+          fullWidth ? 'w-full max-w-none' : compact ? 'max-w-[11rem] xl:max-w-[15rem]' : 'max-w-[11rem] sm:max-w-[15rem]',
           dark ? 'border-white/20 bg-white/10 text-white hover:bg-white/15' : 'border-navy-800/15 bg-white text-navy-800 hover:border-navy-800/40',
         )}
       >
         <UserCircle2 className="h-4 w-4 shrink-0" />
-        <span className="truncate">
-          <span className={cn('hidden opacity-60', compact ? 'xl:inline' : 'sm:inline')}>Demo as </span>
+        <span className="min-w-0 flex-1 truncate text-left">
+          <span className={cn('opacity-60', fullWidth ? 'inline' : compact ? 'hidden xl:inline' : 'hidden sm:inline')}>Signed in as </span>
           {current}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -67,12 +81,13 @@ export function RoleSwitcher({ dark = false, align = 'right', compact = false }:
         <div
           role="menu"
           className={cn(
-            'panel absolute top-11 z-50 max-h-[70dvh] w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-2 shadow-xl animate-rise',
-            align === 'right' ? 'right-0' : 'left-0',
+            'panel z-50 max-h-[70dvh] w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-2 shadow-xl animate-rise',
+            menuPlacement === 'aside' ? 'absolute bottom-0 left-full ml-2' : menuPlacement === 'above' ? 'absolute bottom-full left-0 mb-2' : 'absolute top-11',
+            menuPlacement === 'below' && (align === 'right' ? 'right-0' : 'left-0'),
           )}
         >
           <p className="px-2 pb-2 pt-1 text-[11px] leading-snug text-navy-600">
-            Demo identities for the MVP. Client zone → Johan. Broker zone → Thabo.
+            Switch identity for the MVP. Client zone → Johan. Broker zone → Thabo.
           </p>
           {me && (
             <button

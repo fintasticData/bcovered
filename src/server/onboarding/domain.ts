@@ -113,10 +113,16 @@ export function requirementSatisfied(repo: Repo, app: BrokerageApplication, req:
     case 'team_owner': {
       const members = repo.list('organisation_memberships', (m) => m.status === 'active')
       const owner = members.some((m) => m.role === 'brokerage_owner')
-      const rep =
-        members.some((m) => m.role === 'representative') ||
+      const pendingRepInvite =
         repo.list('brokerage_invitations', (i) => i.role === 'representative' && !i.accepted_at && !i.revoked_at && i.expires_at > new Date().toISOString()).length > 0
-      return owner && (rep || app.brokerage_type === 'sole_proprietor')
+      const appointed = members.some((m) => {
+        if (m.fais_status !== 'active') return false
+        if (!(m.authorised_licence_categories ?? []).length) return false
+        if (m.fais_capacity === 'representative' || m.fais_capacity === 'juristic_representative') return true
+        // Sole proprietor: owner key individual with authorised categories may stand in for a separate representative.
+        return app.brokerage_type === 'sole_proprietor' && m.role === 'brokerage_owner' && m.fais_capacity === 'key_individual'
+      })
+      return owner && (appointed || pendingRepInvite)
     }
     case 'commercial_terms':
       return repo.list('organisation_commercial_terms', (t) => t.status === 'agreed').length > 0
@@ -306,11 +312,17 @@ export function activationChecklist(repo: Repo, app: BrokerageApplication): Acti
   const reqs = new Map(repo.list('onboarding_requirements').map((r) => [r.key, r]))
   const items = repo.list('onboarding_items', (i) => i.application_id === app.id)
   const members = repo.list('organisation_memberships', (m) => m.status === 'active')
+  const faisAppointed = members.some((m) => {
+    if (m.fais_status !== 'active' || !(m.authorised_licence_categories ?? []).length) return false
+    if (m.fais_capacity === 'representative' || m.fais_capacity === 'juristic_representative') return true
+    return app.brokerage_type === 'sole_proprietor' && m.role === 'brokerage_owner' && m.fais_capacity === 'key_individual'
+  })
   return [
     { label: 'Application approved by a B-Covered reviewer', ok: app.status === 'approved' || app.status === 'active' },
     { label: 'Every required item accepted or waived', ok: items.every((i) => !reqs.get(i.requirement_key)?.is_required || i.status === 'accepted' || i.status === 'waived') },
     { label: 'Commercial terms agreed', ok: repo.list('organisation_commercial_terms', (t) => t.status === 'agreed').length > 0 },
     { label: 'An active brokerage owner', ok: members.some((m) => m.role === 'brokerage_owner') },
+    { label: 'At least one FAIS-appointed representative (or sole-prop owner)', ok: faisAppointed },
     { label: 'At least one product module declared', ok: app.declared_modules.length > 0 },
   ]
 }

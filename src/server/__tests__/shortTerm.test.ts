@@ -21,7 +21,7 @@ describe('personal lines', () => {
     const book = getPersonalLines(broker)
     expect(book.products.map((p) => p.key)).toEqual(['car', 'home', 'contents', 'motorbike', 'valuables'])
     const personalLeads = new Repo(TENANT_ID).list('leads', (l) => l.line === 'personal')
-    expect(book.products.reduce((s, p) => s + p.leads, 0)).toBe(personalLeads.filter((l) => productForCategory(l.product_category)).length)
+    expect(book.products.reduce((s, p) => s + p.leads, 0)).toBe(personalLeads.filter((l) => l.product_category && productForCategory(l.product_category)).length)
     expect(book.policies.every((r) => r.policy.line === 'short_term_personal')).toBe(true)
   })
 

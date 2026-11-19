@@ -153,7 +153,17 @@ function createSample(s: SampleBrokerage, orgId: string, i: number) {
   })
   const person = (id: string, p: { name: string; email: string }, role: MemberRole) => {
     repo.insert('app_users', { id, email: p.email, full_name: p.name, role: role === 'brokerage_owner' ? 'manager' : 'broker', customer_id: null, active_organisation_id: orgId })
-    repo.insert('organisation_memberships', { user_id: id, role, status: 'active', invited_by: role === 'brokerage_owner' ? null : ownerId })
+    const advice = role === 'brokerage_owner' || role === 'representative'
+    repo.insert('organisation_memberships', {
+      user_id: id,
+      role,
+      status: 'active',
+      invited_by: role === 'brokerage_owner' ? null : ownerId,
+      fais_capacity: role === 'brokerage_owner' ? 'key_individual' : 'representative',
+      fais_status: 'active',
+      dofa_date: null,
+      authorised_licence_categories: advice ? ['st_personal', 'st_commercial'] : [],
+    })
   }
   person(ownerId, s.owner, 'brokerage_owner')
   if (s.rep) person(repId, s.rep, 'representative')

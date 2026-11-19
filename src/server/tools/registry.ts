@@ -39,7 +39,11 @@ export function defineTool<S extends z.ZodType, O>(def: ToolDef<S, O>): ToolDef<
   return def
 }
 
-const registry = new Map<string, ToolDef>()
+/** Survive Vite HMR: a fresh module instance must keep the same Map, or invokeTool sees an empty registry. */
+const registry: Map<string, ToolDef> = (() => {
+  const g = globalThis as typeof globalThis & { __bcoveredToolRegistry?: Map<string, ToolDef> }
+  return (g.__bcoveredToolRegistry ??= new Map())
+})()
 
 export function registerTools(defs: ToolDef[]) {
   defs.forEach((d) => registry.set(d.name, d))

@@ -54,7 +54,16 @@ export interface OutletStaff {
 export interface FranchiseList {
   category: DataCategory
   can_manage: boolean
-  partners: Array<{ id: string; name: string; status: string; created_at: string; outlets: Array<Outlet & { staff: number; enquiries: number; sold: number }> }>
+  partners: Array<{
+    id: string
+    name: string
+    status: string
+    created_at: string
+    customer_id?: string | null
+    profile_id?: string | null
+    open_path?: string | null
+    outlets: Array<Outlet & { staff: number; enquiries: number; sold: number }>
+  }>
 }
 
 export interface OutletDetail extends Outlet {
@@ -189,13 +198,13 @@ export const franchiseApi = {
   attribution: (c: DataCategory, personId: string) => salesRpc<{ enquiries: EnquiryAttribution[] }>('franchise_client_attribution', { p_person_id: personId }, c),
   setup: (c: DataCategory, a: {
     partner_name?: string; partner_id?: string; outlet_name?: string; service_area?: string; receiving_member_id?: string; sales_mode?: SalesMode
-    manager_name?: string; manager_email?: string; manager_phone?: string; key: string
+    manager_name?: string; manager_email?: string; manager_phone?: string; customer_id?: string; key: string
   }) =>
     salesRpc<SetupReceipt>('franchise_setup', {
       p_partner_name: a.partner_name || null, p_idempotency_key: a.key, p_outlet_name: a.outlet_name || null, p_service_area: a.service_area || null,
       p_receiving_member_id: a.receiving_member_id || null, p_receiving_member_name: null, p_sales_mode: a.sales_mode ?? null,
       p_manager_name: a.manager_name || null, p_manager_email: a.manager_email || null, p_manager_phone: a.manager_phone || null,
-      p_partner_id: a.partner_id || null, p_copilot: 'workspace',
+      p_partner_id: a.partner_id || null, p_copilot: 'ava', p_customer_id: a.customer_id || null,
     }, c),
   updateOutlet: (c: DataCategory, a: { outlet_id: string; name?: string; service_area?: string; receiving_member_id?: string; sales_mode?: SalesMode; status?: 'active' | 'paused'; key: string }) =>
     salesRpc<SetupReceipt>('franchise_update_outlet', {

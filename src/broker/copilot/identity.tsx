@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 
 export const COPILOTS: Record<CopilotId, { name: string; role: string; icon: typeof Sparkles; tone: string; chip: string }> = {
   ar: { name: 'AR', role: 'Ava and Russ together: routes each part of a request', icon: Sparkles, tone: 'bg-navy-800 text-white', chip: 'border-navy-800/20 bg-navy-50 text-navy-800' },
-  ava: { name: 'Ava', role: 'People: personal clients, motor, home, contents and individual life', icon: UserRound, tone: 'bg-personal-500 text-white', chip: 'border-personal-200 bg-personal-50 text-personal-700' },
-  russ: { name: 'Russ', role: 'Business: business accounts, commercial cover and group schemes', icon: Building2, tone: 'bg-business-500 text-white', chip: 'border-business-200 bg-business-50 text-business-700' },
+  ava: { name: 'Ava', role: 'Main broker assistant: intake, capture, linking; delegates research and quotes to Russ', icon: UserRound, tone: 'bg-personal-500 text-white', chip: 'border-personal-200 bg-personal-50 text-personal-700' },
+  russ: { name: 'Russ', role: 'Sub-agent: business accounts, commercial cover, research, quotes and follow-ups', icon: Building2, tone: 'bg-business-500 text-white', chip: 'border-business-200 bg-business-50 text-business-700' },
 }
 
 export function CopilotBadge({ id, className }: { id: CopilotId | 'ava' | 'russ'; className?: string }) {

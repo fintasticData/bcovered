@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useLifePolicies } from '@/api/hooks'
 import { StatusBadge } from '@/components/StatusBadge'
+import { useDataCategory } from '@/lib/supabase/category'
+import { useSupabaseSync } from '@/lib/supabase/sync'
 import { formatDate } from '@/lib/utils'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { BasisBadge, Filters, Page, RowLink, Table, Td, zar } from '../shared/ui'
@@ -9,6 +12,8 @@ type Filter = 'all' | 'in_force' | 'pipeline' | 'attention'
 
 export default function PoliciesPage() {
   const { data, isLoading, error } = useLifePolicies()
+  const category = useDataCategory()
+  const sync = useSupabaseSync()
   const [filter, setFilter] = useState<Filter>('all')
   const rows = useMemo(
     () =>
@@ -43,7 +48,23 @@ export default function PoliciesPage() {
       />
       {isLoading && <LoadingState />}
       {error && <ErrorState message={error.message} />}
-      {data && !rows.length && <EmptyState title="No policies in this view" />}
+      {data && !rows.length && (
+        <EmptyState title="No policies in this view">
+          {category === 'live'
+            ? 'Live has no individual life policies for this brokerage yet. Switch to Sample, or open a customer in My workspace.'
+            : sync.status === 'error'
+              ? `Database sync issue: ${sync.lastError ?? 'unknown'}.`
+              : (
+                <>
+                  Try filter All, or open{' '}
+                  <Link to="/broker/book" className="font-semibold text-brand-600 underline">
+                    My workspace
+                  </Link>{' '}
+                  for offers and confirmed cover.
+                </>
+              )}
+        </EmptyState>
+      )}
       {rows.length > 0 && (
         <div className="panel">
           <Table head={['Policy', 'Client', 'Life insured', 'Life cover', 'Premium', 'Beneficiaries', 'Status']} minWidth={900}>

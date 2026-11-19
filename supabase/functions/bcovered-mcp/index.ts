@@ -112,6 +112,33 @@ const JOBS: Job[] = [
       }),
   },
   {
+    name: 'business.create_client',
+    title: 'Create a business client',
+    owner: 'russ',
+    write: true,
+    lines: BUSINESS,
+    description:
+      'Create a commercial account and a discovery-status business profile from a business name. Returns possible duplicates unless force is true.',
+    input: z.object({
+      name: z.string().min(2),
+      trading_name: z.string().min(2).optional(),
+      industry_key: z.string().min(2).optional(),
+      force: z.boolean().optional(),
+      idempotency_key: key,
+      copilot,
+    }),
+    run: (db, category, a) =>
+      call(db, 'copilot_create_business_client', {
+        p_category: category,
+        p_name: a.name,
+        p_idempotency_key: a.idempotency_key,
+        p_copilot: a.copilot ?? 'russ',
+        p_trading_name: a.trading_name ?? null,
+        p_industry_key: a.industry_key ?? null,
+        p_force: a.force ?? false,
+      }),
+  },
+  {
     name: 'interaction.record',
     title: 'Record a note or interaction',
     owner: 'shared',
@@ -499,6 +526,35 @@ function SALES_JOBS(): Job[] {
         call(db, 'sales_create_follow_up', {
           p_category: category, p_person_id: a.person_id, p_title: a.title, p_idempotency_key: a.idempotency_key, p_due_date: opt(a.due_date),
           p_offer_id: opt(a.offer_id), p_detail: opt(a.detail), p_copilot: a.copilot,
+        }),
+    }),
+    job({
+      name: 'pc.claim.create',
+      title: 'Report a claim / incident',
+      write: true,
+      description: 'Create a short-term claim for a client from incident date, type, description and optional policy/items. Same write path as the Report incident form.',
+      input: z.object({
+        person_id: uuid,
+        incident_at: z.string().min(8),
+        incident_time_unknown: z.boolean().optional(),
+        incident_type: z.string().min(2),
+        description: z.string().min(20),
+        policy_id: uuid.optional(),
+        item_ids: z.array(uuid).optional(),
+        idempotency_key: key,
+        copilot,
+      }),
+      run: (db, category, a) =>
+        call(db, 'pc_create_claim', {
+          p_category: category,
+          p_person_id: a.person_id,
+          p_policy_id: opt(a.policy_id),
+          p_incident_at: a.incident_at,
+          p_incident_time_unknown: a.incident_time_unknown ?? true,
+          p_incident_type: a.incident_type,
+          p_description: a.description,
+          p_item_ids: a.item_ids ?? [],
+          p_idempotency_key: a.idempotency_key,
         }),
     }),
     job({

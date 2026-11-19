@@ -43,6 +43,14 @@ function describeOutcome(view: ApprovalView, decision: Decision): Outcome {
       link: submissionId ? { to: `/broker/commercial/submissions/${submissionId}`, label: 'Open the submission' } : undefined,
     }
   }
+  if (view.approval.approval_type === 'policy_change') {
+    const path = view.approval.evidence.find((e) => e.label === 'Policy')?.ref
+    return {
+      title: 'Policy special request approved',
+      detail: `Recorded for servicing. Insurer placement or policy wording changes still happen outside this approval.`,
+      link: path ? { to: path, label: 'Open the policy' } : undefined,
+    }
+  }
   return {
     title: 'Approved and released',
     detail: `The proposal is now in ${who}’s customer portal with an in-app notice. Use “Demo as …” to switch to ${who} and see it.`,

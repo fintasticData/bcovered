@@ -52,6 +52,7 @@ export const COPILOT_SUGGESTIONS = [
 ]
 
 export const COMMERCIAL_COPILOT_SUGGESTIONS = [
+  'Create a new business client: “Hondo’s Burgers”',
   'Assess Ubuntu Foods and identify the five most important risk areas requiring review',
   'Create a Risk Twin for Ubuntu Foods',
   'Which Risk Twins need attention?',
@@ -68,6 +69,52 @@ const currentTwin = (repo: Repo, profileId: string) =>
   repo.find('business_risk_profiles', (r) => r.business_profile_id === profileId && r.status === 'current')
 
 const TWIN_SUGGESTIONS = ['Which Risk Twins need attention?', 'Show running jobs', 'Show commercial clients']
+
+/** Pull the business name from “create a new business client: "Hondo's Burgers"” and similar phrasings. */
+function businessClientNameIn(raw: string): string | null {
+  const quoted = raw.match(/["“']([^"”']{2,})["”']/)
+  if (quoted) return quoted[1].trim()
+  const after = raw.match(
+    /^\s*(?:please\s+)?(?:create|add|register|capture|onboard|set\s+up)\b(?:\s+a)?(?:\s+new)?\s+(?:commercial|business)\s+(?:client|customer|profile|account)\b\s*(?::|=)?\s*(?:called|named|for)?\s*(.+)$/i,
+  )
+  if (!after?.[1]) return null
+  return after[1]
+    .replace(/^(?:a|an|the)\s+/i, '')
+    .replace(/^[“”"']+|[“”"'.?!]+$/g, '')
+    .trim() || null
+}
+
+/** “Create / add a new business client”: open the book immediately; details can be filled after. */
+function createBusinessCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
+  if (
+    !/^\s*(?:please\s+)?(?:create|add|register|capture|onboard|set\s+up)\b(?:\s+a)?(?:\s+new)?\s+(?:commercial|business)\s+(?:client|customer|profile|account)\b/i.test(
+      raw,
+    )
+  ) {
+    return null
+  }
+  const name = businessClientNameIn(raw)
+  if (!name || name.length < 2) {
+    return {
+      reply: 'What is the business called? For example: create a new business client: “Hondo’s Burgers”.',
+      view: { kind: 'none' },
+      suggestions: ['Create a new business client: “Hondo’s Burgers”', 'Show commercial clients'],
+    }
+  }
+  const result = invokeTool<{ profile: BusinessProfile; customer: Customer; created: boolean }>(
+    'business.create_client',
+    { name },
+    { repo, actor },
+  )
+  const label = nameOf(result.profile)
+  return {
+    reply: result.created
+      ? `Created ${label} as a commercial client in discovery. Open the profile to add industry, locations and contacts, or ask me to create a Risk Twin.`
+      : `${label} is already on your book. Opening it.`,
+    view: { kind: 'business', title: label, profile_id: result.profile.id, job_id: null },
+    suggestions: [`Create a Risk Twin for ${label}`, 'Show commercial clients', `Assess ${label} and identify the five most important risk areas requiring review`],
+  }
+}
 
 /** "Create / build / rebuild a Risk Twin for X": reuse what exists, build what is missing, interview for what is new. */
 function twinCommand(repo: Repo, actor: Actor, raw: string): CopilotTurn | null {
@@ -372,6 +419,8 @@ function assessCommand(repo: Repo, actor: Actor, raw: string, t: string): Copilo
 
 function commercialCommand(repo: Repo, actor: Actor, raw: string, t: string): CopilotTurn | null {
   const ctx = { repo, actor }
+  const created = createBusinessCommand(repo, actor, raw)
+  if (created) return created
   const twin = twinCommand(repo, actor, raw)
   if (twin) return twin
   const special = impactCommand(repo, actor, raw) ?? investigateCommand(repo, actor, raw) ?? compareCommand(repo, actor, raw) ?? assessCommand(repo, actor, raw, t)
@@ -384,9 +433,9 @@ function commercialCommand(repo: Repo, actor: Actor, raw: string, t: string): Co
     const matches = invokeTool<Array<{ profile: BusinessProfile; customer: Customer }>>('business.discover', { query: name }, ctx)
     if (!matches.length) {
       return {
-        reply: `I couldn’t find a commercial client called “${name}”. Try Ubuntu Foods, or run the Restaurant Group scenario in Demo Studio to create one.`,
+        reply: `I couldn’t find a commercial client called “${name}”. Create one with “create a new business client: ${name}”, or run the Restaurant Group scenario in Demo Studio.`,
         view: { kind: 'none' },
-        suggestions: COMMERCIAL_COPILOT_SUGGESTIONS,
+        suggestions: [`Create a new business client: “${name}”`, 'Show commercial clients'],
       }
     }
     const { profile } = matches[0]
@@ -410,7 +459,10 @@ function commercialCommand(repo: Repo, actor: Actor, raw: string, t: string): Co
     }
   }
 
-  if (/commercial (clients?|customers?)|business (clients?|customers?|profiles?)|risk twins?/.test(t)) {
+  if (
+    /commercial (clients?|customers?)|business (clients?|customers?|profiles?)|risk twins?/.test(t) &&
+    !/\b(create|add|register|capture|onboard|set\s+up)\b/.test(t)
+  ) {
     const ids = repo
       .list('business_profiles', (p) => p.status !== 'archived')
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
@@ -445,7 +497,7 @@ const LATER_PHASE: Array<[RegExp, string]> = [
   [/portfolio|commission|premium|summari[sz]e/, 'Portfolio intelligence is Scenario 6 and needs policy data, which arrives in Phase 3.'],
 ]
 
-const OPEN_LEAD: LeadStatus[] = ['new', 'qualifying', 'qualified', 'quoting', 'proposal_pending']
+const OPEN_LEAD: LeadStatus[] = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted']
 const TERMINAL = ['completed', 'failed', 'cancelled']
 
 export type CopilotMode = 'personal' | 'commercial' | 'life' | 'controls'
@@ -513,12 +565,12 @@ export function handleCopilotCommand(repo: Repo, actor: Actor, text: string, mod
   if (/lead/.test(t)) {
     const onlyNew = /new|open|unqualified/.test(t)
     const ids = repo
-      .list('leads', (l) => (onlyNew ? ['new', 'qualifying', 'qualified'].includes(l.status) : OPEN_LEAD.includes(l.status)))
+      .list('leads', (l) => (onlyNew ? ['lead', 'contacted'].includes(l.status) : OPEN_LEAD.includes(l.status)))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map((l) => l.id)
     return {
-      reply: `${ids.length} ${onlyNew ? 'new or qualifying' : 'open'} lead${ids.length === 1 ? '' : 's'}.`,
-      view: { kind: 'leads', title: onlyNew ? 'New and qualifying leads' : 'Open leads', lead_ids: ids },
+      reply: `${ids.length} ${onlyNew ? 'new or early-stage' : 'open'} lead${ids.length === 1 ? '' : 's'}.`,
+      view: { kind: 'leads', title: onlyNew ? 'New leads' : 'Open leads', lead_ids: ids },
       suggestions,
     }
   }

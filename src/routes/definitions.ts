@@ -3,6 +3,9 @@
 import type { Json } from '@/server/db/schema'
 
 export type ActionKind = 'select' | 'review' | 'form' | 'run' | 'decision'
+export type RouteGroup = 'policies' | 'claims' | 'quotes'
+export type RouteEligible = 'client' | 'policy' | 'claim' | 'quote'
+export type RouteCategoryScope = 'sample' | 'live' | 'both'
 
 /** auto: Russ may run it on its own. person: Russ pauses and hands over to the broker. */
 export type RussMode = 'auto' | 'person'
@@ -23,6 +26,11 @@ export interface Applied {
   changed?: boolean
   /** Sets the client the run is for. */
   subject?: { id: string; label: string }
+  policy_id?: string | null
+  claim_id?: string | null
+  waiting_on?: string | null
+  due_at?: string | null
+  business_key?: string | null
 }
 
 /** Supabase writes a Route can confirm. Injected so the engine stays synchronous and the handlers stay testable. */
@@ -30,6 +38,66 @@ export interface RoutePort {
   clientRecord(personId: string): Promise<ClientSnapshot>
   logNote(a: { person_id: string; body: string; key: string }): Promise<{ id: string; reference: string }>
   followUp(a: { person_id: string; title: string; due_date: string; key: string }): Promise<{ id: string; reference: string }>
+  createEndorsement?(a: {
+    person_id: string
+    policy_id: string
+    requested_effective_at: string
+    change: Json
+    item_id?: string | null
+    notes?: string | null
+    key: string
+  }): Promise<{ id: string; reference: string }>
+  createClaim?(a: {
+    person_id: string
+    policy_id?: string | null
+    incident_at: string
+    incident_time_unknown: boolean
+    incident_type: string
+    description: string
+    item_ids: string[]
+    key: string
+  }): Promise<{ id: string; reference: string; version_review_needed?: boolean }>
+  transitionServiceRequest?(a: { request_id: string; to_status: string; note?: string | null; key: string }): Promise<{ summary: string }>
+  confirmEndorsement?(a: {
+    request_id: string
+    confirmed_effective_at: string
+    confirmation_source: string
+    insurer_reference?: string | null
+    key: string
+  }): Promise<{ summary: string; version_id?: string }>
+  transitionClaim?(a: { claim_id: string; to_status: string; note?: string | null; key: string }): Promise<{ summary: string }>
+  recordClaimSubmission?(a: {
+    claim_id: string
+    channel: string
+    insurer_reference?: string | null
+    key: string
+  }): Promise<{ summary: string }>
+  recordClaimDecision?(a: {
+    claim_id: string
+    decision: string
+    decision_source: string
+    settlement_amount?: number | null
+    key: string
+  }): Promise<{ summary: string }>
+  createRenewal?(a: {
+    person_id: string
+    policy_id: string
+    requested_effective_at: string
+    change?: Json
+    notes?: string | null
+    key: string
+  }): Promise<{ id: string; reference: string }>
+  createCancellation?(a: {
+    person_id: string
+    policy_id: string
+    requested_effective_at: string
+    reason: string
+    source?: string
+    notes?: string | null
+    key: string
+  }): Promise<{ id: string; reference: string }>
+  persistRun?(run: Json): Promise<void>
+  persistResult?(result: Json): Promise<void>
 }
 
 export interface ClientSnapshot {
@@ -85,7 +153,9 @@ export interface RouteDefinition {
   /** What finishing the Route produces. */
   outcome: string
   subject: 'client'
-  category: 'sample'
+  group: RouteGroup
+  eligible: RouteEligible[]
+  category: RouteCategoryScope
   /** Lower-case phrases that ask Russ to start or continue this Route. */
   intents: string[]
   phases: RoutePhase[]
@@ -93,9 +163,14 @@ export interface RouteDefinition {
   selectActionId: string
   /** Badge shown on the guide, e.g. Demo · Sample quotes. */
   badge?: string
+  version?: string
 }
 
-const ROUTES = new Map<string, RouteDefinition>()
+/** Survive Vite HMR the same way as the tool registry — keep definitions across module reloads. */
+const ROUTES: Map<string, RouteDefinition> = (() => {
+  const g = globalThis as typeof globalThis & { __bcoveredRouteDefs?: Map<string, RouteDefinition> }
+  return (g.__bcoveredRouteDefs ??= new Map())
+})()
 
 export function registerRoute(def: RouteDefinition) {
   const ids = def.phases.flatMap((p) => p.actions.map((a) => a.id))
@@ -122,3 +197,13 @@ export function routeIntentOf(text: string): RouteDefinition | null {
 
 /** "continue", "carry on", "next step": resume the run already in context. */
 export const isContinueIntent = (text: string) => /^\s*(please\s+)?(continue|carry on|keep going|go on|next( step)?|resume|do the next step)\b/i.test(text)
+
+/** Build a stable business key for deduping an open run. */
+export function businessKeyOf(defId: string, parts: { person_id?: string | null; policy_id?: string | null; claim_id?: string | null; intent?: string | null; draft_id?: string | null }) {
+  const intent = parts.intent ?? defId
+  if (parts.claim_id) return `${defId}:claim:${parts.claim_id}:${intent}`
+  if (parts.policy_id && parts.draft_id) return `${defId}:policy:${parts.policy_id}:draft:${parts.draft_id}`
+  if (parts.policy_id) return `${defId}:policy:${parts.policy_id}:${intent}`
+  if (parts.person_id) return `${defId}:person:${parts.person_id}:${intent}`
+  return null
+}

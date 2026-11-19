@@ -6,6 +6,7 @@ import { usePersonSources } from '@/copilot/franchiseApi'
 import { cn } from '@/lib/utils'
 import { EmptyState, LoadingState } from '../PageHeader'
 import { CategoryBadge, ErrorText, inputClass, KIND_LABEL, MemberLabel, StageBadge, shortDate } from './bits'
+import { stageForFilter, type QueueFilter } from './queueTypes'
 
 function PendingMatches({ items, onOpen }: { items: PendingMatch[]; onOpen: (id: string) => void }) {
   const resolve = useSalesMutation(salesApi.resolveMatch)
@@ -50,7 +51,24 @@ function LastComm({ c }: { c: GridRow['last_communication'] }) {
   )
 }
 
-export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, onOpen, selectedId }: {
+function applyQueueFilter(rows: GridRow[], filter: QueueFilter | undefined): GridRow[] {
+  if (!filter || filter === 'all' || filter === 'renewals') return rows
+  if (filter === 'leads') return rows.filter((r) => r.stage === 'new_enquiry')
+  if (filter === 'quotes') return rows.filter((r) => r.stage === 'offer_sent')
+  if (filter === 'decision') return rows.filter((r) => r.stage === 'accepted')
+  if (filter === 'covered') return rows.filter((r) => r.stage === 'sold' || r.stage === 'client')
+  if (filter === 'info') {
+    const now = Date.now()
+    return rows.filter(
+      (r) =>
+        (r.stage === 'new_enquiry' && r.offers === 0) ||
+        Boolean(r.next_follow_up?.due_date && new Date(r.next_follow_up.due_date).getTime() < now),
+    )
+  }
+  return rows
+}
+
+export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, onOpen, selectedId, queueFilter }: {
   scope: 'mine' | 'team'
   onScope: (s: 'mine' | 'team') => void
   canSeeTeam: boolean
@@ -58,11 +76,22 @@ export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, 
   onClearMember: () => void
   onOpen: (personId: string) => void
   selectedId?: string | null
+  /** When set by the desk queue, maps readable filters onto stages / next-action heuristics. */
+  queueFilter?: QueueFilter
 }) {
   const [query, setQuery] = useState('')
   const [stage, setStage] = useState<Stage | ''>('')
-  const grid = useBookGrid({ scope, member_id: member?.member_id ?? null, stage: stage || null, query: query.trim().length >= 2 ? query.trim() : null })
+  const queueStage = queueFilter ? stageForFilter(queueFilter) : ''
+  const effectiveStage = queueFilter ? queueStage : stage
+  const grid = useBookGrid({
+    scope,
+    member_id: member?.member_id ?? null,
+    // Covered spans sold+client; Information needed is client-side — fetch without stage then filter.
+    stage: queueFilter === 'covered' || queueFilter === 'info' || queueFilter === 'renewals' ? null : effectiveStage || null,
+    query: query.trim().length >= 2 ? query.trim() : null,
+  })
   const d = grid.data
+  const rows = d ? applyQueueFilter(d.rows, queueFilter) : []
   const t = d?.totals
   const sources = usePersonSources(d?.rows.map((r) => r.id) ?? []).data ?? {}
 
@@ -90,11 +119,15 @@ export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, 
           <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-navy-400" />
           <input className={`${inputClass} pl-8`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, client number or phone" />
         </label>
-        <label className="sr-only" htmlFor="grid-stage">Stage</label>
-        <select id="grid-stage" className={`${inputClass} w-auto`} value={stage} onChange={(e) => setStage(e.target.value as Stage | '')}>
-          <option value="">All stages</option>
-          {(Object.keys(STAGE_LABEL) as Stage[]).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-        </select>
+        {!queueFilter && (
+          <>
+            <label className="sr-only" htmlFor="grid-stage">Stage</label>
+            <select id="grid-stage" className={`${inputClass} w-auto`} value={stage} onChange={(e) => setStage(e.target.value as Stage | '')}>
+              <option value="">All stages</option>
+              {(Object.keys(STAGE_LABEL) as Stage[]).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+            </select>
+          </>
+        )}
       </div>
 
       {t && (
@@ -110,14 +143,14 @@ export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, 
           <LoadingState label="Loading clients…" />
         ) : grid.error ? (
           <ErrorText error={grid.error} />
-        ) : !d?.rows.length ? (
+        ) : !rows.length ? (
           <EmptyState title={scope === 'mine' ? 'No clients assigned to you yet' : 'No clients yet'}>
             Add a client, or share your referral link: submitted enquiries appear here as new prospects.
           </EmptyState>
         ) : (
           <>
           <ul className="space-y-2 @3xl:hidden" aria-label="Clients">
-            {d.rows.map((r) => (
+            {rows.map((r) => (
               <li key={r.id}>
                 <button type="button" onClick={() => onOpen(r.id)}
                   className={cn('block w-full cursor-pointer rounded-xl border bg-white p-3 text-left text-sm active:bg-brand-50/60', selectedId === r.id ? 'border-brand-500 bg-brand-50/60' : 'border-navy-800/10')}>
@@ -166,7 +199,7 @@ export function ClientGrid({ scope, onScope, canSeeTeam, member, onClearMember, 
                 </tr>
               </thead>
               <tbody className="divide-y divide-navy-800/5">
-                {d.rows.map((r) => (
+                {rows.map((r) => (
                   <tr key={r.id} onClick={() => onOpen(r.id)} className={cn('cursor-pointer align-top hover:bg-brand-50/40', selectedId === r.id && 'bg-brand-50/60')}>
                     <td className="px-3 py-2.5">
                       <button type="button" className="cursor-pointer text-left font-medium text-navy-900 hover:text-brand-700" onClick={(e) => { e.stopPropagation(); onOpen(r.id) }}>

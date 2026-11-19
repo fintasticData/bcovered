@@ -5,8 +5,18 @@ import { useMe, useSignOut, useSwitchWorkspace } from '@/api/hooks'
 import { StatusBadge } from './StatusBadge'
 import { cn } from '@/lib/utils'
 
+type MenuPlacement = 'below' | 'above' | 'aside'
+
 /** People in more than one brokerage switch explicitly; every query then runs in the chosen brokerage only. */
-export function WorkspaceSwitcher({ dark = false }: { dark?: boolean }) {
+export function WorkspaceSwitcher({
+  dark = false,
+  menuPlacement = 'below',
+  fullWidth = false,
+}: {
+  dark?: boolean
+  menuPlacement?: MenuPlacement
+  fullWidth?: boolean
+}) {
   const { data: me } = useMe()
   const switcher = useSwitchWorkspace()
   const signOut = useSignOut()
@@ -22,24 +32,31 @@ export function WorkspaceSwitcher({ dark = false }: { dark?: boolean }) {
   const active = me.workspaces.find((w) => w.active)
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={cn('relative', fullWidth && 'w-full')} ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
-          'flex max-w-[14rem] cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold',
-          dark ? 'border-white/20 bg-white/10 text-white' : 'border-navy-800/15 bg-white text-navy-800 hover:border-navy-800/40',
+          'flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold',
+          fullWidth ? 'w-full max-w-none' : 'max-w-[14rem]',
+          dark ? 'border-white/20 bg-white/10 text-white hover:bg-white/15' : 'border-navy-800/15 bg-white text-navy-800 hover:border-navy-800/40',
         )}
       >
         <Building2 className="h-4 w-4 shrink-0" />
-        <span className="truncate">{active?.name ?? (me.platform_role ? 'B-Covered platform' : 'Choose a brokerage')}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{active?.name ?? (me.platform_role ? 'B-Covered platform' : 'Choose a brokerage')}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
       </button>
       {open && (
-        <div role="menu" className="panel absolute top-10 right-0 z-50 w-72 p-2 shadow-xl animate-rise">
-          <p className="px-2 pb-2 pt-1 text-[11px] text-navy-600">Workspaces you belong to. Switching changes which brokerage’s records you see.</p>
+        <div
+          role="menu"
+          className={cn(
+            'panel z-50 w-72 p-2 shadow-xl animate-rise',
+            menuPlacement === 'aside' ? 'absolute bottom-0 left-full ml-2' : menuPlacement === 'above' ? 'absolute bottom-full left-0 mb-2' : 'absolute top-10 right-0',
+          )}
+        >
+          <p className="px-2 pb-2 pt-1 text-[11px] text-navy-600">Brokerages you belong to. Switching changes which brokerage’s records you see.</p>
           {me.workspaces.map((w) => (
             <button
               key={w.organisation_id}

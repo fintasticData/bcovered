@@ -26,6 +26,7 @@ const BrokerLayout = lazy(() => import('./broker/BrokerLayout'))
 const OverviewPage = lazy(() => import('./broker/OverviewPage'))
 const WorkspacePage = lazy(() => import('./broker/WorkspacePage'))
 const BookPage = lazy(() => import('./broker/book/BookPage'))
+const CustomerAreaPage = lazy(() => import('./broker/customers/CustomerAreaPage'))
 const RoutesPage = lazy(() => import('./broker/routes/RoutesPage'))
 const RouteGuidePage = lazy(() => import('./broker/routes/RouteGuidePage'))
 const BrokerSignUpPage = lazy(() => import('./pages/brokers/BrokerSignUpPage'))
@@ -45,6 +46,13 @@ const ClientsPage = lazy(() => import('./broker/commercial/ClientsPage'))
 const CoverPage = lazy(() => import('./broker/commercial/CoverPage'))
 const PersonalLinesPage = lazy(() => import('./broker/shortterm/PersonalLinesPage'))
 const ShortTermPolicyPage = lazy(() => import('./broker/shortterm/PolicyPage'))
+const PoliciesQueuePage = lazy(() => import('./broker/policies/PoliciesQueuePage'))
+const PolicyDetailPage = lazy(() => import('./broker/policies/PolicyDetailPage'))
+const ServiceRequestDetailPage = lazy(() => import('./broker/policies/ServiceRequestDetailPage'))
+const VehicleReplacementFormPage = lazy(() => import('./broker/policies/VehicleReplacementFormPage'))
+const ClaimsQueuePage = lazy(() => import('./broker/claims/ClaimsQueuePage'))
+const ClaimDetailPage = lazy(() => import('./broker/claims/ClaimDetailPage'))
+const ReportIncidentFormPage = lazy(() => import('./broker/claims/ReportIncidentFormPage'))
 const AccountPage = lazy(() => import('./broker/accounts/AccountPage'))
 const ClientDetailPage = lazy(() => import('./broker/commercial/ClientDetailPage'))
 const RiskTwinsPage = lazy(() => import('./broker/commercial/RiskTwinsPage'))
@@ -96,6 +104,7 @@ const JoinPage = lazy(() => import('./pages/brokers/JoinPage'))
 const InvitePage = lazy(() => import('./pages/brokers/InvitePage'))
 const InviteHelpPage = lazy(() => import('./pages/brokers/InviteHelpPage'))
 const MyAreaPage = lazy(() => import('./pages/my/MyAreaPage'))
+const CustomerReportIncidentPage = lazy(() => import('./pages/my/CustomerReportIncidentPage'))
 const OnboardingPage = lazy(() => import('./onboarding/OnboardingPage'))
 const PlatformLayout = lazy(() => import('./platform/PlatformLayout'))
 const QueuePage = lazy(() => import('./platform/QueuePage'))
@@ -103,6 +112,7 @@ const ReviewPage = lazy(() => import('./platform/ReviewPage'))
 const BrokeragesPage = lazy(() => import('./platform/BrokeragesPage'))
 const BrokeragePage = lazy(() => import('./platform/BrokeragePage'))
 const InvitationsPage = lazy(() => import('./platform/InvitationsPage'))
+const BrokerageProfilePage = lazy(() => import('./broker/settings/BrokerageProfilePage'))
 const TeamPage = lazy(() => import('./broker/settings/TeamPage'))
 const InsurersPage = lazy(() => import('./broker/settings/InsurersPage'))
 const ClientBookImportsPage = lazy(() => import('./broker/imports/ClientBookImportsPage'))
@@ -191,7 +201,8 @@ export default function App() {
           <Route path="/insurance/:slug" element={<ProductPage />} />
           <Route path="/assist" element={<AssistPage />} />
           <Route path="/quote" element={<QuotePage />} />
-          <Route path="/claims" element={<ClaimsPage />} />
+          <Route path="/claims" element={<Navigate to="/my?tab=claims" replace />} />
+          <Route path="/claims/demo" element={<ClaimsPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo" element={<DemoStudioPage />} />
@@ -207,6 +218,14 @@ export default function App() {
             element={
               <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Area">
                 <MyAreaPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/my/claims/new"
+            element={
+              <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Area">
+                <CustomerReportIncidentPage />
               </RequireRole>
             }
           />
@@ -299,8 +318,12 @@ export default function App() {
             </RequireRole>
           }
         >
-          <Route index element={<OverviewPage />} />
+          <Route index element={<Navigate to="customers" replace />} />
+          <Route path="overview" element={<OverviewPage />} />
           <Route path="workspace" element={<WorkspacePage />} />
+          <Route path="customers" element={<CustomerAreaPage />} />
+          <Route path="customers/people/:personId" element={<CustomerAreaPage />} />
+          <Route path="customers/businesses/:profileId" element={<CustomerAreaPage />} />
           <Route path="book" element={<BookPage />} />
           <Route path="book/clients/:personId" element={<BookPage />} />
           <Route path="routes" element={<RoutesPage />} />
@@ -316,6 +339,13 @@ export default function App() {
           <Route path="commercial" element={<LensRedirect lens="commercial" />} />
           <Route path="personal" element={<PersonalLinesPage />} />
           <Route path="personal/policies/:policyId" element={<ShortTermPolicyPage />} />
+          <Route path="policies" element={<PoliciesQueuePage />} />
+          <Route path="policies/requests/new" element={<VehicleReplacementFormPage />} />
+          <Route path="policies/requests/:requestId" element={<ServiceRequestDetailPage />} />
+          <Route path="policies/:policyId" element={<PolicyDetailPage />} />
+          <Route path="claims" element={<ClaimsQueuePage />} />
+          <Route path="claims/new" element={<ReportIncidentFormPage />} />
+          <Route path="claims/:claimId" element={<ClaimDetailPage />} />
           <Route path="accounts/:accountId" element={<AccountPage />} />
           <Route path="commercial/cover" element={<CoverPage />} />
           <Route path="commercial/clients" element={<ClientsPage />} />
@@ -354,6 +384,7 @@ export default function App() {
           <Route path="investigations/:investigationId" element={<InvestigationPage />} />
           <Route path="executive" element={<RequireRole roles={['manager', 'admin']} area="The executive dashboard"><ExecutivePage /></RequireRole>} />
           <Route path="compliance" element={<CompliancePage />} />
+          <Route path="settings/profile" element={<TabbedHub hub={SETTINGS_HUB}><BrokerageProfilePage /></TabbedHub>} />
           <Route path="settings/team" element={<TabbedHub hub={SETTINGS_HUB}><TeamPage /></TabbedHub>} />
           <Route path="settings/insurers" element={<TabbedHub hub={SETTINGS_HUB}><InsurersPage /></TabbedHub>} />
           <Route path="imports/client-book" element={<TabbedHub hub={SETTINGS_HUB}><ClientBookImportsPage /></TabbedHub>} />

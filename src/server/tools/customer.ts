@@ -4,6 +4,20 @@ import { defineTool, STAFF, type ToolDef } from './registry'
 
 const SA_PHONE = /^(\+27|0)\d{9}$/
 
+const optionalPhone = z
+  .string()
+  .trim()
+  .transform((s) => s.replace(/\s/g, ''))
+  .refine((s) => !s || SA_PHONE.test(s), 'Use a South African mobile number')
+  .optional()
+
+const optionalEmail = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine((s) => !s || z.email().safeParse(s).success, 'Enter a valid email')
+  .optional()
+
 export const customerTools = [
   defineTool({
     name: 'customer.search',
@@ -32,24 +46,31 @@ export const customerTools = [
 
   defineTool({
     name: 'customer.create',
-    description: 'Create a prospect, reusing an existing record with the same email.',
+    description: 'Create a prospect. Email and phone are optional so walk-ins can be captured by name.',
     allow: ['agent', ...STAFF],
     sideEffect: true,
     input: z.object({
       full_name: z.string().trim().min(2),
-      email: z.email(),
-      phone: z.string().transform((s) => s.replace(/\s/g, '')).pipe(z.string().regex(SA_PHONE)),
+      email: optionalEmail,
+      phone: optionalPhone,
       region: z.string().optional(),
       customer_type: z.enum(['personal', 'commercial']).default('personal'),
     }),
     run: ({ repo, actor }, input) => {
-      const existing = repo.find('customers', (c) => c.email?.toLowerCase() === input.email.toLowerCase())
-      if (existing) return { customer: existing, created: false }
+      const email = input.email || null
+      const phone = input.phone || null
+      if (email) {
+        const existing = repo.find('customers', (c) => c.email?.toLowerCase() === email)
+        if (existing) return { customer: existing, created: false }
+      } else if (phone) {
+        const existing = repo.find('customers', (c) => c.phone === phone && c.customer_type === input.customer_type)
+        if (existing) return { customer: existing, created: false }
+      }
       const customer = repo.insert('customers', {
         customer_type: input.customer_type,
         full_name: input.full_name,
-        email: input.email.toLowerCase(),
-        phone: input.phone,
+        email,
+        phone,
         region: input.region ?? null,
         status: 'prospect',
         is_synthetic: true,

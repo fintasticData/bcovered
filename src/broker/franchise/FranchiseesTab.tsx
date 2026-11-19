@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowLeft, MessageCircle, Pause, Play, Plus, Save, ShieldCheck, Store, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ReferralQr } from '@/components/ReferralQr'
@@ -36,8 +37,20 @@ export function FranchiseesTab({ onOpenOutlet, onAddOutlet, onSetup }: {
         <section key={p.id} className="rounded-xl border border-navy-800/10 bg-white">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-800/10 px-3 py-2">
             <div>
-              <h3 className="text-sm font-semibold text-navy-900">{p.name}</h3>
-              <p className="text-[11px] text-navy-500">{p.outlets.length} outlet{p.outlets.length === 1 ? '' : 's'}{p.status === 'paused' ? ' · paused' : ''}</p>
+              <h3 className="text-sm font-semibold text-navy-900">
+                {p.profile_id ? (
+                  <Link to={`/broker/customers/businesses/${p.profile_id}?rtab=outlets`} className="hover:text-brand-600">
+                    {p.name}
+                  </Link>
+                ) : (
+                  p.name
+                )}
+              </h3>
+              <p className="text-[11px] text-navy-500">
+                {p.outlets.length} outlet{p.outlets.length === 1 ? '' : 's'}
+                {p.status === 'paused' ? ' · paused' : ''}
+                {p.customer_id ? ' · franchisee role on business record' : ''}
+              </p>
             </div>
             {d.can_manage && <Button size="sm" variant="outline" onClick={() => onAddOutlet({ id: p.id, name: p.name })}><Plus /> Add outlet</Button>}
           </header>

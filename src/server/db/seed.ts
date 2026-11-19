@@ -108,6 +108,10 @@ export function seedTables(now = Date.now()): Tables {
     created_by: null,
     created_at: daysAgo(now, age),
     updated_at: daysAgo(now, age),
+    closed_reason: null,
+    closed_at_stage: null,
+    closed_at: null,
+    policy_id: null,
   })
 
   const benefits = benefitsSeed(t, {
@@ -219,7 +223,7 @@ export function seedTables(now = Date.now()): Tables {
         L.johan,
         C.johan,
         'motor',
-        'won',
+        'accepted',
         {
           vehicle: { make: 'Ford', model: 'Ranger', year: 2021, value: 465000, usage: 'private', cover_type: 'comprehensive' },
           summary: 'Existing client. Motor cover placed after last review.',
@@ -231,7 +235,7 @@ export function seedTables(now = Date.now()): Tables {
         L.ayanda,
         C.ayanda,
         'motor',
-        'qualified',
+        'contacted',
         {
           vehicle: {
             make: 'Volkswagen',
@@ -256,7 +260,7 @@ export function seedTables(now = Date.now()): Tables {
         L.priya,
         C.priya,
         'business_property',
-        'new',
+        'lead',
         { summary: 'Small restaurant in Durban asking about business property and liability cover.' },
         ['Annual turnover', 'Sum insured for equipment and stock', 'Fire suppression in kitchen'],
         3,
@@ -267,7 +271,7 @@ export function seedTables(now = Date.now()): Tables {
         L.lindiwe,
         C.lindiwe,
         'household_contents',
-        'qualifying',
+        'lead',
         { summary: 'First-time renter wanting contents cover for a Johannesburg apartment.' },
         ['Estimated contents value', 'Security features'],
         1,
@@ -336,6 +340,12 @@ function commercialSeed(now: number): CommercialTables {
         primary_contact: { name: 'Sipho Ndlovu', email: 'sipho.ndlovu@ubuntufoods.example.demo', phone: '0115550160', role: 'Financial director' },
         existing_cover: { insurer: 'Karoo Mutual', policy_count: 2, renewal_month: 'January', notes: 'Commercial package plus a separate fleet policy' },
         loss_history: { claims_last_5_years: 2, notes: 'Blast freezer breakdown (2023); hijacking of one delivery truck (2025)' },
+        cover_interests: [
+          { key: 'fire_allied_perils', related: [] },
+          { key: 'business_interruption', related: [] },
+          { key: 'commercial_motor', related: [] },
+          { key: 'public_liability', related: [] },
+        ],
         field_sources: {
           registered_name: 'verified',
           trading_name: 'declared',

@@ -74,6 +74,7 @@ export type JobName =
   | 'records.overview'
   | 'client.create'
   | 'account.create'
+  | 'business.create_client'
   | 'interaction.record'
   | 'task.create'
   | 'history.list'
@@ -103,6 +104,7 @@ export type JobName =
   | 'sales.sale.record'
   | 'sales.comms.log'
   | 'sales.followup.create'
+  | 'pc.claim.create'
   | 'sales.referral.funnel'
   | 'sales.team.find'
   | 'franchise.setup'
@@ -127,6 +129,7 @@ export type Intent =
   | 'task'
   | 'create_client'
   | 'create_account'
+  | 'create_business_client'
   | 'quote_request'
   | 'life_application_create'
   | 'life_application_get'
@@ -152,6 +155,7 @@ export type Intent =
   | 'lead_generation'
   /** A Route step run in the browser (CopilotPanel bridge); never planned on the server. */
   | 'route'
+  | 'claim_report'
   | 'unknown'
 
 export interface NameHint {
@@ -524,7 +528,11 @@ export function intentOf(clause: string): Intent {
   if (sales) return sales
   const t = stripChips(clause).toLowerCase()
   if (/\b(add|make|save|log|record|write|leave|put|capture)\b[^.]*\bnotes?\b|\bnote (that|:)|^note\b|\blog (a |the )?(call|meeting|email)\b/.test(t)) return 'note'
+  if (/\b(report|open|create|start|lodge|file)\b[^.]*\b(claim|incident|accident)\b|\breport a claim\b|\bnew claim\b/.test(t)) return 'claim_report'
   if (/\b(arrange|schedule|book|set up|create|add|make)\b[^.]*\b(callback|call back|call-back|follow[- ]?up|task|reminder)\b|\bremind me\b/.test(t)) return 'task'
+  if (/\b(create|add|new|register|capture|onboard|set\s+up)\b[^.]*\b(business|commercial)\s+(client|customer|profile|account)\b/.test(t)) {
+    return 'create_business_client'
+  }
   if (/\b(create|add|new|register|capture|onboard)\b[^.]*\bclient\b|\bnew client\b/.test(t)) return 'create_client'
   if (/\b(create|add|new|set up)\b[^.]*\baccount\b/.test(t) && !/\b(find|show|open|search)\b/.test(t)) return 'create_account'
   if (/\bquote\b/.test(t) && /\b(request|new|create|get|need|want|capture|start|add)\b/.test(t)) return 'quote_request'
@@ -539,7 +547,19 @@ export function intentOf(clause: string): Intent {
   return 'unknown'
 }
 
-const WRITE_INTENTS: Intent[] = ['note', 'task', 'create_client', 'create_account', 'quote_request', 'life_application_create']
+const WRITE_INTENTS: Intent[] = ['note', 'task', 'claim_report', 'create_client', 'create_account', 'create_business_client', 'quote_request', 'life_application_create']
+
+/** Business name from “create a new business client: "Hondo's Burgers"” and similar. */
+function businessClientNameIn(clause: string): string | null {
+  const t = stripChips(clause).trim()
+  const quoted = t.match(/["“']([^"”']{2,})["”']/)
+  if (quoted) return quoted[1].trim()
+  const after = t.match(
+    /(?:create|add|register|capture|onboard|set\s+up)\b(?:\s+a)?(?:\s+new)?\s+(?:commercial|business)\s+(?:client|customer|profile|account)\b\s*(?::|=)?\s*(?:called|named|for)?\s*(.+)$/i,
+  )
+  if (!after?.[1]) return null
+  return after[1].replace(/^(?:a|an|the)\s+/i, '').replace(/^[“”"']+|[“”"'.?!]+$/g, '').trim() || null
+}
 
 export function noteBodyIn(clause: string): string | null {
   const t = stripChips(clause).trim()
@@ -644,6 +664,21 @@ export function planTurn(text: string, entities: EntityRef[] = []): PlannedStep[
       params.body = noteBodyIn(clause)
       params.kind = interactionKindIn(clause)
     }
+    if (intent === 'claim_report') {
+      const iso = clause.match(/\b(20\d{2}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?)\b/)
+      params.incident_at = iso?.[1]?.replace(' ', 'T') ?? null
+      params.incident_type = /\b(theft|hijack)\b/i.test(clause)
+        ? 'vehicle_theft'
+        : /\b(burglar|break[- ]?in)\b/i.test(clause)
+          ? 'burglary'
+          : /\b(flood|water)\b/i.test(clause)
+            ? 'water_damage'
+            : /\b(hail|storm)\b/i.test(clause)
+              ? 'storm_hail'
+              : 'motor_accident'
+      const quoted = clause.match(/["“]([^"”]{20,})["”]/)
+      params.description = quoted?.[1] ?? null
+    }
     if (intent === 'task') {
       const lower = clause.toLowerCase()
       params.title = /call ?-?back/.test(lower) ? 'Callback' : /remind/.test(lower) ? 'Reminder' : 'Follow-up'
@@ -656,6 +691,9 @@ export function planTurn(text: string, entities: EntityRef[] = []): PlannedStep[
       params.surname = n?.surname ?? null
       params.date_of_birth = birthDateIn(clause)
     }
+    if (intent === 'create_business_client') {
+      params.name = businessClientNameIn(clause)
+    }
     if (intent === 'create_account') {
       params.name = accountNameIn(clause)
       params.type = /\b(business|commercial|company|\(pty\)|pty|cc|ltd)\b/i.test(clause) ? 'commercial' : 'personal'
@@ -667,7 +705,7 @@ export function planTurn(text: string, entities: EntityRef[] = []): PlannedStep[
       params.record_type = /\bnotes?\b|\binteractions\b/.test(t) ? 'interaction' : /\b(tasks|follow[- ]?ups)\b/.test(t) ? 'task' : null
       params.copilot = /\b(ava|personal|people)\b/.test(t) ? 'ava' : /\b(russ|business|commercial)\b/.test(t) ? 'russ' : null
     }
-    const names = intent === 'create_client' || intent === 'create_account' ? [] : namesIn(clause)
+    const names = intent === 'create_client' || intent === 'create_account' || intent === 'create_business_client' ? [] : namesIn(clause)
     return {
       index,
       clause,
@@ -835,7 +873,7 @@ export async function runTurn(input: TurnInput, tools: ToolPort): Promise<TurnRe
     }
 
     const unresolved = mine.find((c) => !c.chosen)
-    if (unresolved && step.intent !== 'create_client' && step.intent !== 'create_account') {
+    if (unresolved && step.intent !== 'create_client' && step.intent !== 'create_account' && step.intent !== 'create_business_client') {
       if (unresolved.options.length === 0) {
         results.push({
           ...base, job: 'records.search', handled_by: 'ar', status: 'failed', title: 'No match',
@@ -978,6 +1016,67 @@ export async function runTurn(input: TurnInput, tools: ToolPort): Promise<TurnRe
         result = fromTool('interaction.record', r, (d) => saved('interaction.record', d, 'Note saved'))
         break
       }
+      case 'claim_report': {
+        if (!person) {
+          result = needSubject('the claim belongs to')
+          break
+        }
+        const description = values.description ?? (step.params.description as string | null) ?? (stripChips(step.clause).length >= 20 ? stripChips(step.clause) : null)
+        const incidentAt = values.incident_at ?? (step.params.incident_at as string | null)
+        const incidentType = values.incident_type ?? (step.params.incident_type as string | null) ?? 'motor_accident'
+        if (!incidentAt) {
+          result = {
+            ...base, ...stamp, job: 'pc.claim.create', status: 'needs_input', title: 'Incident date', subject,
+            summary: `Ready to open a claim for ${label(person)}. When did it happen? Use YYYY-MM-DD or YYYY-MM-DDTHH:MM.`,
+            input: { field: 'incident_at', label: 'Incident date/time', placeholder: '2026-11-12T14:30' },
+          }
+          break
+        }
+        if (!description || description.length < 20) {
+          result = {
+            ...base, ...stamp, job: 'pc.claim.create', status: 'needs_input', title: 'What happened?', subject,
+            summary: 'Give a short incident description (at least 20 characters).',
+            input: { field: 'description', label: 'Description', placeholder: 'e.g. Rear-ended at the robot; front bumper damaged' },
+          }
+          break
+        }
+        const atIso = incidentAt.includes('T') ? new Date(incidentAt).toISOString() : new Date(`${incidentAt}T12:00:00`).toISOString()
+        const timeUnknown = values.incident_time_unknown === 'true' || !incidentAt.includes('T')
+        const r = await tools.call('pc.claim.create', {
+          person_id: person.id,
+          incident_at: atIso,
+          incident_time_unknown: timeUnknown,
+          incident_type: incidentType,
+          description,
+          policy_id: (policy as PolicyRef | null)?.id ?? context.policy?.id,
+          item_ids: [],
+          idempotency_key: key,
+          copilot: input.copilot,
+        })
+        if (!r.ok) {
+          result = fromTool('pc.claim.create', r, () => ({ ...base, ...stamp, job: 'pc.claim.create', status: 'failed', title: 'Claim not created', summary: 'Could not create the claim.', subject }))
+          break
+        }
+        const d = r.data as Record<string, unknown>
+        const claimId = String(d.claim_id ?? '')
+        const ref = String(d.reference ?? '')
+        result = {
+          ...base, ...stamp, job: 'pc.claim.create', status: 'saved', title: 'Claim created', subject,
+          summary: String(d.summary ?? `Claim ${ref} created`),
+          links: claimId ? [{ label: 'Open claim', to: `/broker/claims/${claimId}` }] : [],
+          receipt: {
+            reference: ref || claimId,
+            record_type: 'claim',
+            summary: String(d.summary ?? 'Claim created'),
+            client_number: person.number,
+            client_name: person.name,
+            open_path: claimId ? `/broker/claims/${claimId}` : `/broker/customers/people/${person.id}?rtab=claims`,
+            replayed: Boolean(d.replayed),
+            category,
+          },
+        }
+        break
+      }
       case 'task': {
         if (!subject && !policy) { result = needSubject('the follow-up is for'); break }
         // Straight after an offer step, the follow-up is dated, assigned to the broker and linked to that offer.
@@ -1025,6 +1124,29 @@ export async function runTurn(input: TurnInput, tools: ToolPort): Promise<TurnRe
         }
         const r = await tools.call('account.create', { name, type: step.params.type ?? 'personal', primary_person_id: person?.id, idempotency_key: key, copilot: step.params.type === 'commercial' ? 'russ' : 'ava' })
         result = fromTool('account.create', r, (d) => saved('account.create', d, 'Account created'))
+        break
+      }
+      case 'create_business_client': {
+        const name = values.name ?? (step.params.name as string | null)
+        if (!name) {
+          result = {
+            ...base,
+            ...stamp,
+            job: 'business.create_client',
+            status: 'needs_input',
+            title: 'Business name',
+            summary: 'What is the business called?',
+            input: { field: 'name', label: 'Business name', placeholder: 'e.g. Hondo’s Burgers' },
+          }
+          break
+        }
+        const r = await tools.call('business.create_client', {
+          name,
+          force: values.force === 'true',
+          idempotency_key: key,
+          copilot: 'russ',
+        })
+        result = fromTool('business.create_client', r, (d) => saved('business.create_client', d, 'Business client created'))
         break
       }
       case 'quote_request': {
@@ -1116,7 +1238,7 @@ export async function runTurn(input: TurnInput, tools: ToolPort): Promise<TurnRe
       }
       default:
         result = { ...base, ...stamp, job: null, status: 'needs_input', title: 'Not sure what to do', subject,
-          summary: 'I can find clients and accounts, add notes, create follow-ups, clients, accounts, quote requests and life applications, and show policies, history and schemes. Type / for the list.',
+          summary: 'I can find clients and accounts, add notes, report claims, create follow-ups, clients, business clients, accounts, quote requests and life applications, and show policies, history and schemes. Type / for the list.',
           input: { field: 'text', label: 'Rephrase' } }
     }
 

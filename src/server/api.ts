@@ -298,7 +298,7 @@ export interface WorkspaceOption {
 export interface SessionView extends AppUser {
   member_role: MemberRole | null
   platform_role: PlatformRole | null
-  organisation: Pick<Organisation, 'id' | 'name' | 'kind' | 'lifecycle_status' | 'is_demo' | 'status_reason' | 'blp_number' | 'fsp_number' | 'fsp_verified'> | null
+  organisation: Pick<Organisation, 'id' | 'name' | 'kind' | 'lifecycle_status' | 'is_demo' | 'status_reason' | 'blp_number' | 'fsp_number' | 'fsp_verified' | 'logo_url'> | null
   workspaces: WorkspaceOption[]
   capabilities: Capability[]
   read_only: boolean
@@ -336,6 +336,7 @@ export function getSessionUser(auth: Auth): SessionView | null {
           blp_number: org.blp_number,
           fsp_number: org.fsp_number,
           fsp_verified: org.fsp_verified,
+          logo_url: org.logo_url ?? null,
         }
       : null,
     workspaces,
@@ -394,8 +395,14 @@ function toMessageView(m: ConversationMessage): MessageView {
 }
 
 function canSeeConversation(p: Principal, c: Conversation) {
+  // Internal broker/copilot threads stay off customer and outlet portals.
+  if (c.visibility === 'internal' || c.channel === 'broker') {
+    if (!isStaff(p)) return false
+    const memberRole = (p as { member_role?: string }).member_role
+    if (memberRole === 'outlet_manager' || memberRole === 'outlet_staff') return false
+    return true
+  }
   if (isStaff(p)) return true
-  if (c.channel === 'broker') return false
   if (p.role === 'customer') return !c.customer_id || c.customer_id === p.user?.customer_id
   return c.channel === 'public'
 }
@@ -418,7 +425,7 @@ const COMMERCIAL_GREETING =
   'Hi, I’m BCovered’s Business Discovery Agent. Tell me how your business operates, in your own words, and I’ll only ask for what’s missing. Our agents then map potential risks and a licensed broker reviews everything. I don’t give financial advice.'
 
 const COMMERCIAL_COPILOT_GREETING =
-  'I’m Russ, working with the commercial agents. Ask me to review a business, show commercial clients or draft submissions. Results open on the right and every review runs as a job you can monitor.'
+  'I’m Russ, working with the commercial agents. Ask me to create a business client, review a business, show commercial clients or draft submissions. Results open on the right and every review runs as a job you can monitor.'
 
 const GREETING: Record<Channel, string> = {
   public:
@@ -426,7 +433,7 @@ const GREETING: Record<Channel, string> = {
   portal:
     'Welcome to My Area. I’m Ava — your quotes and covers are on the right. Tell me what you need next. I’m not a licensed adviser: a broker reviews every recommendation before you see it.',
   broker:
-    'I’m Russ, B-Covered’s assistant. Ask me about work queues, comparisons, life advice, employee movements, contribution reconciliations, transfers, investments or cell captives. Results open on the right and every piece of work runs as a job you can monitor. I prepare; a licensed person approves.',
+    'I’m Ava, B-Covered’s main assistant. Ask me to find customers, capture and link records, or hand insurance research and quotes to Russ. Results open on the right and every piece of work runs as a job you can monitor. I prepare; a licensed person approves.',
 }
 
 export function startConversation(
@@ -468,11 +475,19 @@ export function startConversation(
     business_discovery: { content: COMMERCIAL_GREETING, quick_replies: ['We operate three restaurants around Johannesburg and want better insurance.'] },
   }
   return db.transaction(() => {
+    const ctx = { ...(body.context ?? {}), ...intake }
+    const personId = typeof ctx.person_id === 'string' ? ctx.person_id : null
+    const businessCustomerId = typeof ctx.business_customer_id === 'string' ? ctx.business_customer_id : null
     const c = p.repo.insert('conversations', {
-      customer_id: p.user?.customer_id ?? null,
+      customer_id: p.user?.customer_id ?? (typeof ctx.customer_id === 'string' ? ctx.customer_id : null),
       channel,
       assistant,
-      context: { ...(body.context ?? {}), ...intake },
+      context: ctx,
+      visibility: channel === 'broker' ? 'internal' : 'customer',
+      created_by_user_id: p.user?.id ?? null,
+      responsible_member_id: typeof ctx.responsible_member_id === 'string' ? ctx.responsible_member_id : null,
+      person_id: personId,
+      business_customer_id: businessCustomerId,
     })
     p.repo.insert('conversation_messages', {
       conversation_id: c.id,
@@ -762,6 +777,9 @@ export function controlJob(auth: Auth, body: { job_id: string; action: JobAction
 
 export interface LeadRow extends Lead {
   customer_name: string
+  customer_type: 'personal' | 'commercial'
+  customer_email: string | null
+  customer_phone: string | null
   latest_quote_id: string | null
   /** The researched business behind a Russ lead, with its latest run match. */
   prospect: LeadProspect | null
@@ -794,6 +812,9 @@ export function listLeads(auth: Auth): LeadRow[] {
       return {
         ...l,
         customer_name: customer?.full_name ?? 'Unknown',
+        customer_type: customer?.customer_type ?? 'personal',
+        customer_email: customer?.email ?? null,
+        customer_phone: customer?.phone ?? null,
         latest_quote_id: latestQuote.get(l.id)?.id ?? null,
         prospect: l.prospect_id ? (prospects.get(l.prospect_id) ?? null) : null,
         match: ms[0] ?? null,
@@ -879,6 +900,14 @@ export function bulkUpdateLeads(auth: Auth, body: { lead_ids: string[] } & LeadB
   return { updated, skipped }
 }
 
+export interface LeadOpportunitySummary {
+  id: string
+  product_category: string | null
+  status: LeadStatus
+  closed_reason: string | null
+  closed_at_stage: string | null
+}
+
 export interface LeadDetail {
   lead: Lead
   customer: Customer
@@ -889,6 +918,8 @@ export interface LeadDetail {
   prospect: LeadProspect | null
   /** Every run that found this business, newest first, for any cover type. */
   matches: Array<LeadProspectMatch & { run_title: string; lead_status: string | null }>
+  /** Other opportunities for the same person or business. */
+  sibling_opportunities: LeadOpportunitySummary[]
 }
 
 export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
@@ -905,6 +936,16 @@ export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
           return { ...m, run_title: job ? summariseJob(p.repo, job).title : 'Russ lead search', lead_status: m.lead_id ? (p.repo.get('leads', m.lead_id)?.status ?? null) : null }
         })
     : []
+  const sibling_opportunities = p.repo
+    .list('leads', (l) => l.customer_id === lead.customer_id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((l) => ({
+      id: l.id,
+      product_category: l.product_category,
+      status: l.status,
+      closed_reason: l.closed_reason ?? null,
+      closed_at_stage: l.closed_at_stage ?? null,
+    }))
   return {
     lead,
     customer: p.repo.require('customers', lead.customer_id),
@@ -913,12 +954,35 @@ export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
     jobs: p.repo.list('jobs', (j) => j.lead_id === lead.id || (lead.source_job_id !== undefined && j.id === lead.source_job_id)).map((j) => summariseJob(p.repo, j)),
     prospect,
     matches,
+    sibling_opportunities,
     messages: lead.conversation_id
       ? p.repo
           .list('conversation_messages', (m) => m.conversation_id === lead.conversation_id)
           .sort((a, b) => a.created_at.localeCompare(b.created_at))
       : [],
   }
+}
+
+export type CaptureLeadInput = {
+  kind: 'person' | 'business'
+  full_name: string
+  phone?: string
+  email?: string
+  region?: string
+  notes?: string
+  product_category?: string
+}
+
+export function captureLead(auth: Auth, body: CaptureLeadInput) {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  return invokeTool<{ customer: Customer; lead: Lead; created: boolean }>('lead.capture', body, { repo: p.repo, actor: p.actor })
+}
+
+export function closeLead(auth: Auth, body: { lead_id: string; reason: string; closed_at_stage?: Exclude<LeadStatus, 'closed'> }) {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  return invokeTool<Lead>('lead.close', body, { repo: p.repo, actor: p.actor })
 }
 
 // ---------------------------------------------------------------- quotes
@@ -960,6 +1024,13 @@ export function getQuote(auth: Auth, body: { quote_id: string }): QuoteDetail {
   return quoteDetail(p.repo, body.quote_id)
 }
 
+/** Open a quote request from a lead after the broker chooses cover types. */
+export function createQuoteRequest(auth: Auth, body: { lead_id: string; covers?: string[] }): Quote {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  return invokeTool<Quote>('quote.create_request', body, { repo: p.repo, actor: p.actor })
+}
+
 export function askQuote(auth: Auth, body: { quote_id: string; question: string }): QuoteAnswer {
   const p = principal(auth)
   const quote = p.repo.require('quotes', body.quote_id)
@@ -967,6 +1038,36 @@ export function askQuote(auth: Auth, body: { quote_id: string; question: string 
     throw new ToolError('forbidden', 'You cannot ask about this quote.')
   }
   return invokeTool<QuoteAnswer>('quote.answer_question', body, { repo: p.repo, actor: p.actor })
+}
+
+const SPECIAL_REQUEST_TYPES = ['endorsement', 'certificate', 'cancellation_assist', 'claim_assist'] as const
+export type PolicySpecialRequestType = (typeof SPECIAL_REQUEST_TYPES)[number]
+
+/** Policy management special request — lands in Approvals; not a nav destination. */
+export function createPolicySpecialRequest(
+  auth: Auth,
+  body: { policy_id: string; request_type: PolicySpecialRequestType; note: string; evidence_path?: string },
+): ApprovalRequest {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const note = body.note.trim()
+  if (note.length < 5) throw new ToolError('validation', 'Add a short note describing the request')
+  if (!SPECIAL_REQUEST_TYPES.includes(body.request_type)) throw new ToolError('validation', 'Unknown special request type')
+  const label = body.request_type.replace(/_/g, ' ')
+  const evidencePath = body.evidence_path ?? `/broker/life/policies/${body.policy_id}`
+  return invokeTool<ApprovalRequest>(
+    'approval.request',
+    {
+      approval_type: 'policy_change',
+      subject_table: 'policies',
+      subject_id: body.policy_id,
+      summary: `Special request (${label}) on policy`,
+      proposed_changes: { request_type: body.request_type, note, policy_id: body.policy_id },
+      risk_flags: [],
+      evidence: [{ label: 'Policy', ref: evidencePath }],
+    },
+    { repo: p.repo, actor: p.actor },
+  )
 }
 
 // ---------------------------------------------------------------- approvals
@@ -1103,6 +1204,7 @@ export function decideApproval(
 
 export interface PortalView {
   customer: Customer
+  brokerage: { id: string; name: string; logo_url: string | null } | null
   business_profile_id: string | null
   proposals: QuoteDetail[]
   in_review: Array<{ quote_id: string; status: Quote['status']; product_category: string; created_at: string }>
@@ -1119,8 +1221,12 @@ export function getPortal(auth: Auth): PortalView {
   const p = principal(auth)
   const customer = requireCustomer(p)
   const quotes = p.repo.list('quotes', (q) => q.customer_id === customer.id)
+  const org = p.organisation
   return {
     customer,
+    brokerage: org
+      ? { id: org.id, name: org.trading_name || org.name, logo_url: org.logo_url ?? null }
+      : null,
     business_profile_id: p.repo.find('business_profiles', (b) => b.customer_id === customer.id)?.id ?? null,
     proposals: quotes.filter((q) => q.status === 'released').map((q) => quoteDetail(p.repo, q.id)),
     in_review: quotes
@@ -1161,6 +1267,9 @@ export interface OverviewData {
 const ACTION_LABEL: Record<string, string> = {
   'customer.create': 'Customer profile created',
   'lead.create': 'Lead created',
+  'lead.capture': 'Lead captured',
+  'lead.close': 'Lead closed',
+  'lead.mark_live': 'Lead marked live',
   'lead.record_risk_assessment': 'Risk assessment recorded',
   'quote.create_request': 'Quote request opened',
   'quote.prepare_proposal': 'Comparison summary prepared',
@@ -1185,10 +1294,10 @@ export function getOverview(auth: Auth): OverviewData {
   requireRole(p, STAFF_ROLES)
   const leads = p.repo.list('leads')
   const jobs = p.repo.list('jobs')
-  const statuses = ['new', 'qualifying', 'qualified', 'quoting', 'proposal_pending', 'proposal_released', 'won', 'lost']
+  const statuses = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted', 'live', 'closed']
   return {
     kpis: {
-      open_leads: leads.filter((l) => !['won', 'lost'].includes(l.status)).length,
+      open_leads: leads.filter((l) => !['closed', 'live'].includes(l.status)).length,
       approvals_pending: p.repo.list('approval_requests', (a) => a.status === 'pending').length,
       proposals_released: p.repo.list('quotes', (q) => q.status === 'released').length,
       active_jobs: jobs.filter((j) => ['queued', 'running', 'awaiting_approval', 'awaiting_information', 'paused'].includes(j.status)).length,

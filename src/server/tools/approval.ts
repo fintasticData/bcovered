@@ -172,7 +172,7 @@ export const approvalTools = [
       if (approval.subject_table === 'quotes') {
         const status = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'draft'
         const quote = repo.update('quotes', approval.subject_id, { status })
-        if (quote.lead_id && decision === 'rejected') repo.update('leads', quote.lead_id, { status: 'qualified' })
+        if (quote.lead_id && decision === 'rejected') repo.update('leads', quote.lead_id, { status: 'quoting' })
       }
       if (approval.subject_table === 'commercial_submissions') {
         const status = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'draft'

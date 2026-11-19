@@ -1,22 +1,30 @@
-// Routes: guided business processes. A run and its action results live in the browser store only (not synced to
-// Supabase); every customer-facing step and recorded decision is written to the client's record in Supabase instead.
+// Routes: guided business processes. Runs sync to Supabase via route_* RPCs; domain data stays on claims / PSR.
 import type { ISODate, Json, UUID } from './schema'
 
 export type RouteRunStatus = 'active' | 'completed' | 'abandoned'
 export type RouteResultStatus = 'done' | 'needs_input' | 'blocked' | 'failed' | 'stale'
+export type RouteCategory = 'sample' | 'live'
 
 export interface RouteRun {
   id: UUID
   tenant_id: UUID
   definition_id: string
+  definition_version: string | null
   subject_type: 'client'
   /** Supabase person id of the client the run is for, once selected. */
   subject_id: string | null
   subject_label: string | null
-  category: 'sample'
+  policy_id: string | null
+  claim_id: string | null
+  /** Dedup key for the business intent (e.g. policy:{id}:change, claim:{id}:follow_up). */
+  business_key: string | null
+  category: RouteCategory
   status: RouteRunStatus
   current_action_id: string | null
-  /** Working data the actions build up: client snapshot, draft request, quotes and the outcome. */
+  waiting_on: string | null
+  owner_user_id: string | null
+  due_at: ISODate | null
+  /** Working data the actions build up. */
   state: { [key: string]: Json }
   started_by: string
   started_by_name: string

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Bell, Building2, Clock, FileText, Sparkles } from 'lucide-react'
 import { useMe, usePortal } from '@/api/hooks'
@@ -5,6 +6,7 @@ import { SimulatedBadge } from '@/components/SimulatedBadge'
 import { humanise } from '@/components/StatusBadge'
 import { describeVehicle } from '@/server/domain/motor'
 import { rand } from '@/lib/quote'
+import { fetchOrganisationMedia } from '@/lib/supabase/organisations'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { ErrorState, LoadingState } from '@/broker/PageHeader'
 
@@ -20,6 +22,20 @@ const REVIEW_LABEL: Record<string, string> = {
 export default function PortalPage() {
   const { data, isLoading, error } = usePortal()
   const { data: me } = useMe()
+  const brokerage = data?.brokerage ?? null
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  useEffect(() => {
+    setLogoUrl(brokerage?.logo_url ?? null)
+    const id = brokerage?.id ?? me?.organisation?.id
+    if (!id) return
+    let cancelled = false
+    void fetchOrganisationMedia(id).then((media) => {
+      if (!cancelled && media?.logo_url) setLogoUrl(media.logo_url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [brokerage?.id, brokerage?.logo_url, me?.organisation?.id])
 
   if (isLoading) return <div className="container-x py-10"><LoadingState /></div>
   if (error || !data) return <div className="container-x py-10"><ErrorState message={error?.message ?? 'Could not load your portal'} /></div>
@@ -29,8 +45,15 @@ export default function PortalPage() {
   return (
     <div className="bg-mist">
       <div className="container-x py-10">
-        <p className="eyebrow mb-1">Customer portal</p>
-        <h1 className="font-display text-3xl font-bold text-navy-900 sm:text-4xl">Welcome back, {first}</h1>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="h-12 w-12 rounded-xl object-cover ring-1 ring-navy-800/10" />
+          ) : null}
+          <div>
+            <p className="eyebrow mb-1">{brokerage?.name ?? me?.organisation?.name ?? 'Customer portal'}</p>
+            <h1 className="font-display text-3xl font-bold text-navy-900 sm:text-4xl">Welcome back, {first}</h1>
+          </div>
+        </div>
         <p className="mt-2 text-sm text-navy-600">
           Your proposals, requests and messages in one place. Policies, documents and claims arrive in the next phase of this demo.
         </p>

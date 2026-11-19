@@ -27,6 +27,9 @@ export default function InvitationsPage() {
   return (
     <Page>
       <PageHeader title="Invite a brokerage" description="Creates the brokerage’s workspace in onboarding state, a draft application and a secure, single-use invitation for its owner." />
+      <Notice>
+        This invites the firm’s owner only. After they accept, the brokerage owner or administrator adds team members and FAIS-aligned roles inside the brokerage workspace.
+      </Notice>
       {!isAdmin && <Notice tone="warning">Only platform administrators can invite brokerage owners.</Notice>}
       <Section title="Owner invitation">
         <form onSubmit={submit} className="grid max-w-xl gap-3">

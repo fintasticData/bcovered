@@ -6,6 +6,7 @@ import {
   Building2,
   Clock,
   FileText,
+  MessageSquare,
   Sparkles,
   Users,
 } from 'lucide-react'
@@ -24,6 +25,9 @@ import { getAssistantAdapter } from '@/server/llm'
 import { BOOK_RESTRICTED_ROLES } from '@/server/onboarding/config'
 import { rand } from '@/lib/quote'
 import { cn, formatDate } from '@/lib/utils'
+import { BusinessCoverView } from './BusinessCoverView'
+import { CustomerCoverView } from './CustomerCoverView'
+import { usePerspective } from '@/lib/perspective'
 
 const REVIEW_LABEL: Record<string, string> = {
   draft: 'Being prepared',
@@ -59,7 +63,7 @@ function QuotesCoversCustomer() {
       <div>
         <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Ready to compare</h3>
         {data.proposals.length === 0 ? (
-          <p className="text-sm text-navy-600">No proposals yet. Ask Ava what cover you need, or open Find My Cover.</p>
+          <p className="text-sm text-navy-600">No proposals yet. Ask Russ what cover you need, or open Find My Cover.</p>
         ) : (
           <ul className="space-y-2">
             {data.proposals.map((p) => {
@@ -110,12 +114,11 @@ function QuotesCoversStaff() {
       <p className="text-xs text-navy-600">Jump into the work waiting in your brokerage workspace.</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {[
+          ['/broker/book', 'My workspace'],
           ['/broker/approvals', 'Approvals'],
           ['/broker/leads', 'Leads'],
           ['/broker/personal', 'Personal lines'],
-          ['/broker/commercial/cover', 'Commercial cover'],
           ['/broker/quotes/sample-motor', 'Sample motor quote'],
-          ['/broker/book', 'Client book'],
         ].map(([to, label]) => (
           <Link key={to} to={to} className="flex items-center justify-between rounded-xl border border-navy-800/10 bg-white px-3 py-2.5 text-sm font-medium text-navy-900 transition hover:border-brand-500/40">
             {label} <ArrowRight className="h-4 w-4 text-brand-500" />
@@ -237,16 +240,21 @@ function AgentsCard() {
 
 export default function MyAreaPage() {
   const { data: me, isLoading } = useMe()
-  const [pane, setPane] = useState<Pane>('chat')
+  const [pane, setPane] = useState<Pane>('work')
+  const [russOpen, setRussOpen] = useState(false)
   const { conversationId, error: startError } = usePersistentConversation('portal', 'ava')
   const { data: view } = useConversation(conversationId)
   const send = useSendMessage(conversationId)
+  const perspective = usePerspective()
   const first = (me?.full_name ?? 'there').split(' ')[0]
-  const isCustomer = me?.role === 'customer'
+  const isCustomer = me?.role === 'customer' || perspective === 'customer'
   const isStaff = Boolean(me?.member_role) || ['broker', 'manager', 'admin'].includes(me?.role ?? '')
+  const showCustomerCover = me?.role === 'customer' || (isStaff && perspective === 'customer')
+  const { data: portalHint } = usePortal()
+  const showBusinessCover = showCustomerCover && Boolean(portalHint?.business_profile_id)
   const starters = isCustomer
     ? ['Show me my quotes', 'I need a new comparison', 'What is waiting with my broker?']
-    : ['Where is my Broker Licence Plate?', 'Open approvals', 'How do I invite a broker agent?']
+    : ['Open my workspace queue', 'Where is my Broker Licence Plate?', 'How do I invite a broker agent?']
 
   if (isLoading) {
     return (
@@ -259,62 +267,98 @@ export default function MyAreaPage() {
   return (
     <div className="bg-mist">
       <div className="border-b border-navy-800/10 bg-white/80">
-        <div className="container-x flex flex-wrap items-end justify-between gap-3 py-5">
-          <div>
-            <p className="eyebrow mb-1 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" /> My Area
-            </p>
-            <h1 className="font-display text-2xl font-bold text-navy-900 sm:text-3xl">Hello, {first}</h1>
-            <p className="mt-1 max-w-xl text-sm text-navy-600">
-              Ava welcomes you on the left. Your quotes, covers{isStaff ? ', licence plate and agents' : ''} sit on the right.
-            </p>
+        <div className="container-x space-y-4 py-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="eyebrow mb-1 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" /> My Area
+              </p>
+              <h1 className="font-display text-2xl font-bold text-navy-900 sm:text-3xl">Welcome back, {first}</h1>
+              <p className="mt-1 max-w-xl text-sm text-navy-600">
+                What would you like to work on? Russ stays compact until you ask.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {isStaff && (
+                <Button size="sm" variant="accent" asChild>
+                  <Link to="/broker/book">My queue</Link>
+                </Button>
+              )}
+              {isCustomer && (
+                <Button size="sm" variant="accent" asChild>
+                  <Link to="/portal">Compare my quotes</Link>
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => { setRussOpen(true); setPane('chat') }}>
+                <MessageSquare /> Ask Russ
+              </Button>
+              <Button size="sm" variant="ghost" asChild>
+                <Link to="/assist">Find My Cover</Link>
+              </Button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {isStaff && (
-              <Button size="sm" variant="accent" asChild>
-                <Link to="/broker">Open full workspace</Link>
-              </Button>
+            {isStaff ? (
+              <>
+                <Button size="sm" variant="outline" asChild><Link to="/broker/book">Find a customer</Link></Button>
+                <Button size="sm" variant="outline" asChild><Link to="/broker/book">Add a lead</Link></Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" asChild><Link to="/portal">My quotes</Link></Button>
+                <Button size="sm" variant="outline" asChild><Link to="/assist">Start an enquiry</Link></Button>
+              </>
             )}
-            {isCustomer && (
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/portal">Classic portal</Link>
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" asChild>
-              <Link to="/assist">Find My Cover</Link>
-            </Button>
           </div>
         </div>
       </div>
 
-      <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="My Area" />
+      {(russOpen || pane === 'chat') && (
+        <MobilePaneSwitch pane={pane === 'queue' ? 'work' : pane} onChange={setPane} workLabel="My Area" chatLabel="Russ" showQueue={false} />
+      )}
 
-      <div className="container-x grid grid-cols-1 gap-5 py-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className={cn('h-[calc(100vh-12rem)] min-h-[480px]', pane === 'work' && 'hidden lg:block')}>
-          <ChatPanel
-            title="Ava"
-            subtitle="Your concierge · not a licensed adviser"
-            messages={view?.messages ?? []}
-            sending={send.isPending}
-            onSend={(t) => send.mutate(t)}
-            disabled={!conversationId || send.isPending}
-            error={startError ?? send.error?.message ?? null}
-            placeholder="Ask Ava about a quote, cover, or next step…"
-            starters={starters}
-            footerNote={
-              getAssistantAdapter().id === 'fal'
-                ? 'Ava helps you navigate My Area. A licensed broker confirms cover and price.'
-                : 'Ava runs on the demo adapter in this build.'
-            }
-          />
-        </div>
-
-        <aside className={cn('space-y-5', pane === 'chat' && 'hidden lg:block')} aria-label="My Area">
-          {isCustomer && <QuotesCoversCustomer />}
-          {isStaff && <QuotesCoversStaff />}
-          {isStaff && <BlpCard />}
-          {isStaff && <AgentsCard />}
+      <div className={cn('container-x grid grid-cols-1 gap-5 py-5', russOpen && 'lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]')}>
+        <aside className={cn('space-y-5', russOpen && pane === 'chat' && 'hidden lg:block')} aria-label="My Area">
+          {showCustomerCover && (
+            <>
+              {isStaff && perspective === 'customer' && (
+                <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900" role="status">
+                  Customer preview — presentation only. Your broker permissions are unchanged.
+                </p>
+              )}
+              {showBusinessCover ? (
+                <BusinessCoverView onAskRuss={() => { setRussOpen(true); setPane('chat') }} />
+              ) : (
+                <CustomerCoverView onAskRuss={() => { setRussOpen(true); setPane('chat') }} />
+              )}
+            </>
+          )}
+          {!showCustomerCover && isCustomer && <QuotesCoversCustomer />}
+          {!showCustomerCover && isStaff && <QuotesCoversStaff />}
+          {!showCustomerCover && isStaff && <BlpCard />}
+          {!showCustomerCover && isStaff && <AgentsCard />}
         </aside>
+
+        {russOpen && (
+          <div className={cn('h-[min(70vh,32rem)] min-h-[360px]', pane === 'work' && 'hidden lg:block')}>
+            <ChatPanel
+              title="Russ"
+              subtitle="Your workspace helper · not a licensed adviser"
+              messages={view?.messages ?? []}
+              sending={send.isPending}
+              onSend={(t) => send.mutate(t)}
+              disabled={!conversationId || send.isPending}
+              error={startError ?? send.error?.message ?? null}
+              placeholder="Ask Russ about a quote, cover, or next step…"
+              starters={starters}
+              footerNote={
+                getAssistantAdapter().id === 'fal'
+                  ? 'Russ helps you navigate My Area. A licensed broker confirms cover and price.'
+                  : 'Russ runs on the demo adapter in this build.'
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   )

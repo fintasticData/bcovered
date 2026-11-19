@@ -562,7 +562,7 @@ export const WALKTHROUGHS = [
     title: 'AR, Ava and Russ on the database',
     outcome: 'A note saved on Priya Naidoo’s motor policy with its reference, visible on the policy after refresh, and her life application retrieved in the same request.',
     steps: [
-      { text: 'Choose “Demo as” → Thabo Nkosi. The header shows “Supabase · Sample” once the database sign-in completes.', link: { to: '/broker', label: 'Broker workspace' } },
+      { text: 'Open the side menu Workspace panel → Signed in as → Thabo Nkosi. The header shows Demo once the database sign-in completes. Switch Demo / Production there as well.', link: { to: '/broker', label: 'Broker workspace' } },
       { text: 'Open AR · Ava · Russ. Keep Sample selected. Type @Naid and pick Priya Naidoo or Priyanka Naidu from the dropdown.', link: { to: '/broker/workspace', label: 'AR' } },
       { text: 'Send: “Find the Naidoo account, add a note to Priya’s motor policy and show me her latest life application”. Give the note wording when asked.', link: { to: '/broker/workspace', label: 'AR' } },
       { text: 'Use “Open record” on the saved note. The motor policy lists the note under Notes and activity; refresh to confirm.', link: { to: '/broker/personal', label: 'Personal lines' } },

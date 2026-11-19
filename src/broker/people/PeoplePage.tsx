@@ -1,19 +1,31 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { usePeople } from '@/api/hooks'
 import { Badge } from '@/components/ui/badge'
+import { useDataCategory } from '@/lib/supabase/category'
+import { useSupabaseSync } from '@/lib/supabase/sync'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { Page, RowLink, Table, Td } from '../shared/ui'
 
 export default function PeoplePage() {
   const [query, setQuery] = useState('')
   const { data, isLoading, error } = usePeople(query || undefined)
+  const category = useDataCategory()
+  const sync = useSupabaseSync()
   return (
     <Page>
       <PageHeader
         title="People"
         description="One record per person. Policyholders, insured lives, beneficiaries, employees, fund members and dependants are roles of the same person, so nobody is captured twice."
       />
+      <p className="text-xs text-navy-600">
+        Prefer the customer queue in{' '}
+        <Link to="/broker/book" className="font-semibold text-brand-600 underline">
+          My workspace
+        </Link>
+        .
+      </p>
       <label className="relative block max-w-md">
         <span className="sr-only">Search people</span>
         <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-navy-400" />
@@ -21,7 +33,17 @@ export default function PeoplePage() {
       </label>
       {isLoading && <LoadingState />}
       {error && <ErrorState message={error.message} />}
-      {data && data.length === 0 && <EmptyState title="Nobody matches that search" />}
+      {data && data.length === 0 && (
+        <EmptyState title={query ? 'Nobody matches that search' : 'No people in this view'}>
+          {category === 'live'
+            ? 'Live has no person rows for this brokerage yet. Switch to Sample, or open My workspace for the sales book.'
+            : sync.status === 'hydrating'
+              ? 'Loading Sample people from Supabase…'
+              : sync.status === 'error'
+                ? `Database sync issue: ${sync.lastError ?? 'unknown'}. Try Demo as Thabo Nkosi, then refresh.`
+                : 'Open My workspace to work from the customer queue, or clear the search.'}
+        </EmptyState>
+      )}
       {data && data.length > 0 && (
         <div className="panel">
           <Table head={['Person', 'Age', 'Client accounts', 'Employer', 'Policies', 'Schemes', 'Funds']} minWidth={820}>

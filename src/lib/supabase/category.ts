@@ -9,7 +9,12 @@ const listeners = new Set<() => void>()
 const hasStorage = typeof localStorage !== 'undefined'
 let current: DataCategory = hasStorage && localStorage.getItem(KEY) === 'live' ? 'live' : 'sample'
 
-export const CATEGORY_LABEL: Record<DataCategory, string> = { sample: 'Sample', live: 'Live' }
+/** UI labels for the workspace mode. Internal values stay sample | live for the database. */
+export const CATEGORY_LABEL: Record<DataCategory, string> = { sample: 'Demo', live: 'Production' }
+export const CATEGORY_HINT: Record<DataCategory, string> = {
+  sample: 'Synthetic demo records scoped for safe practice and sales demos',
+  live: 'Real client records for an activated brokerage',
+}
 
 export const dataCategory = {
   get: () => current,

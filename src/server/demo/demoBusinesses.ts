@@ -11,7 +11,10 @@ interface DemoBusiness {
   email: string
   phone: string
   region: string
-  profile: Omit<BusinessProfile, 'id' | 'tenant_id' | 'customer_id' | 'status' | 'assigned_broker_id' | 'is_synthetic' | 'created_by' | 'created_at' | 'updated_at' | 'missing_info'>
+  profile: Omit<
+    BusinessProfile,
+    'id' | 'tenant_id' | 'customer_id' | 'status' | 'assigned_broker_id' | 'is_synthetic' | 'created_by' | 'created_at' | 'updated_at' | 'missing_info' | 'cover_interests'
+  > & { cover_interests?: BusinessProfile['cover_interests'] }
   locations: Array<Omit<BusinessLocation, 'tenant_id' | 'business_profile_id' | 'legal_entity_id' | 'created_at' | 'updated_at'>>
   activities: Array<{ id: string; location: number | null; kind: ActivityKind; name: string; share_of_revenue: number | null; source: FieldSource }>
   assets: Array<{ id: string; location: number | null; asset_class: AssetClass; description: string; quantity: number; declared_value: number | null; value_basis: ValueBasis; source: FieldSource }>
@@ -249,6 +252,7 @@ export function insertDemoBusinesses(repo: Repo): { inserted: number; profile_id
       ...b.profile,
       id: b.profile_id,
       customer_id: b.customer_id,
+      cover_interests: b.profile.cover_interests ?? [],
       missing_info: [],
       status: 'active',
       assigned_broker_id: SEED_IDS.users.broker,

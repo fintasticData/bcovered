@@ -101,7 +101,13 @@ function LensWorkspace({ lens, copilot }: { lens: Lens; copilot?: 'ava' | 'russ'
   const view: CopilotView = current?.view ?? { kind: 'none' }
 
   const lensJobs = jobs.filter((j) => lens.workflows.includes(j.workflow_type))
-  const focusJobId = viewJobId(view) ?? conversation?.job_id ?? lensJobs.find((j) => ACTIVE.includes(j.status))?.id ?? lensJobs[0]?.id ?? null
+  // Only fall back to an unrelated lens job when the chat has no result view yet — otherwise list/create
+  // replies were hijacked by a stale risk_twin_build as the “Focus job”.
+  const focusJobId =
+    viewJobId(view) ??
+    (view.kind === 'none'
+      ? conversation?.job_id ?? lensJobs.find((j) => ACTIVE.includes(j.status))?.id ?? lensJobs[0]?.id ?? null
+      : null)
   const focusProfileId = view.kind === 'business' || view.kind === 'twin' ? view.profile_id : null
   const { data: job } = useJob(focusJobId)
   const { data: business } = useCommercialClient(focusProfileId)
@@ -318,7 +324,7 @@ export function ResultView({ view }: { view: CopilotView }) {
               <p className="truncate text-xs text-navy-600">{l.qualification.summary}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <span className="text-xs text-navy-600">{humanise(l.product_category)}</span>
+              <span className="text-xs text-navy-600">{l.product_category ? humanise(l.product_category) : 'No cover yet'}</span>
               <StatusBadge status={l.status} />
             </div>
           </li>

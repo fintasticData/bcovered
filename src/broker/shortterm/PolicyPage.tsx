@@ -4,6 +4,7 @@ import { useSupabaseAuth } from '@/lib/supabase/client'
 import { AskCopilotButton } from '../copilot/AskCopilotButton'
 import { PolicyDetailView } from '../copilot/RecordViews'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
+import { PolicySpecialRequest } from '../shared/PolicySpecialRequest'
 import { Page } from '../shared/ui'
 
 /** A personal short-term policy read from Supabase, with its parties, notes and activity. */
@@ -26,7 +27,12 @@ export default function ShortTermPolicyPage() {
         title={`${data.provider ?? 'Policy'} ${data.display_number}`}
         description={data.account ? `${data.account.name} · ${data.account.number}` : undefined}
         line={{ term: 'short', market: 'personal' }}
-        actions={<AskCopilotButton copilot="ava" kind="policy" id={data.id} />}
+        actions={
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <PolicySpecialRequest policyId={data.id} evidencePath={`/broker/personal/policies/${data.id}`} />
+            <AskCopilotButton copilot="ava" kind="policy" id={data.id} />
+          </div>
+        }
       />
       <PolicyDetailView data={data} />
     </Page>

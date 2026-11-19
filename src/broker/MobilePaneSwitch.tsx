@@ -1,10 +1,24 @@
-import { MessageSquare, PanelRightOpen } from 'lucide-react'
+import { LayoutList, MessageSquare, PanelRightOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type Pane = 'chat' | 'work'
+export type Pane = 'queue' | 'work' | 'chat'
 
-/** Below the lg breakpoint the Copilot and its results share the screen one at a time. */
-export function MobilePaneSwitch({ pane, onChange, workLabel = 'Results' }: { pane: Pane; onChange: (p: Pane) => void; workLabel?: string }) {
+/** Below the lg breakpoint the desk panes share the screen one at a time. */
+export function MobilePaneSwitch({
+  pane,
+  onChange,
+  queueLabel = 'Queue',
+  workLabel = 'Workbench',
+  chatLabel = 'Russ',
+  showQueue = true,
+}: {
+  pane: Pane
+  onChange: (p: Pane) => void
+  queueLabel?: string
+  workLabel?: string
+  chatLabel?: string
+  showQueue?: boolean
+}) {
   const item = (p: Pane, label: string, Icon: typeof MessageSquare) => (
     <button
       type="button"
@@ -22,8 +36,9 @@ export function MobilePaneSwitch({ pane, onChange, workLabel = 'Results' }: { pa
   return (
     <div className="px-3 pt-3 lg:hidden">
       <div role="tablist" aria-label="Workspace panes" className="flex gap-1 rounded-xl bg-navy-100/70 p-1">
-        {item('chat', 'Copilot', MessageSquare)}
+        {showQueue && item('queue', queueLabel, LayoutList)}
         {item('work', workLabel, PanelRightOpen)}
+        {item('chat', chatLabel, MessageSquare)}
       </div>
     </div>
   )

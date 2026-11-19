@@ -75,11 +75,14 @@ export const NAV: NavSection[] = [
   {
     id: 'main',
     items: [
+      { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers'] },
       { to: '/broker/book', label: 'My workspace', icon: BriefcaseBusiness },
+      { to: '/broker/policies', label: 'Policies', icon: ScrollText, match: ['/broker/policies'] },
+      { to: '/broker/claims', label: 'Claims', icon: ClipboardCheck, match: ['/broker/claims'] },
       { to: '/broker/routes', label: 'Routes', icon: Route },
       { to: '/broker/franchise', label: 'Franchise', icon: Store },
-      { to: '/broker', label: 'Overview', icon: LayoutDashboard, end: true },
-      { to: '/broker/workspace', label: 'AR · Ava · Russ', icon: Sparkles },
+      { to: '/broker/overview', label: 'Overview', icon: LayoutDashboard },
+      { to: '/broker/workspace', label: 'Ava · records', icon: Sparkles },
       { to: '/broker/leads', label: 'Leads', icon: Users },
       { to: '/broker/approvals', label: 'Approvals', icon: CheckSquare, badge: true },
       { to: '/broker/jobs', label: 'Tasks & Jobs', icon: ListChecks },
@@ -139,7 +142,7 @@ export const NAV: NavSection[] = [
       { to: '/broker/investigations', label: 'Investigations', icon: Search, feature: 'controls' },
       { to: '/broker/compliance', label: 'Compliance register', icon: ClipboardCheck, feature: 'specialist' },
       { to: '/broker/executive', label: 'Executive dashboard', icon: BarChart3, feature: 'specialist', roles: MANAGERS },
-      { to: '/broker/settings/team', label: 'Brokerage settings', icon: Settings2, match: ['/broker/settings', '/broker/imports'] },
+      { to: '/broker/settings/profile', label: 'Brokerage settings', icon: Settings2, match: ['/broker/settings', '/broker/imports'] },
     ],
   },
   {
@@ -154,6 +157,25 @@ export const NAV: NavSection[] = [
   },
 ]
 
+/** Slim daily shell: Customer Area → quote → approve → Ava. Product lines live under More. */
+export const PRIMARY_NAV: NavItem[] = [
+  { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers'] },
+  { to: '/broker/leads', label: 'Leads', icon: Users },
+  { to: '/broker/quotes/sample-motor', label: 'Quotes', icon: Car, match: ['/broker/quotes'] },
+  { to: '/broker/approvals', label: 'Approvals', icon: CheckSquare, badge: true },
+  { to: '/broker/workspace', label: 'Ava · records', icon: Sparkles },
+]
+
+/** Full product nav under More (Routes, Franchise, lines, Team/Settings, systems, etc.). */
+export const MORE_NAV: NavSection[] = NAV.map((section) => {
+  if (section.id !== 'main') return section
+  const primaryTos = new Set(PRIMARY_NAV.map((i) => i.to))
+  return {
+    ...section,
+    items: section.items.filter((i) => !primaryTos.has(i.to)),
+  }
+})
+
 const startsWith = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`)
 
 /** Whether a nav item owns the current path, including its extra `match` prefixes. */
@@ -164,7 +186,7 @@ export function itemMatches(item: NavItem, pathname: string): boolean {
 
 /** The insurance line a broker screen belongs to, or null for cross-line screens such as Overview or Controls. */
 export function lineForPath(pathname: string): { term: Term; market: Market } | null {
-  for (const s of NAV) if (s.term && s.market && s.items.some((i) => itemMatches(i, pathname))) return { term: s.term, market: s.market }
+  for (const s of MORE_NAV) if (s.term && s.market && s.items.some((i) => itemMatches(i, pathname))) return { term: s.term, market: s.market }
   return null
 }
 

@@ -14,14 +14,15 @@ import {
   useSampleDocument,
   useSaveSection,
   useSubmitApplication,
+  useUpdateMemberFais,
   useUploadDocument,
 } from '@/api/hooks'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn, formatDateTime } from '@/lib/utils'
-import type { MemberRole, OnboardingSection, ProductModule, SectionValues } from '@/server/db/onboardingSchema'
-import { MODULE_LABEL, PACKAGES, PRODUCT_MODULES, ROLE_LABEL, SECTION_FIELDS, SECTIONS } from '@/server/onboarding/config'
+import type { FaisAppointmentStatus, FaisCapacity, MemberRole, OnboardingSection, ProductModule, SectionValues } from '@/server/db/onboardingSchema'
+import { FAIS_CAPACITY_LABEL, FAIS_STATUS_LABEL, LICENCE_CATEGORIES, MODULE_LABEL, PACKAGES, PRODUCT_MODULES, ROLE_LABEL, SECTION_FIELDS, SECTIONS } from '@/server/onboarding/config'
 import { FieldInput, NotAuthorisation, downloadText, fileToBase64, openBase64, textInput } from './ui'
 
 export type SaveState = { status: 'idle' | 'saving' | 'saved' | 'error'; at?: string; message?: string }
@@ -154,6 +155,7 @@ export function TeamSection({ view }: { view: OnboardingView }) {
   const invite = useInviteMember()
   const revoke = useRevokeInvitation()
   const remove = useRemoveMember()
+  const updateFais = useUpdateMemberFais()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<MemberRole>('representative')
   const [created, setCreated] = useState<CreatedInvitation | null>(null)
@@ -164,26 +166,50 @@ export function TeamSection({ view }: { view: OnboardingView }) {
   }
   return (
     <div className="space-y-5">
+      <p className="text-xs text-navy-600">
+        Assign client-facing people as Broker / representative only when they are appointed under this FSP (or as a juristic representative). The platform role controls access; it is not an FSCA filing. Record FAIS capacity and authorised categories for each adviser.
+      </p>
       <ul className="divide-y divide-navy-800/5 rounded-xl border border-navy-800/10">
         {view.team.members.map((m) => (
-          <li key={m.membership_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-navy-900">
-                {m.full_name} {m.is_you && <span className="text-xs text-navy-500">(you)</span>}
+          <li key={m.membership_id} className="space-y-2 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-navy-900">
+                  {m.full_name} {m.is_you && <span className="text-xs text-navy-500">(you)</span>}
+                </span>
+                <span className="block text-xs text-navy-600">{m.email}</span>
+                <span className="mt-0.5 block text-[11px] text-navy-500">
+                  {m.fais_capacity_label ?? 'FAIS capacity not set'}
+                  {m.fais_status ? ` · ${FAIS_STATUS_LABEL[m.fais_status]}` : ''}
+                  {m.authorised_licence_categories?.length
+                    ? ` · ${m.authorised_licence_categories.map((c) => LICENCE_CATEGORIES.find((x) => x.value === c)?.label ?? c).join(', ')}`
+                    : ' · No authorised categories'}
+                </span>
               </span>
-              <span className="block text-xs text-navy-600">{m.email}</span>
-            </span>
-            <span className="flex items-center gap-2">
-              <Badge tone="accent">{m.role_label}</Badge>
-              {canManage && !m.is_you && m.role !== 'brokerage_owner' && (
-                <Button size="icon" variant="ghost" aria-label={`Remove ${m.full_name}`} onClick={() => remove.mutate(m.membership_id)}>
-                  <Trash2 />
-                </Button>
-              )}
-            </span>
+              <span className="flex items-center gap-2">
+                <Badge tone="accent">{m.role_label}</Badge>
+                {canManage && !m.is_you && m.role !== 'brokerage_owner' && (
+                  <Button size="icon" variant="ghost" aria-label={`Remove ${m.full_name}`} onClick={() => remove.mutate(m.membership_id)}>
+                    <Trash2 />
+                  </Button>
+                )}
+              </span>
+            </div>
+            {canManage && (
+              <OnboardingFaisRow
+                membershipId={m.membership_id}
+                capacity={m.fais_capacity}
+                status={m.fais_status}
+                dofa={m.dofa_date}
+                categories={m.authorised_licence_categories ?? []}
+                pending={updateFais.isPending}
+                onSave={(body) => updateFais.mutate(body)}
+              />
+            )}
           </li>
         ))}
       </ul>
+      {updateFais.error && <p className="text-xs text-red-600">{updateFais.error.message}</p>}
       {canManage ? (
         <form onSubmit={submit} className="grid gap-2 rounded-xl border border-navy-800/10 bg-mist/60 p-3 sm:grid-cols-[1fr_auto_auto]">
           <label className="sr-only" htmlFor="invite-email">Email</label>
@@ -230,6 +256,84 @@ export function TeamSection({ view }: { view: OnboardingView }) {
         </div>
       )}
     </div>
+  )
+}
+
+function OnboardingFaisRow({
+  membershipId,
+  capacity,
+  status,
+  dofa,
+  categories,
+  pending,
+  onSave,
+}: {
+  membershipId: string
+  capacity: FaisCapacity | null
+  status: FaisAppointmentStatus | null
+  dofa: string | null
+  categories: string[]
+  pending: boolean
+  onSave: (body: {
+    membership_id: string
+    fais_capacity: FaisCapacity | null
+    fais_status: FaisAppointmentStatus | null
+    dofa_date: string | null
+    authorised_licence_categories: string[]
+  }) => void
+}) {
+  const [faisCapacity, setFaisCapacity] = useState<FaisCapacity | ''>(capacity ?? '')
+  const [faisStatus, setFaisStatus] = useState<FaisAppointmentStatus | ''>(status ?? 'active')
+  const [dofaDate, setDofaDate] = useState(dofa ?? '')
+  const [cats, setCats] = useState<string[]>(categories)
+  const save = (e: FormEvent) => {
+    e.preventDefault()
+    onSave({
+      membership_id: membershipId,
+      fais_capacity: faisCapacity || null,
+      fais_status: faisStatus || null,
+      dofa_date: dofaDate || null,
+      authorised_licence_categories: faisCapacity === 'non_advice' ? [] : cats,
+    })
+  }
+  return (
+    <form onSubmit={save} className="grid gap-2 rounded-lg bg-mist/50 p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+      <select aria-label="FAIS capacity" className={textInput} value={faisCapacity} onChange={(e) => setFaisCapacity(e.target.value as FaisCapacity | '')} disabled={pending}>
+        <option value="">Capacity not set</option>
+        {(Object.keys(FAIS_CAPACITY_LABEL) as FaisCapacity[]).map((c) => (
+          <option key={c} value={c}>
+            {FAIS_CAPACITY_LABEL[c]}
+          </option>
+        ))}
+      </select>
+      <select aria-label="FAIS status" className={textInput} value={faisStatus} onChange={(e) => setFaisStatus(e.target.value as FaisAppointmentStatus | '')} disabled={pending}>
+        <option value="">Status not set</option>
+        {(Object.keys(FAIS_STATUS_LABEL) as FaisAppointmentStatus[]).map((s) => (
+          <option key={s} value={s}>
+            {FAIS_STATUS_LABEL[s]}
+          </option>
+        ))}
+      </select>
+      <input aria-label="DOFA" type="date" className={textInput} value={dofaDate} onChange={(e) => setDofaDate(e.target.value)} disabled={pending} />
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
+        Save FAIS
+      </Button>
+      {faisCapacity !== 'non_advice' && (
+        <div className="flex flex-wrap gap-1.5 sm:col-span-4">
+          {LICENCE_CATEGORIES.map((c) => (
+            <label key={c.value} className="inline-flex items-center gap-1 rounded border border-navy-800/10 px-1.5 py-0.5 text-[10px]">
+              <input
+                type="checkbox"
+                checked={cats.includes(c.value)}
+                onChange={() => setCats((prev) => (prev.includes(c.value) ? prev.filter((x) => x !== c.value) : [...prev, c.value]))}
+                disabled={pending}
+              />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </form>
   )
 }
 

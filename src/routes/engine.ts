@@ -165,22 +165,43 @@ export function progress(repo: Repo, runId: string): RouteProgress {
   return computeProgress(requireRoute(run.definition_id), run, resultsOf(repo, run.id))
 }
 
-/** Starts a run, or returns the active one for the same Route and client so progress is never split. */
-export function startOrResume(repo: Repo, actor: RouteActor, body: { definition_id: string; subject_id?: string | null }): { run: RouteRun; resumed: boolean } {
+export interface StartRouteBody {
+  definition_id: string
+  subject_id?: string | null
+  policy_id?: string | null
+  claim_id?: string | null
+  business_key?: string | null
+  waiting_on?: string | null
+  due_at?: string | null
+}
+
+/** Starts a run, or returns the active one for the same business intent so progress is never split. */
+export function startOrResume(repo: Repo, actor: RouteActor, body: StartRouteBody): { run: RouteRun; resumed: boolean } {
   const def = requireRoute(body.definition_id)
   const active = (r: RouteRun) => r.definition_id === def.id && r.status === 'active'
-  const existing = body.subject_id
-    ? repo.find('route_runs', (r) => active(r) && r.subject_id === body.subject_id)
-    : repo.find('route_runs', (r) => active(r) && !r.subject_id && r.started_by === actor.id)
+  const key = body.business_key ?? null
+  const existing = key
+    ? repo.find('route_runs', (r) => active(r) && r.business_key === key)
+    : body.subject_id
+      ? repo.find('route_runs', (r) => active(r) && r.subject_id === body.subject_id && !r.business_key)
+      : repo.find('route_runs', (r) => active(r) && !r.subject_id && !r.business_key && r.started_by === actor.id)
   if (existing) return { run: existing, resumed: true }
+  const category = def.category === 'both' ? 'sample' : def.category
   const run = repo.insert('route_runs', {
     definition_id: def.id,
+    definition_version: def.version ?? '1',
     subject_type: def.subject,
-    subject_id: null,
+    subject_id: body.subject_id ?? null,
     subject_label: null,
-    category: def.category,
+    policy_id: body.policy_id ?? null,
+    claim_id: body.claim_id ?? null,
+    business_key: key,
+    category,
     status: 'active',
     current_action_id: actionsOf(def)[0].id,
+    waiting_on: body.waiting_on ?? null,
+    owner_user_id: actor.id,
+    due_at: body.due_at ?? null,
     state: {},
     started_by: actor.id,
     started_by_name: actor.name,
@@ -266,6 +287,11 @@ export function runAction(
   repo.update('route_runs', run.id, {
     state,
     ...(applied.subject ? { subject_id: applied.subject.id, subject_label: applied.subject.label } : {}),
+    ...(applied.policy_id !== undefined ? { policy_id: applied.policy_id } : {}),
+    ...(applied.claim_id !== undefined ? { claim_id: applied.claim_id } : {}),
+    ...(applied.waiting_on !== undefined ? { waiting_on: applied.waiting_on } : {}),
+    ...(applied.due_at !== undefined ? { due_at: applied.due_at } : {}),
+    ...(applied.business_key !== undefined ? { business_key: applied.business_key } : {}),
   })
   const done = record('done', { summary: applied.summary, result: applied.result ?? { input: body.input } })
   if (applied.changed && action.invalidates) {
@@ -289,32 +315,73 @@ export interface RunSummary {
   id: string
   definition_id: string
   title: string
+  group: string
+  subject_id: string | null
   subject_label: string | null
+  policy_id: string | null
+  claim_id: string | null
+  record_ref: string | null
   status: RouteRun['status']
   next_label: string | null
+  waiting_on: string | null
+  due_at: string | null
   done_count: number
   total_count: number
+  owner_user_id: string | null
+  started_by: string
   started_by_name: string
   updated_at: string
 }
 
-export function listRuns(repo: Repo): RunSummary[] {
+export function listRuns(repo: Repo, filter?: { owner_id?: string | null; mine?: boolean }): RunSummary[] {
   return repo
-    .list('route_runs', (r) => Boolean(getRoute(r.definition_id)))
+    .list('route_runs', (r) => {
+      if (!getRoute(r.definition_id)) return false
+      if (filter?.mine && filter.owner_id) return r.owner_user_id === filter.owner_id || r.started_by === filter.owner_id
+      return true
+    })
     .map((run) => {
-      const p = computeProgress(getRoute(run.definition_id)!, run, resultsOf(repo, run.id))
+      const def = getRoute(run.definition_id)!
+      const p = computeProgress(def, run, resultsOf(repo, run.id))
+      const state = run.state as RouteState
+      const record_ref =
+        (typeof state.request_reference === 'string' && state.request_reference) ||
+        (typeof state.claim_reference === 'string' && state.claim_reference) ||
+        (typeof state.policy_number === 'string' && state.policy_number) ||
+        null
       return {
         id: run.id,
         definition_id: run.definition_id,
         title: p.route.title,
+        group: def.group,
+        subject_id: run.subject_id,
         subject_label: run.subject_label,
+        policy_id: run.policy_id,
+        claim_id: run.claim_id,
+        record_ref,
         status: run.status,
         next_label: p.next?.label ?? null,
+        waiting_on: run.waiting_on,
+        due_at: run.due_at,
         done_count: p.done_count,
         total_count: p.total_count,
+        owner_user_id: run.owner_user_id,
+        started_by: run.started_by,
         started_by_name: run.started_by_name,
         updated_at: run.updated_at,
       }
     })
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+}
+
+/** Active runs that share a policy or claim with this run (for cross-job stale warnings). */
+export function siblingActiveRuns(repo: Repo, runId: string): RouteRun[] {
+  const run = requireRun(repo, runId)
+  return repo.list(
+    'route_runs',
+    (r) =>
+      r.id !== runId &&
+      r.status === 'active' &&
+      ((run.policy_id != null && r.policy_id === run.policy_id) || (run.claim_id != null && r.claim_id === run.claim_id)),
+  )
 }
