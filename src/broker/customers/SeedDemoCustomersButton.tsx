@@ -11,7 +11,7 @@ export function SeedDemoCustomersButton({
   variant = 'outline',
 }: {
   onDone?: (firstPersonId: string | null) => void
-  size?: 'sm' | 'default'
+  size?: 'sm' | 'md'
   variant?: 'outline' | 'accent' | 'ghost'
 }) {
   const category = useDataCategory()

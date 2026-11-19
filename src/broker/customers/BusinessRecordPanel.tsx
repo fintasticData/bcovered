@@ -37,6 +37,7 @@ export function BusinessRecordPanel({
   const partner = (franchise.data?.partners ?? []).find((x) => x.customer_id === p.customer_id)
   const roles = ['commercial_client', ...(partner ? ['franchisee'] : [])]
   const activeTab = ['overview', 'relationships', 'outlets', 'quotes', 'activity'].includes(tab) ? tab : 'overview'
+  const openTasks = data.tasks.filter((t) => t.status === 'open').length
 
   return (
     <div className="space-y-4">
@@ -105,8 +106,8 @@ export function BusinessRecordPanel({
             <div className="rounded-xl border border-navy-800/10 bg-white p-3 sm:col-span-2">
               <dt className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Next action</dt>
               <dd className="mt-1 text-navy-900">
-                {data.open_broker_tasks + data.open_customer_tasks > 0
-                  ? `${data.open_broker_tasks + data.open_customer_tasks} open request(s)`
+                {openTasks > 0
+                  ? `${openTasks} open request${openTasks === 1 ? '' : 's'}`
                   : data.risk_profile
                     ? 'Review exposures and request a quote'
                     : 'Build the Risk Twin or add franchisee outlets'}

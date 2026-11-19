@@ -1040,7 +1040,7 @@ const CORE_TABLES: PlannedTable[] = [
   {
     name: 'route_runs',
     domain: 'agent_ops',
-    status: 'live',
+    status: 'new',
     scope: 'tenant',
     purpose: 'One saved Route job (What you wanna do!): progress shared by the guide and Russ; domain data stays on claims / policy_service_requests.',
     columns: [
@@ -1065,7 +1065,7 @@ const CORE_TABLES: PlannedTable[] = [
   {
     name: 'route_action_results',
     domain: 'agent_ops',
-    status: 'live',
+    status: 'new',
     scope: 'tenant',
     purpose: 'Each attempt at a Route action: done, needs input, blocked, failed or stale, with who did it (person or Russ) and when.',
     columns: [

@@ -1,6 +1,5 @@
 import { businessKeyOf, registerRoute, type RouteAction, type RouteState } from './definitions'
 import { asJson, clientOf, confirmAction, formFieldsCheck, needClient, selectClientAction } from './helpers'
-import type { Json } from '@/server/db/schema'
 
 export const A = {
   select: 'claim_register.client.select',

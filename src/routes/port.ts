@@ -11,7 +11,13 @@ function saved(r: SalesReceipt) {
   return { id: r.id, reference: r.reference }
 }
 
+function asRecord(value: Json | undefined): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  return {}
+}
+
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  if (!supabase) throw new Error('Supabase is not configured for this build.')
   const { data, error } = await supabase.rpc(fn, args)
   if (error) throw new Error(error.message)
   return data as T
@@ -40,7 +46,7 @@ export const supabaseRoutePort: RoutePort = {
       person_id: a.person_id,
       policy_id: a.policy_id,
       requested_effective_at: a.requested_effective_at,
-      change: a.change,
+      change: asRecord(a.change),
       item_id: a.item_id ?? null,
       notes: a.notes ?? null,
       key: a.key,
@@ -122,7 +128,7 @@ export const supabaseRoutePort: RoutePort = {
       person_id: a.person_id,
       policy_id: a.policy_id,
       requested_effective_at: a.requested_effective_at,
-      change: a.change ?? {},
+      change: asRecord(a.change),
       notes: a.notes ?? null,
       key: a.key,
     })

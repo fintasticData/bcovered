@@ -89,11 +89,12 @@ export default function CustomerAreaPage() {
         setContext((c) => ({
           ...c,
           account: {
-            record_type: 'business_client',
+            record_type: 'account',
             id: row.profile.customer_id,
             number: (row as { account_number?: string }).account_number ?? row.profile.customer_id.slice(0, 8),
             name,
             category,
+            detail: 'Business account',
             open_path: `/broker/customers/businesses/${row.profile.id}`,
           },
         }))
@@ -136,7 +137,10 @@ export default function CustomerAreaPage() {
     const biz = target.match(/\/(?:customers\/businesses|commercial\/clients)\/([0-9a-f-]{36})/i)
     if (biz) return openBusiness(biz[1])
     if (step.subject?.record_type === 'client') return openPerson(step.subject.id)
-    if (step.subject?.record_type === 'business_client') return openBusiness(step.subject.id)
+    if (step.subject?.record_type === 'account') {
+      const fromPath = step.subject.open_path?.match(/\/(?:customers\/businesses|commercial\/clients)\/([0-9a-f-]{36})/i)
+      if (fromPath) return openBusiness(fromPath[1])
+    }
   }
 
   const me = p?.member ?? null
