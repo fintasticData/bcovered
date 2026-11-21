@@ -159,7 +159,7 @@ export const quoteTools = [
       }
 
       const released = repo.update('quotes', quote_id, { status: 'released', released_at: new Date().toISOString() })
-      if (quote.lead_id) repo.update('leads', quote.lead_id, { status: 'proposal_released' })
+      if (quote.lead_id) repo.update('leads', quote.lead_id, { status: 'offer_sent' })
       const cheapest = quote.proposal.options.find((o) => o.id === quote.proposal!.comparison.cheapest_option_id)
       const notification = repo.insert('communications', {
         customer_id: quote.customer_id,

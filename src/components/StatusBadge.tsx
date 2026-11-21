@@ -28,6 +28,7 @@ const TONES: Record<string, Tone> = {
   approved: 'success',
   released: 'success',
   proposal_released: 'success',
+  offer_sent: 'success',
   accepted: 'success',
   live: 'success',
   won: 'success',

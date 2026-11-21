@@ -1,6 +1,14 @@
-import type { ActivityKind, AssetClass, BusinessLocation, BusinessProfile, FieldSource, ValueBasis } from '../db/commercialSchema'
+import type {
+  ActivityKind,
+  AssetClass,
+  AssetMobilityType,
+  BusinessLocation,
+  BusinessProfile,
+  FieldSource,
+  ValueBasis,
+} from '../db/commercialSchema'
 import { SEED_IDS } from '../db/seed'
-import { db, type Repo } from '../db/store'
+import type { Repo } from '../db/store'
 
 const id = (n: number) => `a0000000-0000-4000-8000-000000000${String(n).padStart(3, '0')}`
 
@@ -8,6 +16,8 @@ interface DemoBusiness {
   customer_id: string
   profile_id: string
   entity_id: string
+  /** Portal customer identity for My Business Page / role switcher. */
+  user_id: string
   email: string
   phone: string
   region: string
@@ -17,7 +27,24 @@ interface DemoBusiness {
   > & { cover_interests?: BusinessProfile['cover_interests'] }
   locations: Array<Omit<BusinessLocation, 'tenant_id' | 'business_profile_id' | 'legal_entity_id' | 'created_at' | 'updated_at'>>
   activities: Array<{ id: string; location: number | null; kind: ActivityKind; name: string; share_of_revenue: number | null; source: FieldSource }>
-  assets: Array<{ id: string; location: number | null; asset_class: AssetClass; description: string; quantity: number; declared_value: number | null; value_basis: ValueBasis; source: FieldSource }>
+  assets: Array<{
+    id: string
+    location: number | null
+    asset_class: AssetClass
+    description: string
+    quantity: number
+    declared_value: number | null
+    value_basis: ValueBasis
+    source: FieldSource
+    purchase_price?: number | null
+    purchase_date?: string | null
+    insured_value?: number | null
+    mobility_type?: AssetMobilityType
+    /** Location index for usual base; defaults to `location`. */
+    usual_base?: number | null
+    /** Location indexes where this portable asset is typically used. */
+    typically_used?: number[]
+  }>
 }
 
 const site = (
@@ -52,6 +79,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
     customer_id: id(801),
     profile_id: id(811),
     entity_id: id(812),
+    user_id: id(824),
     email: 'operations@thalihouse.example.demo',
     phone: '0215550171',
     region: 'Western Cape',
@@ -89,6 +117,8 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
         backup_power: true,
         public_access: true,
         seating_capacity: 80,
+        // Demo Site layout — hospitality pack illustration as floor plan stand-in
+        floor_plan_url: '/map-packs/map-retail.jpg',
       }),
       site(id(814), 'Claremont restaurant', 'Claremont', 'Cape Town', 'Western Cape', 'Restaurant with commercial kitchen', {
         fire_protection: ['Hand-held extinguishers'],
@@ -105,16 +135,95 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
       { id: id(818), location: null, kind: 'supplier_dependency', name: 'Spice and produce wholesaler (single source)', share_of_revenue: null, source: 'declared' },
     ],
     assets: [
-      { id: id(819), location: 0, asset_class: 'machinery', description: 'Kitchen equipment, extraction and cold room', quantity: 1, declared_value: 520_000, value_basis: 'replacement', source: 'declared' },
-      { id: id(820), location: 1, asset_class: 'machinery', description: 'Kitchen equipment and refrigeration', quantity: 1, declared_value: 380_000, value_basis: 'unknown', source: 'declared' },
-      { id: id(821), location: null, asset_class: 'stock', description: 'Perishable food stock across both sites', quantity: 1, declared_value: 90_000, value_basis: 'unknown', source: 'declared' },
-      { id: id(822), location: null, asset_class: 'electronic_equipment', description: 'POS terminals and card machines', quantity: 6, declared_value: 75_000, value_basis: 'replacement', source: 'declared' },
+      {
+        id: id(819),
+        location: 0,
+        asset_class: 'machinery',
+        description: 'Kitchen equipment and extraction',
+        quantity: 1,
+        declared_value: 420_000,
+        value_basis: 'replacement',
+        source: 'declared',
+        purchase_price: 390_000,
+        purchase_date: '2023-03-15',
+        mobility_type: 'fixed',
+      },
+      {
+        id: id(825),
+        location: 0,
+        asset_class: 'machinery',
+        description: 'Cold room (Woodstock kitchen)',
+        quantity: 1,
+        declared_value: 100_000,
+        value_basis: 'replacement',
+        source: 'verified',
+        purchase_price: 90_000,
+        purchase_date: '2023-03-15',
+        insured_value: 100_000,
+        mobility_type: 'fixed',
+      },
+      {
+        id: id(820),
+        location: 1,
+        asset_class: 'machinery',
+        description: 'Kitchen equipment and refrigeration',
+        quantity: 1,
+        declared_value: 380_000,
+        value_basis: 'unknown',
+        source: 'declared',
+        purchase_price: 350_000,
+        purchase_date: '2024-01-20',
+        mobility_type: 'fixed',
+      },
+      {
+        id: id(821),
+        location: null,
+        asset_class: 'stock',
+        description: 'Perishable food stock across both sites',
+        quantity: 1,
+        declared_value: 90_000,
+        value_basis: 'unknown',
+        source: 'declared',
+        purchase_price: 90_000,
+        purchase_date: '2025-11-01',
+        mobility_type: 'fixed',
+      },
+      {
+        id: id(822),
+        location: null,
+        asset_class: 'electronic_equipment',
+        description: 'POS terminals and card machines',
+        quantity: 6,
+        declared_value: 75_000,
+        value_basis: 'replacement',
+        source: 'declared',
+        purchase_price: 68_000,
+        purchase_date: '2022-08-01',
+        mobility_type: 'fixed',
+      },
+      {
+        id: id(826),
+        location: 0,
+        asset_class: 'electronic_equipment',
+        description: "Manager's phone",
+        quantity: 1,
+        declared_value: 18_000,
+        value_basis: 'replacement',
+        source: 'verified',
+        purchase_price: 16_500,
+        purchase_date: '2025-06-01',
+        insured_value: 18_000,
+        mobility_type: 'portable',
+        usual_base: 0,
+        typically_used: [0, 1],
+      },
     ],
   },
   {
     customer_id: id(831),
     profile_id: id(841),
     entity_id: id(842),
+    user_id: id(852),
     email: 'fleet@swiftfreight.example.demo',
     phone: '0115550184',
     region: 'Gauteng',
@@ -172,6 +281,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
     customer_id: id(861),
     profile_id: id(871),
     entity_id: id(872),
+    user_id: id(879),
     email: 'practice@mokoenapartners.example.demo',
     phone: '0125550136',
     region: 'Gauteng',
@@ -219,34 +329,61 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
   },
 ]
 
-/** Inserts any demo business whose fixed IDs are missing. Running it again changes nothing. */
+function ensureDemoBusinessCustomer(repo: Repo, b: DemoBusiness) {
+  if (!repo.get('customers', b.customer_id)) {
+    repo.insert('customers', {
+      id: b.customer_id,
+      customer_type: 'commercial',
+      full_name: b.profile.registered_name,
+      email: b.email,
+      phone: b.phone,
+      region: b.region,
+      status: 'active',
+      is_synthetic: true,
+      created_by: null,
+    })
+    repo.insert('customer_consents', {
+      customer_id: b.customer_id,
+      purpose: 'processing',
+      granted: true,
+      source: 'web_form',
+      notice_version: 'privacy-2026-01',
+      captured_at: new Date().toISOString(),
+      revoked_at: null,
+    })
+  }
+  if (!repo.get('app_users', b.user_id)) {
+    const contactName = b.profile.primary_contact?.name ?? b.profile.trading_name ?? b.profile.registered_name
+    repo.insert('app_users', {
+      id: b.user_id,
+      email: b.email,
+      full_name: contactName,
+      role: 'customer',
+      customer_id: b.customer_id,
+    })
+  }
+}
+
+/** Ensure Site layout demo URLs stay on known demo locations after re-seed. */
+function syncDemoFloorPlans(repo: Repo) {
+  DEMO_BUSINESSES.forEach((b) => {
+    b.locations.forEach((l) => {
+      if (!l.floor_plan_url) return
+      const existing = repo.get('business_locations', l.id)
+      if (!existing) return
+      if (existing.floor_plan_url === l.floor_plan_url) return
+      repo.update('business_locations', l.id, { floor_plan_url: l.floor_plan_url })
+    })
+  })
+}
+
+/** Inserts any demo business whose fixed IDs are missing. Re-running still ensures portal customers exist. */
 export function insertDemoBusinesses(repo: Repo): { inserted: number; profile_ids: string[] } {
   let inserted = 0
-  db.transaction(() => DEMO_BUSINESSES.forEach((b) => {
+  DEMO_BUSINESSES.forEach((b) => {
+    ensureDemoBusinessCustomer(repo, b)
     if (repo.get('business_profiles', b.profile_id)) return
     inserted++
-    if (!repo.get('customers', b.customer_id)) {
-      repo.insert('customers', {
-        id: b.customer_id,
-        customer_type: 'commercial',
-        full_name: b.profile.registered_name,
-        email: b.email,
-        phone: b.phone,
-        region: b.region,
-        status: 'active',
-        is_synthetic: true,
-        created_by: null,
-      })
-      repo.insert('customer_consents', {
-        customer_id: b.customer_id,
-        purpose: 'processing',
-        granted: true,
-        source: 'web_form',
-        notice_version: 'privacy-2026-01',
-        captured_at: new Date().toISOString(),
-        revoked_at: null,
-      })
-    }
     const base = { business_profile_id: b.profile_id }
     repo.insert('business_profiles', {
       ...b.profile,
@@ -269,8 +406,62 @@ export function insertDemoBusinesses(repo: Repo): { inserted: number; profile_id
     })
     const locIds = b.locations.map((l) => repo.insert('business_locations', { ...l, ...base, legal_entity_id: b.entity_id }).id)
     const at = (i: number | null) => (i === null ? null : locIds[i])
-    b.activities.forEach(({ location, ...a }) => repo.insert('business_activities', { ...a, ...base, location_id: at(location), description: null }))
-    b.assets.forEach(({ location, ...a }) => repo.insert('commercial_assets', { ...a, ...base, location_id: at(location), valuation_date: null }))
-  }))
+    b.activities.forEach(({ location, ...a }) =>
+      repo.insert('business_activities', { ...a, ...base, location_id: at(location), description: null }),
+    )
+    b.assets.forEach(
+      ({
+        location,
+        purchase_price,
+        purchase_date,
+        insured_value,
+        mobility_type,
+        usual_base,
+        typically_used,
+        ...a
+      }) => {
+        const location_id = at(location)
+        const usual_base_place_id =
+          usual_base !== undefined ? at(usual_base ?? null) : location_id
+        const assetId = repo.insert('commercial_assets', {
+          ...a,
+          ...base,
+          location_id,
+          valuation_date: null,
+          purchase_price: purchase_price ?? null,
+          purchase_date: purchase_date ?? null,
+          insured_value: insured_value ?? null,
+          mobility_type: mobility_type ?? (a.asset_class === 'vehicle' ? 'vehicle' : 'fixed'),
+          usual_base_place_id,
+        }).id
+        ;(typically_used ?? []).forEach((locIdx, i) => {
+          const place_id = at(locIdx)
+          if (!place_id) return
+          repo.insert('asset_places_of_use', {
+            id: `${a.id}-pou-${i}`,
+            asset_id: assetId,
+            place_id,
+            relationship: 'typically_used',
+          })
+        })
+      },
+    )
+  })
+  syncDemoFloorPlans(repo)
   return { inserted, profile_ids: DEMO_BUSINESSES.map((b) => b.profile_id) }
 }
+
+/** Fixed IDs + contact labels for Demo Studio / Fintastic My Business Page links. */
+export const DEMO_BUSINESS_PAGE_LINKS = DEMO_BUSINESSES.map((b) => ({
+  profileId: b.profile_id,
+  customerId: b.customer_id,
+  userId: b.user_id,
+  tradingName: b.profile.trading_name ?? b.profile.registered_name,
+  contactName: b.profile.primary_contact?.name ?? b.profile.trading_name ?? b.profile.registered_name,
+  email: b.email,
+  industryKey: b.profile.industry_key,
+  assetCount: b.assets.length,
+  locationCount: b.locations.length,
+  previewPath: `/broker/customers/businesses/${b.profile_id}/business-page?view=fintastic`,
+  customerPath: '/my/business?view=fintastic&tab=assets',
+}))

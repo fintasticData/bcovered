@@ -14,10 +14,23 @@ const knownPaths = new Set([...routes.filter((p) => p.startsWith('/')), ...broke
 
 const HELP_ANCHORS = ['start', 'roles', 'capabilities', 'walkthroughs', 'copilot', 'agents', 'guardrails', 'statuses', 'roadmap', 'faq', 'more']
 
+function pathMatchesKnown(path: string) {
+  if (knownPaths.has(path)) return true
+  for (const pattern of knownPaths) {
+    if (!pattern.includes(':')) continue
+    const escaped = pattern
+      .split('/')
+      .map((seg) => (seg.startsWith(':') ? '[^/]+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      .join('/')
+    if (new RegExp(`^${escaped}$`).test(path)) return true
+  }
+  return false
+}
+
 function resolves(to: string) {
   const [target, hash] = to.split('#')
   const path = target.split('?')[0]
-  if (!knownPaths.has(path)) return false
+  if (!pathMatchesKnown(path)) return false
   if (path === '/legal' && hash) return LEGAL_SECTIONS.some((s) => s.id === hash)
   if (path === '/help' && hash) return HELP_ANCHORS.includes(hash)
   if (path === '/' && hash) return hash === 'personal'

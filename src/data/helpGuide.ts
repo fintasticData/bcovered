@@ -74,7 +74,7 @@ export const ROLES = [
     role: 'Business customer',
     who: 'Nomsa Dlamini (Kasi Kitchen Group) after Scenario A',
     can: 'Lands in the business portal: review status, the business risk profile with its provenance labels, and the documents or information the broker has asked for.',
-    home: { to: '/portal/business', label: 'Business portal' },
+    home: { to: '/my/business', label: 'My Business Page' },
   },
   {
     role: 'Broker',
@@ -177,7 +177,7 @@ export const ACCESS_MATRIX: AccessRow[] = [
   },
   {
     area: 'Business portal: review status, risk profile, document requests',
-    link: { to: '/portal/business', label: 'Business portal' },
+    link: { to: '/my/business', label: 'My Business Page' },
     access: {
       visitor: NONE,
       customer: { level: 'limited', note: 'Without a business, sees how to start a review' },
@@ -395,7 +395,7 @@ export const CAPABILITIES: Capability[] = [
       'Build Twin for clients that have a profile but no Twin; no submission is drafted',
       'Discover existing business by name or registration number',
       'Card, table and risk overview views with search and filters',
-      'Load demo businesses: three fixed synthetic businesses, removed by Demo Studio reset',
+      'Load demo businesses: three fixed synthetic businesses plus portal contacts (Anil / Lerato Molefe / Kagiso) for My Business Page; removed by Demo Studio reset',
     ],
     status: 'live',
     links: [{ to: '/broker/commercial/risk-twins', label: 'Risk Twins' }],
@@ -481,7 +481,7 @@ export const CAPABILITIES: Capability[] = [
     status: 'live',
     links: [
       { to: '/portal', label: 'Personal portal' },
-      { to: '/portal/business', label: 'Business portal' },
+      { to: '/my/business', label: 'My Business Page' },
     ],
   },
   {
@@ -589,7 +589,7 @@ export const WALKTHROUGHS = [
       { text: 'In Demo Studio, start Restaurant group risk review and press Play. The fictional owner describes Kasi Kitchen Group.', link: { to: '/demo', label: 'Demo Studio' } },
       { text: 'Switch to Thabo Nkosi. Open Business clients to see the Risk Twin, exposures and requests.', link: { to: '/broker/commercial/clients', label: 'Business clients' } },
       { text: 'Open Submissions, review the pack, apply the suggested sections, then approve.', link: { to: '/broker/commercial/submissions', label: 'Submissions' } },
-      { text: 'Switch to Nomsa Dlamini: you land in her business portal. Open the risk profile from there.', link: { to: '/portal/business', label: 'Business portal' } },
+      { text: 'Switch to Nomsa Dlamini: you land on My Business Page. Open the risk profile from there.', link: { to: '/my/business', label: 'My Business Page' } },
       { text: 'Optional: in Russ, switch to the Commercial lens and ask “Review Ubuntu Foods and identify outstanding insurance questions”.', link: { to: '/broker/workspace?lens=commercial', label: 'Russ · Commercial' } },
     ],
   },

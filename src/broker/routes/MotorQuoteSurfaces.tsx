@@ -128,7 +128,7 @@ function SelectClient({ progress, busy, run }: SurfaceProps) {
             <Note>
               {auth.status !== 'signed_in'
                 ? 'Sign in to create a Sample client here.'
-                : <>Set up your sales profile in <Link to="/broker/book" className="font-semibold text-brand-700 underline">My workspace</Link> first, then create clients here.</>}
+                : <>Set up your sales profile in <Link to="/broker/customers" className="font-semibold text-brand-700 underline">Customer Area</Link> first, then create clients here.</>}
             </Note>
           )}
           {canCreate && matches ? (
@@ -387,7 +387,7 @@ export function MotorOutcomeCard({ progress }: { progress: RouteProgress }) {
           ? `Preferred quote ${outcome.insurer} at ${formatRand(outcome.premium ?? 0)}/month (${coverLabel(draft?.cover || undefined)}) saved as note ${outcome.reference}.`
           : `Follow-up ${outcome.reference} due ${outcome.due_date}: ${outcome.note}.`}
       </p>
-      <Link to={`/broker/book/clients/${client.person_id}?rtab=${tab}`} className="mt-2 inline-block text-xs font-semibold text-emerald-800 underline">
+      <Link to={`/broker/customers/people/${client.person_id}?rtab=${tab}`} className="mt-2 inline-block text-xs font-semibold text-emerald-800 underline">
         Open {client.name}’s {outcome.kind === 'preferred' ? 'Communications' : 'follow-ups'}
       </Link>
     </div>

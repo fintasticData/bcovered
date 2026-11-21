@@ -1,3 +1,5 @@
+import { DEMO_BUSINESS_PAGE_LINKS } from './demoBusinesses'
+
 export interface DemoScenario {
   id: string
   number: number
@@ -140,11 +142,61 @@ export const PLANNED_COMMERCIAL_SCENARIOS: Array<Pick<DemoScenario, 'code' | 'ti
 ]
 
 /** Synthetic businesses added by "Load demo businesses" on the Risk Twins page. Each gets a Twin built by the risk_twin_build job. */
-export const DEMO_BUSINESS_SUMMARIES: Array<{ name: string; industry: string; summary: string }> = [
-  { name: 'Thali House Restaurants', industry: 'Restaurants and hospitality', summary: 'Two Cape Town restaurants; one kitchen without suppression or backup power.' },
-  { name: 'Swift Freight Logistics', industry: 'Transport and logistics', summary: 'Depot, 14 trucks and trailers, cargo hijacking history and one client at 55% of revenue.' },
-  { name: 'Mokoena & Partners', industry: 'Professional services', summary: 'Law firm with client trust accounts and no recorded current insurer.' },
+export const DEMO_BUSINESS_SUMMARIES: Array<{
+  name: string
+  industry: string
+  summary: string
+  profileId: string
+  contactName: string
+  previewPath: string
+}> = [
+  {
+    name: 'Thali House Restaurants',
+    industry: 'Restaurants and hospitality',
+    summary: 'Two Cape Town restaurants; one kitchen without suppression or backup power. Portal contact: Anil Pillay.',
+    profileId: DEMO_BUSINESS_PAGE_LINKS[0]!.profileId,
+    contactName: DEMO_BUSINESS_PAGE_LINKS[0]!.contactName,
+    previewPath: DEMO_BUSINESS_PAGE_LINKS[0]!.previewPath,
+  },
+  {
+    name: 'Swift Freight Logistics',
+    industry: 'Transport and logistics',
+    summary: 'Depot, 14 trucks and trailers, cargo hijacking history and one client at 55% of revenue. Portal contact: Lerato Molefe.',
+    profileId: DEMO_BUSINESS_PAGE_LINKS[1]!.profileId,
+    contactName: DEMO_BUSINESS_PAGE_LINKS[1]!.contactName,
+    previewPath: DEMO_BUSINESS_PAGE_LINKS[1]!.previewPath,
+  },
+  {
+    name: 'Mokoena & Partners',
+    industry: 'Professional services',
+    summary: 'Law firm with client trust accounts and no recorded current insurer. Portal contact: Kagiso Mokoena.',
+    profileId: DEMO_BUSINESS_PAGE_LINKS[2]!.profileId,
+    contactName: DEMO_BUSINESS_PAGE_LINKS[2]!.contactName,
+    previewPath: DEMO_BUSINESS_PAGE_LINKS[2]!.previewPath,
+  },
 ]
 
-export const SCENARIOS = [NEW_MOTOR_LEAD, RESTAURANT_GROUP]
+export const BROKER_FINANCIALS_HIGHVELD: DemoScenario = {
+  id: 'broker-financials-highveld',
+  number: 7,
+  title: 'Broker financials — Highveld',
+  summary:
+    'Demo brokerage walkthrough: vehicle replace → commission → statement match → receipt → adviser payout. Numbers check by eye (R1,000 → R1,400, 10%, 70/30).',
+  initial_conditions: [
+    'Highveld Demo Brokers selected in Demo mode',
+    'Priya Naicker motor policy HDB-MV-1001 at R1,000 monthly',
+    'Active Protea motor scale 10% with 70% brokerage / 30% adviser',
+  ],
+  agents: ['Russ'],
+  database_effects: [
+    'commission_earnings and allocations for November',
+    'statement match on sample Protea line',
+    'simulated commission_receipts and commission_payouts',
+  ],
+  deliverable: 'Matched earning with cash received and adviser paid; dashboard drills back to the same rows.',
+  script: [],
+  available: true,
+}
+
+export const SCENARIOS = [NEW_MOTOR_LEAD, RESTAURANT_GROUP, BROKER_FINANCIALS_HIGHVELD]
 export const getScenario = (id: string | null) => SCENARIOS.find((s) => s.id === id)

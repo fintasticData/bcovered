@@ -20,7 +20,6 @@ const DemoStudioPage = lazy(() => import('./pages/DemoStudioPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
 const FaqPage = lazy(() => import('./pages/FaqPage'))
 const UpdatesPage = lazy(() => import('./pages/UpdatesPage'))
-const PortalPage = lazy(() => import('./pages/portal/PortalPage'))
 const PortalProposalPage = lazy(() => import('./pages/portal/PortalProposalPage'))
 const BrokerLayout = lazy(() => import('./broker/BrokerLayout'))
 const OverviewPage = lazy(() => import('./broker/OverviewPage'))
@@ -36,7 +35,6 @@ const FranchisePage = lazy(() => import('./broker/franchise/FranchisePage'))
 const OutletPortalPage = lazy(() => import('./pages/outlet/OutletPortalPage'))
 const OutletJoinPage = lazy(() => import('./pages/outlet/OutletJoinPage'))
 const LeadsPage = lazy(() => import('./broker/LeadsPage'))
-const LeadDetailPage = lazy(() => import('./broker/LeadDetailPage'))
 const BrokerQuotePage = lazy(() => import('./broker/BrokerQuotePage'))
 const SampleMotorQuotePage = lazy(() => import('./broker/quotes/SampleMotorQuotePage'))
 const ApprovalsPage = lazy(() => import('./broker/ApprovalsPage'))
@@ -53,6 +51,7 @@ const VehicleReplacementFormPage = lazy(() => import('./broker/policies/VehicleR
 const ClaimsQueuePage = lazy(() => import('./broker/claims/ClaimsQueuePage'))
 const ClaimDetailPage = lazy(() => import('./broker/claims/ClaimDetailPage'))
 const ReportIncidentFormPage = lazy(() => import('./broker/claims/ReportIncidentFormPage'))
+const RenewalsPage = lazy(() => import('./fintastic-ux/RenewalsPage'))
 const AccountPage = lazy(() => import('./broker/accounts/AccountPage'))
 const ClientDetailPage = lazy(() => import('./broker/commercial/ClientDetailPage'))
 const RiskTwinsPage = lazy(() => import('./broker/commercial/RiskTwinsPage'))
@@ -65,7 +64,6 @@ const BusinessHomePage = lazy(() => import('./pages/business/BusinessHomePage'))
 const BusinessIndustriesPage = lazy(() => import('./pages/business/BusinessIndustriesPage'))
 const BusinessCoverPage = lazy(() => import('./pages/business/BusinessCoverPage'))
 const BusinessRiskReviewPage = lazy(() => import('./pages/business/BusinessRiskReviewPage'))
-const PortalBusinessPage = lazy(() => import('./pages/portal/PortalBusinessPage'))
 const PortalRiskProfilePage = lazy(() => import('./pages/portal/PortalRiskProfilePage'))
 const PortalLifePage = lazy(() => import('./pages/portal/PortalLifePage'))
 const PeoplePage = lazy(() => import('./broker/people/PeoplePage'))
@@ -96,6 +94,8 @@ const PackPage = lazy(() => import('./broker/specialist/PackPage'))
 const InvestigationsPage = lazy(() => import('./broker/specialist/InvestigationsPage'))
 const InvestigationPage = lazy(() => import('./broker/specialist/InvestigationPage'))
 const ExecutivePage = lazy(() => import('./broker/specialist/ExecutivePage'))
+const BrokerFinancialsPage = lazy(() => import('./broker/financials/BrokerFinancialsPage'))
+const CommissionScalesPage = lazy(() => import('./broker/financials/CommissionScalesPage'))
 const CompliancePage = lazy(() => import('./broker/specialist/CompliancePage'))
 const SignInPage = lazy(() => import('./pages/auth/SignInPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'))
@@ -104,7 +104,23 @@ const JoinPage = lazy(() => import('./pages/brokers/JoinPage'))
 const InvitePage = lazy(() => import('./pages/brokers/InvitePage'))
 const InviteHelpPage = lazy(() => import('./pages/brokers/InviteHelpPage'))
 const MyAreaPage = lazy(() => import('./pages/my/MyAreaPage'))
+const MyBusinessPage = lazy(() => import('./pages/my/MyBusinessPage'))
+const MyQuotesPage = lazy(() => import('./pages/my/MyQuotesPage'))
+const MyClaimsPage = lazy(() => import('./pages/my/MyClaimsPage'))
+const CustomerLayout = lazy(() => import('./pages/my/CustomerLayout'))
 const CustomerReportIncidentPage = lazy(() => import('./pages/my/CustomerReportIncidentPage'))
+const YourPagePreviewPage = lazy(() => import('./pages/your-page/YourPagePreviewPage'))
+const BusinessPagePreviewPage = lazy(() => import('./pages/your-page/BusinessPagePreviewPage'))
+const CustomerInvitePage = lazy(() => import('./pages/your-page/CustomerInvitePage'))
+const PartnerTrackingPage = lazy(() => import('./pages/partners/PartnerTrackingPage'))
+const ConciergeHomePage = lazy(() => import('./pages/concierge/ConciergeHomePage'))
+const ConciergeNewRequestPage = lazy(() => import('./pages/concierge/ConciergeNewRequestPage'))
+const ConciergeRequestPage = lazy(() => import('./pages/concierge/ConciergeRequestPage'))
+const ConciergeQueuePage = lazy(() => import('./broker/concierge/ConciergeQueuePage'))
+const ConciergeRequestDetailPage = lazy(() => import('./broker/concierge/ConciergeRequestDetailPage'))
+const ServiceProvidersPage = lazy(() => import('./broker/concierge/ServiceProvidersPage'))
+const PartnerConciergeQueuePage = lazy(() => import('./pages/partner/PartnerConciergeQueuePage'))
+const PartnerConciergeRequestPage = lazy(() => import('./pages/partner/PartnerConciergeRequestPage'))
 const OnboardingPage = lazy(() => import('./onboarding/OnboardingPage'))
 const PlatformLayout = lazy(() => import('./platform/PlatformLayout'))
 const QueuePage = lazy(() => import('./platform/QueuePage'))
@@ -147,22 +163,59 @@ function routeIdentity(pathname: string): 'personal' | 'business' | undefined {
 
 function PublicLayout() {
   const { pathname } = useLocation()
+  const customerPortal =
+    pathname === '/my' ||
+    pathname.startsWith('/my/') ||
+    pathname === '/demo/my' ||
+    pathname.startsWith('/demo/my/')
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="bg-brand-900 px-4 py-1.5 text-center text-xs text-brand-100">
-        <span className="hidden sm:inline">InsureFlow AI demo · BCovered is a fictional brokerage. All people, insurers and figures are synthetic. </span>
-        <span className="sm:hidden">Fictional demo brokerage · synthetic data. </span>
-        <Link to={`/updates#${LATEST_UPDATE_HEADLINE.id}`} className="ml-1 font-semibold text-gold-300 hover:text-gold-400">
-          What’s new<span className="hidden md:inline">: {LATEST_UPDATE_HEADLINE.title}</span> →
-        </Link>
-      </div>
+      {!customerPortal && (
+        <div className="bg-brand-900 px-4 py-1.5 text-center text-xs text-brand-100">
+          <span className="hidden sm:inline">InsureFlow AI demo · BCovered is a fictional brokerage. All people, insurers and figures are synthetic. </span>
+          <span className="sm:hidden">Fictional demo brokerage · synthetic data. </span>
+          <Link to={`/updates#${LATEST_UPDATE_HEADLINE.id}`} className="ml-1 font-semibold text-gold-300 hover:text-gold-400">
+            What’s new<span className="hidden md:inline">: {LATEST_UPDATE_HEADLINE.title}</span> →
+          </Link>
+          <span className="mx-2 hidden text-brand-400 md:inline" aria-hidden>
+            ·
+          </span>
+          <Link
+            to="/broker/customers/people/4f636b52-b23d-4e06-9860-f29846094e17?rtab=items&view=fintastic&item=Delivery%20van%2004"
+            className="ml-1 hidden font-semibold text-gold-300 hover:text-gold-400 md:inline"
+          >
+            Fleet
+          </Link>
+          <Link to="/broker/renewals?view=fintastic&focus=r1" className="ml-2 hidden font-semibold text-gold-300 hover:text-gold-400 md:inline">
+            Renewals
+          </Link>
+          <Link to="/broker/quotes/sample-motor?view=fintastic" className="ml-2 hidden font-semibold text-gold-300 hover:text-gold-400 md:inline">
+            Quotes
+          </Link>
+          <Link to="/broker/claims/c1111111-0000-4000-8000-00000000a033?view=fintastic" className="ml-2 hidden font-semibold text-gold-300 hover:text-gold-400 md:inline">
+            Claim
+          </Link>
+          <Link
+            to="/broker/customers/people/c0000000-0000-4000-8000-000000000310"
+            className="ml-2 hidden font-semibold text-gold-300 hover:text-gold-400 md:inline"
+          >
+            Record drawer
+          </Link>
+          <Link
+            to="/broker/customers/people/c0000000-0000-4000-8000-000000000310/your-page?view=fintastic&item=Toyota%20Fortuner&panel=1"
+            className="ml-2 hidden font-semibold text-gold-300 hover:text-gold-400 lg:inline"
+          >
+            Inspect
+          </Link>
+        </div>
+      )}
       <Header />
       <main className="flex-1" data-identity={routeIdentity(pathname)}>
         <Suspense fallback={<div className="container-x min-h-[60vh]"><LoadingState /></div>}>
           <Outlet />
         </Suspense>
       </main>
-      <Footer />
+      {!customerPortal && <Footer />}
     </div>
   )
 }
@@ -214,18 +267,44 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
-            path="/my"
             element={
-              <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Area">
-                <MyAreaPage />
+              <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Page">
+                <CustomerLayout />
+              </RequireRole>
+            }
+          >
+            <Route path="/my" element={<MyAreaPage />} />
+            <Route path="/my/business" element={<MyBusinessPage />} />
+            <Route path="/my/business/risk-profile" element={<PortalRiskProfilePage />} />
+            <Route path="/my/quotes" element={<MyQuotesPage />} />
+            <Route path="/my/claims" element={<MyClaimsPage />} />
+            <Route path="/my/claims/new" element={<CustomerReportIncidentPage />} />
+            <Route path="/my/concierge" element={<ConciergeHomePage />} />
+            <Route path="/my/concierge/new" element={<ConciergeNewRequestPage />} />
+            <Route path="/my/concierge/requests/:requestId" element={<ConciergeRequestPage />} />
+            <Route path="/demo/my" element={<MyAreaPage />} />
+            <Route path="/demo/my/business" element={<MyBusinessPage />} />
+            <Route path="/demo/my/business/risk-profile" element={<PortalRiskProfilePage />} />
+            <Route path="/demo/my/quotes" element={<MyQuotesPage />} />
+            <Route path="/demo/my/claims" element={<MyClaimsPage />} />
+            <Route path="/demo/my/claims/new" element={<CustomerReportIncidentPage />} />
+            <Route path="/demo/my/concierge" element={<ConciergeHomePage />} />
+            <Route path="/demo/my/concierge/new" element={<ConciergeNewRequestPage />} />
+            <Route path="/demo/my/concierge/requests/:requestId" element={<ConciergeRequestPage />} />
+          </Route>
+          <Route
+            path="/partner/concierge"
+            element={
+              <RequireRole roles={['insurer_partner']} area="Insurer Concierge desk">
+                <PartnerConciergeQueuePage />
               </RequireRole>
             }
           />
           <Route
-            path="/my/claims/new"
+            path="/partner/concierge/:requestId"
             element={
-              <RequireRole roles={['customer', 'broker', 'manager', 'admin']} area="My Area">
-                <CustomerReportIncidentPage />
+              <RequireRole roles={['insurer_partner']} area="Insurer Concierge desk">
+                <PartnerConciergeRequestPage />
               </RequireRole>
             }
           />
@@ -236,36 +315,18 @@ export default function App() {
           <Route path="/team/join/:token" element={<TeamJoinPage />} />
           <Route path="/r/:code" element={<ReferralEnquiryPage />} />
           <Route path="/enquire" element={<ReferralEnquiryPage />} />
+          <Route path="/invite/c/:token" element={<CustomerInvitePage />} />
+          <Route path="/p/:slug/tracking" element={<PartnerTrackingPage />} />
+          <Route path="/partners/tracking" element={<PartnerTrackingPage />} />
           <Route path="/outlet" element={<OutletPortalPage />} />
           <Route path="/outlet/join/:token" element={<OutletJoinPage />} />
           <Route path="/business" element={<BusinessHomePage />} />
           <Route path="/business/industries" element={<BusinessIndustriesPage />} />
           <Route path="/business/cover" element={<BusinessCoverPage />} />
           <Route path="/business/risk-review" element={<BusinessRiskReviewPage />} />
-          <Route
-            path="/portal/business"
-            element={
-              <RequireRole roles={['customer']} area="The business portal">
-                <PortalBusinessPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/portal/business/risk-profile"
-            element={
-              <RequireRole roles={['customer']} area="The business portal">
-                <PortalRiskProfilePage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/portal"
-            element={
-              <RequireRole roles={['customer']} area="The customer portal">
-                <PortalPage />
-              </RequireRole>
-            }
-          />
+          <Route path="/portal/business" element={<Navigate to="/my/business" replace />} />
+          <Route path="/portal/business/risk-profile" element={<Navigate to="/my/business/risk-profile" replace />} />
+          <Route path="/portal" element={<Navigate to="/my" replace />} />
           <Route
             path="/portal/life"
             element={
@@ -322,7 +383,9 @@ export default function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="workspace" element={<WorkspacePage />} />
           <Route path="customers" element={<CustomerAreaPage />} />
+          <Route path="customers/people/:personId/your-page" element={<YourPagePreviewPage />} />
           <Route path="customers/people/:personId" element={<CustomerAreaPage />} />
+          <Route path="customers/businesses/:profileId/business-page" element={<BusinessPagePreviewPage />} />
           <Route path="customers/businesses/:profileId" element={<CustomerAreaPage />} />
           <Route path="book" element={<BookPage />} />
           <Route path="book/clients/:personId" element={<BookPage />} />
@@ -330,7 +393,7 @@ export default function App() {
           <Route path="routes/runs/:runId" element={<RouteGuidePage />} />
           <Route path="franchise" element={<FranchisePage />} />
           <Route path="leads" element={<LeadsPage />} />
-          <Route path="leads/:leadId" element={<LeadDetailPage />} />
+          <Route path="leads/:leadId" element={<LeadsPage />} />
           <Route path="quotes/sample-motor" element={<SampleMotorQuotePage />} />
           <Route path="quotes/:quoteId" element={<BrokerQuotePage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
@@ -342,6 +405,11 @@ export default function App() {
           <Route path="policies" element={<PoliciesQueuePage />} />
           <Route path="policies/requests/new" element={<VehicleReplacementFormPage />} />
           <Route path="policies/requests/:requestId" element={<ServiceRequestDetailPage />} />
+          <Route path="renewals" element={<RenewalsPage />} />
+          <Route path="concierge" element={<ConciergeQueuePage />} />
+          <Route path="concierge/providers" element={<ServiceProvidersPage />} />
+          <Route path="concierge/providers/:providerId" element={<ServiceProvidersPage />} />
+          <Route path="concierge/:requestId" element={<ConciergeRequestDetailPage />} />
           <Route path="policies/:policyId" element={<PolicyDetailPage />} />
           <Route path="claims" element={<ClaimsQueuePage />} />
           <Route path="claims/new" element={<ReportIncidentFormPage />} />
@@ -383,10 +451,12 @@ export default function App() {
           <Route path="investigations" element={<InvestigationsPage />} />
           <Route path="investigations/:investigationId" element={<InvestigationPage />} />
           <Route path="executive" element={<RequireRole roles={['manager', 'admin']} area="The executive dashboard"><ExecutivePage /></RequireRole>} />
+          <Route path="financials" element={<RequireRole roles={['manager', 'admin', 'broker']} area="Broker financials"><BrokerFinancialsPage /></RequireRole>} />
           <Route path="compliance" element={<CompliancePage />} />
           <Route path="settings/profile" element={<TabbedHub hub={SETTINGS_HUB}><BrokerageProfilePage /></TabbedHub>} />
           <Route path="settings/team" element={<TabbedHub hub={SETTINGS_HUB}><TeamPage /></TabbedHub>} />
           <Route path="settings/insurers" element={<TabbedHub hub={SETTINGS_HUB}><InsurersPage /></TabbedHub>} />
+          <Route path="settings/commission-scales" element={<TabbedHub hub={SETTINGS_HUB}><CommissionScalesPage /></TabbedHub>} />
           <Route path="imports/client-book" element={<TabbedHub hub={SETTINGS_HUB}><ClientBookImportsPage /></TabbedHub>} />
           <Route path="imports/client-book/:batchId" element={<ClientBookImportPage />} />
           <Route path="systems" element={systems} />

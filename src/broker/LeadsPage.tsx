@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Building2, Car, ChevronRight, ClipboardCopy, ExternalLink, Mail, Phone, Plus, X } from 'lucide-react'
-import { useBulkLeads, useLeads } from '@/api/hooks'
+import { useBulkLeads, useCloseLead, useLead, useLeads } from '@/api/hooks'
 import { humanise } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { useTeam } from '@/copilot/salesApi'
@@ -16,10 +16,15 @@ import { LEAD_PIPELINE_STAGES } from '@/server/db/schema'
 import { categoriesFor, PRODUCT_KEYS } from '@/server/shortTermApi'
 import { CategoryBadge } from './copilot/identity'
 import { LeadProgressBar } from './leads/LeadProgressBar'
+import { buildLeadContextMenu, isLeadOverdue } from './leads/leadContextMenu'
 import { AreaFindings, SampleDataBadge } from './leads/LeadRunViews'
+import { DemoAdvanceBar } from './leads/DemoAdvanceBar'
+import { LeadRecordPanel } from './leads/LeadRecordPanel'
 import { NewLeadModal } from './leads/NewLeadModal'
 import { DemoSampleBadge } from './quotes/shared'
 import { DataGrid, type CsvColumn } from './shared/DataGrid'
+import { RightSlideout } from './shared/RightSlideout'
+import { RowActionsButton, RowContextMenu, type ContextMenuState } from './shared/RowContextMenu'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from './PageHeader'
 
 const VIEWS = [
@@ -97,7 +102,7 @@ function FollowUpForm({ onSubmit, busy }: { onSubmit: (title: string, due: strin
   if (!open) {
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        Add follow-up
+        Set follow-up
       </Button>
     )
   }
@@ -124,14 +129,132 @@ function FollowUpForm({ onSubmit, busy }: { onSubmit: (title: string, due: strin
 }
 
 export default function LeadsPage() {
+  const { leadId } = useParams()
   const { data: leads, isLoading, error } = useLeads()
+  const slideLead = useLead(leadId)
   const category = useDataCategory()
   const runs = useLeadRuns()
   const team = useTeam()
   const bulk = useBulkLeads()
+  const closeLead = useCloseLead()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [notice, setNotice] = useState<string | null>(null)
   const [newLeadOpen, setNewLeadOpen] = useState(false)
+  const [rowMenu, setRowMenu] = useState<ContextMenuState>(null)
+
+  const openLead = useCallback(
+    (id: string) => {
+      sessionStorage.setItem('bcovered:leads-scroll', String(window.scrollY))
+      navigate({ pathname: `/broker/leads/${id}`, search: params.toString() })
+    },
+    [navigate, params],
+  )
+
+  const closeSlideout = useCallback(() => {
+    navigate({ pathname: '/broker/leads', search: params.toString() })
+  }, [navigate, params])
+
+  const runOne = useCallback(
+    (body: Parameters<typeof bulk.mutate>[0], label: string) => {
+      bulk.mutate(body, {
+        onSuccess: (r) => setNotice(`${label}: ${r.updated} updated${r.skipped ? `, ${r.skipped} unchanged` : ''}.`),
+        onError: (e) => setNotice((e as Error).message),
+      })
+    },
+    [bulk],
+  )
+
+  const menuActions = useMemo(
+    () => ({
+      open: (lead: LeadRow) => openLead(lead.id),
+      openCustomerArea: (lead: LeadRow) => navigate(lead.customer_area_path || '/broker/customers'),
+      setStatus: (lead: LeadRow, status: LeadStatus) =>
+        runOne({ lead_ids: [lead.id], action: 'status', status }, `Status set to ${humanise(status)}`),
+      setFollowUp: (lead: LeadRow) => {
+        const title = window.prompt('Follow-up', lead.next_action?.trim() || 'Call to introduce cover')
+        if (!title?.trim()) return
+        const due = window.prompt('Due date (YYYY-MM-DD), optional', lead.next_action_due_at?.slice(0, 10) ?? '')
+        runOne({ lead_ids: [lead.id], action: 'follow_up', title: title.trim(), due_date: due?.trim() || null }, 'Follow-up set')
+      },
+      assignOwner: (lead: LeadRow) => {
+        const members = team.data ?? []
+        if (!members.length) {
+          setNotice('No team members to assign.')
+          return
+        }
+        const list = members.map((m, i) => `${i + 1}. ${m.name}`).join('\n')
+        const pick = window.prompt(`Assign owner — enter number (or 0 for nobody):\n${list}`, '1')
+        if (pick == null) return
+        const n = Number(pick)
+        if (n === 0) {
+          runOne({ lead_ids: [lead.id], action: 'assign', member_id: null }, 'Unassigned')
+          return
+        }
+        const member = members[n - 1]
+        if (!member) {
+          setNotice('Invalid owner choice.')
+          return
+        }
+        runOne({ lead_ids: [lead.id], action: 'assign', member_id: member.member_id }, `Assigned to ${member.name}`)
+      },
+      close: (lead: LeadRow) => {
+        const reason = window.prompt('Close reason', lead.closed_reason?.trim() || 'Declined')
+        if (!reason?.trim()) return
+        const stage = LEAD_PIPELINE_STAGES.includes(lead.status as (typeof LEAD_PIPELINE_STAGES)[number])
+          ? (lead.status as (typeof LEAD_PIPELINE_STAGES)[number])
+          : 'lead'
+        closeLead.mutate(
+          { lead_id: lead.id, reason: reason.trim(), closed_at_stage: stage },
+          {
+            onSuccess: () => setNotice('Opportunity closed.'),
+            onError: (e) => setNotice((e as Error).message),
+          },
+        )
+      },
+      askRuss: (lead: LeadRow) => {
+        sessionStorage.setItem('bcovered:working-on-lead', lead.id)
+        navigate(`/broker/workspace?copilot=russ&leadId=${lead.id}`)
+      },
+    }),
+    [navigate, openLead, runOne, team.data, closeLead],
+  )
+
+  const slideTitle =
+    slideLead.data?.customer.full_name ??
+    leads?.find((l) => l.id === leadId)?.customer_name ??
+    'Lead'
+  const slideSubtitle = (() => {
+    const row = slideLead.data
+    const fromList = leads?.find((l) => l.id === leadId)
+    const kind = (row?.customer.customer_type ?? fromList?.customer_type) === 'commercial' ? 'Business' : 'Person'
+    const cover = row?.lead.product_category
+      ? humanise(row.lead.product_category)
+      : fromList?.product_category
+        ? humanise(fromList.product_category)
+        : null
+    const status = row?.lead.status ?? fromList?.status
+    return [kind, cover, status ? humanise(status) : null].filter(Boolean).join(' · ')
+  })()
+  const slideDemo =
+    slideLead.data?.prospect?.is_sample ||
+    leads?.find((l) => l.id === leadId)?.prospect?.is_sample ||
+    category === 'sample'
+
+  const leadMenu = useCallback((lead: LeadRow) => buildLeadContextMenu(lead, menuActions), [menuActions])
+
+  useEffect(() => {
+    const key = 'bcovered:leads-scroll'
+    const saved = sessionStorage.getItem(key)
+    if (saved) {
+      const y = Number(saved)
+      if (Number.isFinite(y)) window.requestAnimationFrame(() => window.scrollTo(0, y))
+      sessionStorage.removeItem(key)
+    }
+    const onLeave = () => sessionStorage.setItem(key, String(window.scrollY))
+    window.addEventListener('pagehide', onLeave)
+    return () => window.removeEventListener('pagehide', onLeave)
+  }, [])
 
   const view = VIEWS.find((v) => v.id === params.get('view')) ?? VIEWS[0]
   const typeFilter = TYPE_FILTERS.find((t) => t.id === params.get('type')) ?? TYPE_FILTERS[0]
@@ -193,9 +316,13 @@ export default function LeadsPage() {
           return (
             <div className="min-w-[12rem]">
               <span className="flex flex-wrap items-center gap-1.5">
-                <Link to={`/broker/leads/${l.id}`} className="font-medium text-navy-900 hover:text-brand-600">
+                <button
+                  type="button"
+                  className="cursor-pointer font-medium text-navy-900 hover:text-brand-600"
+                  onClick={() => openLead(l.id)}
+                >
                   {l.customer_name}
-                </Link>
+                </button>
                 {l.prospect?.is_sample && <SampleDataBadge />}
                 {l.prospect?.status && l.prospect.status !== 'active' && (
                   <span className="rounded bg-navy-100 px-1 text-[10px] font-semibold text-navy-700 uppercase">{humanise(l.prospect.status)}</span>
@@ -257,10 +384,56 @@ export default function LeadsPage() {
       },
       {
         id: 'status',
-        header: 'Status',
+        header: 'Stage',
         accessorFn: (l) => STATUSES.indexOf(l.status),
         cell: ({ row: { original: l } }) => (
-          <LeadProgressBar status={l.status} closedReason={l.closed_reason} closedAtStage={l.closed_at_stage} compact />
+          <LeadProgressBar
+            status={l.status}
+            closedReason={l.closed_reason}
+            closedAtStage={l.closed_at_stage}
+            overdue={isLeadOverdue(l)}
+            compact
+          />
+        ),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        cell: ({ row: { original: l } }) => (
+          <RowActionsButton items={leadMenu(l)} onOpen={setRowMenu} />
+        ),
+      },
+      {
+        id: 'assigned',
+        header: 'Owner',
+        accessorFn: (l) => (l.assigned_member_id ? (members.get(l.assigned_member_id) ?? '') : ''),
+        cell: ({ getValue }) => <span className="text-xs text-navy-700">{(getValue() as string) || '–'}</span>,
+      },
+      {
+        id: 'next_action',
+        header: 'Next action',
+        accessorFn: (l) => l.next_action ?? l.blocker ?? '',
+        cell: ({ row: { original: l } }) => (
+          <span className="max-w-[14rem] truncate text-xs text-navy-800" title={l.next_action ?? l.blocker ?? undefined}>
+            {l.next_action?.trim() || l.blocker || '–'}
+          </span>
+        ),
+      },
+      {
+        id: 'due',
+        header: 'Due',
+        accessorFn: (l) => l.next_action_due_at ?? '',
+        cell: ({ row: { original: l } }) => (
+          <span className="text-xs text-navy-700">{l.next_action_due_at ? formatDateTime(l.next_action_due_at) : '–'}</span>
+        ),
+      },
+      {
+        id: 'last_activity',
+        header: 'Last activity',
+        accessorFn: (l) => l.last_activity_at ?? l.updated_at,
+        cell: ({ row: { original: l } }) => (
+          <span className="text-xs text-navy-600">{formatDateTime(l.last_activity_at ?? l.updated_at)}</span>
         ),
       },
       {
@@ -268,12 +441,6 @@ export default function LeadsPage() {
         header: 'Urgency',
         accessorFn: (l) => ({ high: 3, medium: 2, low: 1 })[l.urgency ?? 'low'] ?? 0,
         cell: ({ row: { original: l } }) => <span className="text-xs text-navy-700">{l.urgency ? humanise(l.urgency) : '–'}</span>,
-      },
-      {
-        id: 'missing',
-        header: 'Missing info',
-        accessorFn: (l) => l.missing_info.length,
-        cell: ({ row: { original: l } }) => <span className="text-xs text-navy-700" title={l.missing_info.join(', ')}>{l.missing_info.length ? l.missing_info.length : 'None'}</span>,
       },
       {
         id: 'tasks',
@@ -297,12 +464,6 @@ export default function LeadsPage() {
           ),
       },
       {
-        id: 'assigned',
-        header: 'Assigned',
-        accessorFn: (l) => (l.assigned_member_id ? (members.get(l.assigned_member_id) ?? '') : ''),
-        cell: ({ getValue }) => <span className="text-xs text-navy-700">{(getValue() as string) || '–'}</span>,
-      },
-      {
         id: 'category',
         header: 'Data',
         accessorFn: (l) => l.data_category ?? category,
@@ -311,7 +472,7 @@ export default function LeadsPage() {
       },
       { id: 'created', header: 'Created', accessorFn: (l) => l.created_at, cell: ({ row: { original: l } }) => <span className="text-xs text-navy-600">{formatDateTime(l.created_at)}</span> },
     ],
-    [runNames, members, category],
+    [runNames, members, category, leadMenu, openLead],
   )
 
   const csv: CsvColumn<LeadRow>[] = [
@@ -371,7 +532,7 @@ export default function LeadsPage() {
               </Link>
             </Button>
             <Button size="sm" variant="outline" asChild>
-              <Link to="/broker/quotes/sample-motor">
+              <Link to={category === 'sample' ? '/broker/quotes/sample-motor' : '/broker/routes?start=motor_quotes'}>
                 <Plus /> New motor quote
               </Link>
             </Button>
@@ -383,7 +544,7 @@ export default function LeadsPage() {
       />
       {runId ? (
         <RunHeader runId={runId} onClear={() => setParam('run', null)} />
-      ) : (
+      ) : category === 'sample' ? (
         <Link to="/broker/quotes/sample-motor" className="panel mb-4 flex items-center gap-4 p-4 transition hover:border-brand-500/40">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
             <Car className="h-5 w-5" />
@@ -397,7 +558,7 @@ export default function LeadsPage() {
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-navy-400" />
         </Link>
-      )}
+      ) : null}
       {scope && (
         <p className="mb-3 text-xs text-navy-600">
           Showing {scope} leads only.{' '}
@@ -421,16 +582,17 @@ export default function LeadsPage() {
           data={rows}
           columns={columns}
           getRowId={(l) => l.id}
-          storageKey="broker-leads"
+          storageKey="broker-leads-v2"
           searchPlaceholder="Search name, email, area or summary"
           searchText={(l) =>
-            [l.customer_name, l.customer_email, l.customer_phone, l.qualification.summary, l.product_category, l.source, l.prospect?.email, l.prospect?.phone, l.prospect?.area, l.prospect?.industry, l.prospect?.business_function, l.prospect?.address]
+            [l.customer_name, l.customer_email, l.customer_phone, l.qualification.summary, l.product_category, l.source, l.next_action, l.prospect?.email, l.prospect?.phone, l.prospect?.area, l.prospect?.industry, l.prospect?.business_function, l.prospect?.address]
               .filter(Boolean)
               .join(' ')
           }
-          initialSort={[{ id: 'created', desc: true }]}
-          defaultHidden={anyResearch ? ['industry', 'assigned', 'tasks'] : ['area', 'industry', 'function', 'run', 'assigned', 'tasks']}
+          initialSort={[{ id: 'due', desc: false }, { id: 'last_activity', desc: true }]}
+          defaultHidden={['email', 'area', 'industry', 'function', 'product', 'urgency', 'tasks', 'source', 'run', 'category', 'created']}
           minWidth={1100}
+          rowClassName={(l) => (l.id === leadId ? 'bg-brand-50/80' : undefined)}
           csv={{ filename: runId ? `russ-leads-${runId.slice(0, 8)}` : 'leads', columns: csv }}
           empty={<EmptyState title="No leads in this view">Add a lead, change the filters, or ask Russ to find businesses in an area.</EmptyState>}
           toolbar={
@@ -480,6 +642,11 @@ export default function LeadsPage() {
             const prospects = selected.filter((l) => l.prospect).length
             return (
               <>
+                {category === 'sample' && (
+                  <div className="w-full basis-full">
+                    <DemoAdvanceBar selectedIds={ids} clear={clear} />
+                  </div>
+                )}
                 <select
                   value=""
                   disabled={bulk.isPending}
@@ -505,7 +672,7 @@ export default function LeadsPage() {
                     aria-label="Assign to team member"
                     className="field py-1 text-xs"
                   >
-                    <option value="">Assign to…</option>
+                    <option value="">Assign owner…</option>
                     {team.data!.map((m) => (
                       <option key={m.member_id} value={m.member_id}>
                         {m.name}
@@ -514,7 +681,7 @@ export default function LeadsPage() {
                     <option value="none">Nobody</option>
                   </select>
                 )}
-                <FollowUpForm busy={bulk.isPending} onSubmit={(title, due) => run({ lead_ids: ids, action: 'follow_up', title, due_date: due }, 'Follow-ups created', clear)} />
+                <FollowUpForm busy={bulk.isPending} onSubmit={(title, due) => run({ lead_ids: ids, action: 'follow_up', title, due_date: due }, 'Follow-ups set', clear)} />
                 {prospects > 0 && (
                   <select
                     value=""
@@ -541,19 +708,29 @@ export default function LeadsPage() {
               </>
             )
           }}
+          getRowContextMenu={leadMenu}
           mobileCard={(l, sel) => (
             <div className="panel flex gap-3 p-4">
               <input type="checkbox" checked={sel.selected} onChange={sel.toggle} aria-label={`Select ${l.customer_name}`} className="mt-1" />
-              <Link to={`/broker/leads/${l.id}`} className="min-w-0 flex-1 active:bg-mist">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0">
+                  <button type="button" className="min-w-0 cursor-pointer text-left active:bg-mist" onClick={() => openLead(l.id)}>
                     <span className="font-medium text-navy-900">{l.customer_name}</span>
                     <span className="mt-0.5 block text-[11px] text-navy-500">
                       {l.customer_type === 'commercial' ? 'Business' : 'Person'}
                       {l.product_category ? ` · ${humanise(l.product_category)}` : ''}
                     </span>
-                  </span>
-                  <LeadProgressBar status={l.status} closedReason={l.closed_reason} closedAtStage={l.closed_at_stage} compact />
+                  </button>
+                  <div className="flex flex-col items-end gap-1">
+                    <LeadProgressBar
+                      status={l.status}
+                      closedReason={l.closed_reason}
+                      closedAtStage={l.closed_at_stage}
+                      overdue={isLeadOverdue(l)}
+                      compact
+                    />
+                    <RowActionsButton items={leadMenu(l)} onOpen={setRowMenu} />
+                  </div>
                 </div>
                 {(l.customer_phone || l.customer_email || l.prospect) && (
                   <p className="mt-0.5 truncate text-xs text-navy-700">
@@ -564,11 +741,24 @@ export default function LeadsPage() {
                 <p className="mt-2 text-[11px] text-navy-500">
                   {l.product_category ? humanise(l.product_category) : 'No cover yet'} · {l.line} · {l.missing_info.length ? `${l.missing_info.length} missing` : 'complete'} · {formatDateTime(l.created_at)}
                 </p>
-              </Link>
+              </div>
             </div>
           )}
         />
       )}
+      <RowContextMenu state={rowMenu} onClose={() => setRowMenu(null)} />
+
+      <RightSlideout
+        open={Boolean(leadId)}
+        onClose={closeSlideout}
+        title={slideTitle}
+        subtitle={slideSubtitle || undefined}
+        demo={Boolean(slideDemo)}
+        size="record"
+        footer={null}
+      >
+        {leadId && <LeadRecordPanel leadId={leadId} embedded onOpenLead={openLead} />}
+      </RightSlideout>
     </div>
   )
 }

@@ -84,7 +84,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       {
         q: 'What documents might a broker ask for?',
         a: 'Typically the current policy schedule and wording, a claims history, an asset register with replacement values, financial statements and industry-specific certificates. They appear as requests in your business portal.',
-        link: { to: '/portal/business', label: 'Business portal' },
+        link: { to: '/my/business', label: 'My Business Page' },
       },
     ],
   },

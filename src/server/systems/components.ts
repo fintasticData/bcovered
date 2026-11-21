@@ -283,7 +283,7 @@ export const ENDPOINTS: Endpoint[] = [
   e('commercial.updateSection', 'PATCH', '/commercial/submissions/:id/sections/:section', 'Apply a section edit to the draft', 'staff', 'db_function'),
   e('commercial.requestApproval', 'POST', '/commercial/submissions/:id/approval', 'Request submission approval', 'staff', 'db_function'),
   e('commercial.updateTask', 'PATCH', '/tasks/:id', 'Complete or cancel a task', 'staff', 'db_function'),
-  e('commercial.portal', 'GET', '/portal/business', 'Business portal', 'customer', 'table_read'),
+  e('commercial.portal', 'GET', '/my/business', 'My Business Page', 'customer', 'table_read'),
   e('twin.workspace', 'GET', '/commercial/twins/:id', 'Twin workspace', 'staff', 'table_read'),
   e('twin.startAssessment', 'POST', '/commercial/twins/:id/assessments', 'Start an assessment job', 'staff', 'edge_function'),
   e('twin.startInvestigation', 'POST', '/commercial/twins/:id/investigations', 'Start an investigation job', 'staff', 'edge_function'),

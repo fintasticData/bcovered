@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CheckCircle2, Circle, Loader2, Lock, Maximize2, Minimize2, UserRound } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CheckCircle2, Circle, Loader2, Lock, MessageSquare, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ActionOutcome, ActionProgress, RouteProgress } from '@/api/client'
 import { useRouteRun, useRunRouteAction } from '@/api/hooks'
@@ -141,14 +141,14 @@ function Phases({
   )
 }
 
-/** The guide: navigation, then Russ (about 40%), then the Route's phases and the selected action's work surface. */
+/** The guide: Route work first; Russ stays hidden until opened, then sits on the right (~40%). */
 export default function RouteGuidePage() {
   const { runId } = useParams()
   const [params, setParams] = useSearchParams()
   const category = useDataCategory()
   const q = useRouteRun(runId)
   const act = useRunRouteAction()
-  const [expanded, setExpanded] = useState(false)
+  const [showRuss, setShowRuss] = useState(false)
   const [pane, setPane] = useState<Pane>('work')
   const [context, setContext] = useState<TurnContext>({ route_run_id: runId })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -163,7 +163,7 @@ export default function RouteGuidePage() {
   useEffect(() => {
     const client = p?.run.state.client as { person_id: string; client_number: string; name: string } | undefined
     if (client && context.person?.id !== client.person_id) {
-      setContext((c) => ({ ...c, route_run_id: runId, person: { record_type: 'client', id: client.person_id, number: client.client_number, name: client.name, category: 'sample', open_path: `/broker/book/clients/${client.person_id}` } }))
+      setContext((c) => ({ ...c, route_run_id: runId, person: { record_type: 'client', id: client.person_id, number: client.client_number, name: client.name, category: 'sample', open_path: `/broker/customers/people/${client.person_id}` } }))
     }
   }, [p?.run.state.client, runId, context.person?.id])
 
@@ -266,32 +266,33 @@ export default function RouteGuidePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} workLabel="Guide" />}
-      <div className={cn('grid min-h-0 flex-1 gap-4 p-3 sm:p-4', 'grid-cols-1', !expanded && 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
-        {!expanded && (
-          <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>
-            <CopilotPanel
-              key={`russ:route:${runId}:${category}`}
-              copilot="russ"
-              scope={`route:${runId}`}
-              context={context}
-              onContextChange={(c) => setContext({ ...c, route_run_id: c.route_run_id ?? runId })}
-              onSelect={onSelect}
-              selectedKey={selectedKey}
-              intro={`Russ works on ${p.route.title} with you. Ask him to continue: he does the steps marked Russ (reviewing the vehicle, getting sample quotes) and hands back the ones that need you. Both of you update the same saved progress.`}
-              starters={['Continue', `${p.route.title}`]}
-            />
-          </div>
+      <MobilePaneSwitch
+        pane={pane}
+        onChange={(next) => {
+          setPane(next)
+          if (next === 'chat') setShowRuss(true)
+        }}
+        workLabel="Guide"
+        showQueue={false}
+      />
+      <div
+        className={cn(
+          'grid min-h-0 flex-1 gap-4 p-3 sm:p-4',
+          'grid-cols-1',
+          showRuss && 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]',
         )}
-
-        <section className={cn('panel flex min-h-0 flex-col overflow-hidden', !expanded && pane !== 'work' && 'hidden lg:flex')} aria-label={`${p.route.title} guide`}>
+      >
+        <section
+          className={cn('panel flex min-h-0 flex-col overflow-hidden', showRuss && pane !== 'work' && 'hidden lg:flex')}
+          aria-label={`${p.route.title} guide`}
+        >
           <header className="space-y-2 border-b border-navy-800/10 px-4 py-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link to="/broker/routes" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600"><ArrowLeft className="h-3.5 w-3.5" /> Routes</Link>
                 <h1 className="truncate text-base font-semibold text-navy-900">{p.route.title}</h1>
                 <p className="flex flex-wrap items-center gap-1.5 text-xs text-navy-600">
-                  {client ? <Link to={`/broker/book/clients/${client.person_id}`} className="font-medium text-navy-900 underline">{client.name}</Link> : 'Client not chosen yet'}
+                  {client ? <Link to={`/broker/customers/people/${client.person_id}`} className="font-medium text-navy-900 underline">{client.name}</Link> : 'Client not chosen yet'}
                   {client && <span className="font-mono">{client.client_number}</span>}
                   {(p.run.state.request_reference as string | undefined) && <span>· {String(p.run.state.request_reference)}</span>}
                   {(p.run.state.claim_reference as string | undefined) && <span>· {String(p.run.state.claim_reference)}</span>}
@@ -308,8 +309,21 @@ export default function RouteGuidePage() {
                   <Link to="/broker/routes">Save and return to work</Link>
                 </Button>
                 <CategorySwitch />
-                <Button size="sm" variant="ghost" className="hidden lg:inline-flex" onClick={() => setExpanded((e) => !e)}>
-                  {expanded ? <Minimize2 /> : <Maximize2 />} {expanded ? 'Show Russ' : 'Expand editor'}
+                <Button
+                  size="sm"
+                  variant={showRuss ? 'outline' : 'ghost'}
+                  className="hidden lg:inline-flex"
+                  aria-label={showRuss ? 'Hide Russ' : 'Show Russ'}
+                  aria-pressed={showRuss}
+                  title={showRuss ? 'Hide Russ' : 'Show Russ'}
+                  onClick={() => {
+                    if (showRuss) setPane('work')
+                    setShowRuss((v) => !v)
+                  }}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span className="sr-only">{showRuss ? 'Hide Russ' : 'Show Russ'}</span>
+                  <span className="hidden 2xl:inline">Russ</span>
                 </Button>
               </div>
             </div>
@@ -341,6 +355,22 @@ export default function RouteGuidePage() {
             )}
           </div>
         </section>
+
+        {showRuss && (
+          <div className={cn('min-h-0', pane !== 'chat' && 'hidden lg:block')}>
+            <CopilotPanel
+              key={`russ:route:${runId}:${category}`}
+              copilot="russ"
+              scope={`route:${runId}`}
+              context={context}
+              onContextChange={(c) => setContext({ ...c, route_run_id: c.route_run_id ?? runId })}
+              onSelect={onSelect}
+              selectedKey={selectedKey}
+              intro={`Russ works on ${p.route.title} with you. Ask him to continue: he does the steps marked Russ (reviewing the vehicle, getting sample quotes) and hands back the ones that need you. Both of you update the same saved progress.`}
+              starters={['Continue', `${p.route.title}`]}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

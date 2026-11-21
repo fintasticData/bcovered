@@ -46,6 +46,204 @@ export const KIND_LABEL: Record<UpdateKind, string> = {
 /** Newest first. The pinned thread is the standing overview of everything in the current build. */
 export const UPDATE_THREADS: UpdateThread[] = [
   {
+    id: 'cover-desk-map-mobile',
+    date: '2026-11-21T20:30:00+02:00',
+    version: 'v1.12',
+    title: 'Cover desk, Map Asset Register, and mobile polish',
+    summary:
+      'One Cover desk for personal and business, a working Map Asset Register with site layout and List/Cards/Map, values and payments, and phone-first navigation across My Cover and broker drawers.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Unified Cover desk',
+        body: 'Personal and Business share one desk chrome with account switcher and desk tabs (Cover, Values & payments, Quotes, Claims, Comms, Concierge). Demo and live stay clearly labelled.',
+        links: [
+          { to: '/demo/my', label: 'Demo · My Cover' },
+          { to: '/demo/my/business', label: 'Demo · My Business' },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'business',
+        title: 'Map Asset Register',
+        body: 'List, Cards and Map for business assets. Map opens Places → site drill-down, illustrated overview packs, and Site layout when a floor plan is set. Portable items show usual base and typically-used places.',
+        links: [
+          {
+            to: '/demo/my/business?tab=assets&layout=map',
+            label: 'Demo · Business map',
+          },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'personal',
+        title: 'Personal List · Cards · Map',
+        body: 'Your insured items use the same layout toggle as business. Cards for scan-first phones; Map for place-of-use when available.',
+        links: [{ to: '/demo/my?layout=cards', label: 'Demo · Personal cards' }],
+      },
+      {
+        kind: 'improved',
+        area: 'portals',
+        title: 'Values & payments and risk profile',
+        body: 'Values & payments sits on the Cover desk. Risk profile still lets you correct declared numbers with history; verified fields stay locked.',
+        links: [
+          { to: '/demo/my?tab=values', label: 'Demo · Values & payments' },
+          { to: '/my/business/risk-profile', label: 'Risk profile' },
+        ],
+      },
+      {
+        kind: 'improved',
+        area: 'platform',
+        title: 'Mobile-first Cover and Map',
+        body: 'Desk tabs and task chips scroll horizontally on small screens. Map Places use chip navigation; overview stacks place cards instead of the desktop star. Slideouts respect safe areas; pin actions stay visible on touch.',
+        links: [{ to: '/demo/my/business?tab=assets&layout=map', label: 'Try map on phone' }],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Concierge, providers and claim repair quotes',
+        body: 'Broker concierge queue, service providers directory and claim-linked repair quotes stay available from Customer Area and Claims Fintastic views.',
+        links: [
+          { to: '/broker/concierge/providers', label: 'Service providers' },
+          { to: '/updates#fintastic-drawers', label: 'Fintastic drawers' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'portal-risk-profile-edit',
+    date: '2026-11-21T14:00:00+02:00',
+    version: 'v1.11',
+    title: 'Business risk profile: declare corrections and see history',
+    summary:
+      'Customers can correct declared numbers and asset values on the risk profile page. Verified fields stay locked. Every change is kept with who changed it and when.',
+    posts: [
+      {
+        kind: 'improved',
+        area: 'portals',
+        title: 'Edit declared details on your risk profile',
+        body: 'Correct years trading, turnover, employees, VAT and asset values inline. Verified registration details stay locked for your broker. Recent changes shows from → to with who and when.',
+        links: [{ to: '/my/business/risk-profile', label: 'Your business risk profile' }],
+      },
+    ],
+  },
+  {
+    id: 'fintastic-drawers',
+    date: '2026-11-21T03:30:00+02:00',
+    version: 'v1.10',
+    title: 'Fintastic right-hand drawers',
+    summary:
+      'Three right-hand modes beside centre-first hubs: a complete customer record drawer, a thin item inspect panel, and task forms opened from Add or right-click. Open any link from the broker news bar.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Complete record work drawer',
+        body: 'Open Naledi VIP from Customer Area — identity, lifecycle actions, full tabs with counts, overview facts and timelines. size=record; primary CTAs live in the drawer.',
+        links: [
+          {
+            to: '/broker/customers/people/c0000000-0000-4000-8000-000000000310',
+            label: 'Record drawer · Naledi VIP',
+          },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Focused-item inspect (thin)',
+        body: 'Toyota Fortuner with the centre hub focused and the right panel open for facts only. Primary action stays on the hub — close the panel to return.',
+        links: [
+          {
+            to: '/broker/customers/people/c0000000-0000-4000-8000-000000000310/your-page?view=fintastic&item=Toyota%20Fortuner&panel=1',
+            label: 'Item inspect · Fortuner',
+          },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Task form from Add / ActionCard',
+        body: 'Create job for Naledi VIP — task + person in the header, Save / Cancel, same handler pattern as Add and right-click.',
+        links: [
+          {
+            to: '/broker/concierge/providers?job=1&personId=c0000000-0000-4000-8000-000000000310',
+            label: 'Task form · Create job',
+          },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Claim-linked repair quotes',
+        body: 'After insurer acceptance, CLM-S1007 (burglary) unlocks Get repair quotes. Jobs bind to the claim number; locksmith and appliance quotes show on the Fintastic claim star.',
+        links: [
+          {
+            to: '/broker/claims/03766623-19d9-40e5-8737-06af43ac61d7?view=fintastic',
+            label: 'CLM-S1007 · Get repair quotes',
+          },
+          {
+            to: '/broker/concierge/providers?job=1&claimId=03766623-19d9-40e5-8737-06af43ac61d7&personId=c0000000-0000-4000-8000-000000000310',
+            label: 'Providers · claim-bound Create job',
+          },
+        ],
+      },
+      {
+        kind: 'improved',
+        area: 'broker',
+        title: 'News bar groups Centre vs Drawers',
+        body: 'Broker and demo news bars list centre-first hosts and the three drawer modes separately. Details land on this update thread.',
+        links: [{ to: '/demo', label: 'Demo Studio · Fintastic' }],
+      },
+    ],
+  },
+  {
+    id: 'fintastic-centre-first',
+    date: '2026-11-20T23:00:00+02:00',
+    version: 'v1.9',
+    title: 'Four centre-first Fintastic screens',
+    summary:
+      'Desktop centre-first layouts for fleet cover, renewals, quote comparison and motor claim booking — with Russ beside the decision. Open any link from the broker news bar.',
+    posts: [
+      {
+        kind: 'new',
+        area: 'portals',
+        title: 'Business fleet cover hub',
+        body: 'Open Delivery van 04 from Items in Fintastic view: photo, Cover pending, Request cover, invoice at the edge, Russ attach.',
+        links: [
+          {
+            to: '/broker/customers/people/4f636b52-b23d-4e06-9860-f29846094e17?rtab=items&view=fintastic&item=Delivery%20van%2004',
+            label: 'Fleet cover · Delivery van 04',
+          },
+        ],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Renewals change review',
+        body: 'Ubuntu Foods excess R10 000 → R15 000 with Russ explain, Discuss draft, and bulk actions on checked rows.',
+        links: [{ to: '/broker/renewals?view=fintastic&focus=r1', label: 'Renewals · Ubuntu Foods' }],
+      },
+      {
+        kind: 'new',
+        area: 'broker',
+        title: 'Quote comparison',
+        body: 'SAMPLE offers A/B/C with the reference centred. Switch reference to recalculate Russ; Share opens a customer preview.',
+        links: [{ to: '/broker/quotes/sample-motor?view=fintastic', label: 'Motor quotes · Fintastic' }],
+      },
+      {
+        kind: 'new',
+        area: 'personal',
+        title: 'Motor claim active step',
+        body: 'Confirm repair booking with Russ’s proposed slot, or choose another time. Also on My claims for customers.',
+        links: [
+          { to: '/broker/claims/c1111111-0000-4000-8000-00000000a033?view=fintastic', label: 'Broker claim · Fintastic' },
+          { to: '/demo/my?tab=claims&view=fintastic', label: 'My claims · demo' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'policies-claims-routes',
     date: '2026-11-19T09:00:00+02:00',
     version: 'v1.8',
@@ -127,9 +325,10 @@ export const UPDATE_THREADS: UpdateThread[] = [
         kind: 'improved',
         area: 'broker',
         title: 'Person-first lead pipeline',
-        body: 'Capture a person or business before cover is known. Stages run lead → quoting → accepted or closed, with closed reason and optional policy link for Live.',
+        body: 'Capture a person or business before cover is known. Stages run lead → contacted → qualified → quoting → offer sent → accepted → live (or closed), with Confirm cover filing the policy from an accepted offer.',
         links: [
           { to: '/broker/leads', label: 'Leads' },
+          { to: '/broker/customers', label: 'Customer Area' },
           { to: '/broker/overview', label: 'Overview' },
         ],
       },
@@ -239,7 +438,7 @@ export const UPDATE_THREADS: UpdateThread[] = [
         area: 'broker',
         title: 'My workspace sales desk',
         body: 'One desk for your clients, offers, referrals and team view, with Russ beside the queue. Brokerage logo shows when branding is set.',
-        links: [{ to: '/broker/book', label: 'My workspace' }],
+        links: [{ to: '/broker/customers', label: 'Customer Area' }],
       },
       {
         kind: 'new',
@@ -405,7 +604,7 @@ export const UPDATE_THREADS: UpdateThread[] = [
         title: 'Broker workspace',
         body: 'Customer Area is the home: people and businesses with Ava beside the record. Policies, claims and Routes sit next to the sales book.',
         points: [
-          'Customer Area, My workspace, Franchise, Leads and Approvals',
+          'Customer Area, Franchise, Leads and Approvals',
           'Policies queue, Claims queue and guided Routes for common jobs',
           'AI Workspace and Commercial workspace, each with its own Copilot',
           'Approvals with Current and Suggested views; Tasks & Jobs with a full agent and tool trace',
@@ -430,7 +629,7 @@ export const UPDATE_THREADS: UpdateThread[] = [
         links: [
           { to: '/my', label: 'My area' },
           { to: '/portal', label: 'Classic portal' },
-          { to: '/portal/business', label: 'Business portal' },
+          { to: '/my/business', label: 'My Business Page' },
           { to: '/outlet', label: 'Outlet portal' },
         ],
       },
@@ -869,7 +1068,7 @@ export const UPDATE_THREADS: UpdateThread[] = [
         area: 'portals',
         title: 'Business contacts land in the business portal',
         body: 'Switching to a business contact opens the business portal and greets the person by name. Customers without a business see a clear next step.',
-        links: [{ to: '/portal/business', label: 'Business portal' }],
+        links: [{ to: '/my/business', label: 'My Business Page' }],
       },
       {
         kind: 'improved',

@@ -10,7 +10,7 @@ export default function SampleMotorQuotePage() {
 
   return (
     <div className="mx-auto max-w-7xl scroll-mt-4 p-4 sm:p-6">
-      <Link to={personId ? `/broker/book/clients/${personId}?rtab=quotes` : '/broker/book'} className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
+      <Link to={personId ? `/broker/customers/people/${personId}?rtab=quotes` : '/broker/customers'} className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
         <ArrowLeft className="h-3.5 w-3.5" /> {personId ? 'Customer quotes' : 'My workspace'}
       </Link>
       <PageHeader

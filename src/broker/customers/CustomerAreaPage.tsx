@@ -1,29 +1,60 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Building2, FlaskConical, Maximize2, Minimize2, Plus, Upload, UserPlus, Users } from 'lucide-react'
-import { useCommercialClients } from '@/api/hooks'
+import { Building2, FlaskConical, MessageSquare, Plus, Share2, Upload, UserPlus, Users } from 'lucide-react'
+import { useCommercialClient, useCommercialClients } from '@/api/hooks'
 import { Button } from '@/components/ui/button'
 import { StatusBadge, humanise } from '@/components/StatusBadge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { StepResult, TurnContext } from '@/copilot/api'
 import { useFranchiseList } from '@/copilot/franchiseApi'
-import { useBookGrid, useSalesProfile, type GridRow, STAGE_LABEL } from '@/copilot/salesApi'
+import {
+  useBookGrid,
+  useClientRecord,
+  useSalesProfile,
+  useTeam,
+  type GridRow,
+  type MemberRef,
+  STAGE_LABEL,
+} from '@/copilot/salesApi'
 import { useDataCategory } from '@/lib/supabase/category'
 import { useSupabaseAuth } from '@/lib/supabase/client'
+import { fetchOrganisationMedia } from '@/lib/supabase/organisations'
 import { cn, formatDateTime } from '@/lib/utils'
 import { MobilePaneSwitch, type Pane } from '../MobilePaneSwitch'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { CategorySwitch } from '../copilot/CategorySwitch'
 import { ClientRecordPanel } from '../book/ClientRecordPanel'
-import { AddClientDialog } from '../book/dialogs'
+import { DeskQueue, type BrowseMode, type QueueFilter } from '../book/DeskQueue'
+import { AddClientDialog, CreateOfferDialog, ShareReferralDialog } from '../book/dialogs'
+import { applyQueueCounts } from '../book/queueCounts'
+import { ReferralsTab, TeamTab } from '../book/TeamTab'
 import { SetupFranchiseDialog } from '../franchise/dialogs'
 import { DataGrid } from '../shared/DataGrid'
+import { RightSlideout } from '../shared/RightSlideout'
 import { AddBusinessDialog, type BusinessPrefill } from './AddBusinessDialog'
 import { AvaDeskPanel } from './AvaDeskPanel'
 import { BusinessRecordPanel } from './BusinessRecordPanel'
 import { SeedDemoCustomersButton } from './SeedDemoCustomersButton'
 
 type AreaTab = 'customers' | 'businesses'
+type DeskTab = 'queue' | 'team' | 'referrals'
+type Dialog = null | 'add-customer' | 'add-business' | 'import' | 'franchise' | 'seed-demo' | 'share' | 'offer'
+
+function filterQueueRows(rows: GridRow[], filter: QueueFilter): GridRow[] {
+  if (filter === 'renewals') return []
+  if (filter === 'leads') return rows.filter((r) => r.stage === 'new_enquiry')
+  if (filter === 'quotes') return rows.filter((r) => r.stage === 'offer_sent')
+  if (filter === 'decision') return rows.filter((r) => r.stage === 'accepted')
+  if (filter === 'covered') return rows.filter((r) => r.stage === 'sold' || r.stage === 'client' || r.sales > 0)
+  if (filter === 'info') {
+    const now = Date.now()
+    return rows.filter(
+      (r) => (r.stage === 'new_enquiry' && r.offers === 0) || Boolean(r.next_follow_up?.due_date && new Date(r.next_follow_up.due_date).getTime() < now),
+    )
+  }
+  return rows.filter((r) => r.offers > 0 || r.sales > 0 || r.stage !== 'new_enquiry')
+}
 
 export default function CustomerAreaPage() {
   const { personId, profileId } = useParams()
@@ -35,23 +66,61 @@ export default function CustomerAreaPage() {
   const p = profile.data
   const canSeeTeam = !p?.book_restricted
   const canManage = Boolean(p?.can_manage_team)
+  const team = useTeam(canManage)
 
   const tab = ((params.get('tab') as AreaTab | null) ?? 'customers') as AreaTab
+  const desk = ((params.get('desk') as DeskTab | null) ?? 'queue') as DeskTab
   const scope = (params.get('scope') as 'mine' | 'team' | null) ?? (canSeeTeam ? 'team' : 'mine')
   const roleFilter = params.get('role') ?? ''
   const recordTab = params.get('rtab') ?? 'overview'
+  const mode = (params.get('mode') as BrowseMode | null) ?? 'people'
+  const filter = (params.get('qfilter') as QueueFilter | null) ?? 'all'
+  const memberId = params.get('member')
 
-  const [expanded, setExpanded] = useState(false)
   const [avaCollapsed, setAvaCollapsed] = useState(true)
-  const [pane, setPane] = useState<Pane>(personId || profileId ? 'work' : 'queue')
-  const [dialog, setDialog] = useState<null | 'add-customer' | 'add-business' | 'import' | 'franchise' | 'seed-demo'>(null)
+  const [pane, setPane] = useState<Pane>(() => (personId || profileId ? 'work' : 'queue'))
+  const [dialog, setDialog] = useState<Dialog>(null)
   const [businessPrefill, setBusinessPrefill] = useState<BusinessPrefill | undefined>(undefined)
   const [context, setContext] = useState<TurnContext>({})
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
-  const grid = useBookGrid({ scope, member_id: null, stage: null, query: null })
+  const member = memberId
+    ? (team.data?.find((m) => m.member_id === memberId) ??
+      (context.member?.member_id === memberId ? context.member : null) ??
+      ({
+        member_id: memberId,
+        name: 'this team member',
+        role: 'agent',
+        role_label: 'Team',
+        referral_code: '',
+        referral_path: '',
+      } as MemberRef))
+    : null
+
+  const grid = useBookGrid({ scope, member_id: member?.member_id ?? null, stage: null, query: null })
   const businesses = useCommercialClients()
   const franchise = useFranchiseList(category)
+  const slidePerson = useClientRecord(personId)
+  const slideBusiness = useCommercialClient(profileId)
+
+  const filterCounts = useMemo(() => applyQueueCounts(grid.data?.rows ?? []), [grid.data?.rows])
+  const itemRows = useMemo(() => filterQueueRows(grid.data?.rows ?? [], filter), [grid.data?.rows, filter])
+
+  useEffect(() => {
+    const id = p?.brokerage?.id
+    if (!id) {
+      setLogoUrl(null)
+      return
+    }
+    let cancelled = false
+    void fetchOrganisationMedia(id).then((media) => {
+      if (!cancelled) setLogoUrl(media?.logo_url ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [p?.brokerage?.id])
 
   const franchiseByCustomer = useMemo(() => {
     const map = new Map<string, { partnerId: string; name: string; outlets: number }>()
@@ -76,7 +145,6 @@ export default function CustomerAreaPage() {
             open_path: `/broker/customers/people/${row.id}`,
           },
         }))
-        setAvaCollapsed(false)
       }
     }
   }, [personId, grid.data?.rows])
@@ -98,7 +166,6 @@ export default function CustomerAreaPage() {
             open_path: `/broker/customers/businesses/${row.profile.id}`,
           },
         }))
-        setAvaCollapsed(false)
       }
     }
   }, [profileId, businesses.data, category])
@@ -112,13 +179,11 @@ export default function CustomerAreaPage() {
 
   const openPerson = (id: string, extra: Record<string, string | null> = {}) => {
     setPane('work')
-    setAvaCollapsed(false)
-    setQuery({ tab: 'customers', rtab: null, ...extra }, `/broker/customers/people/${id}`)
+    setQuery({ tab: 'customers', desk: 'queue', rtab: null, ...extra }, `/broker/customers/people/${id}`)
   }
 
   const openBusiness = (id: string, extra: Record<string, string | null> = {}) => {
     setPane('work')
-    setAvaCollapsed(false)
     setQuery({ tab: 'businesses', rtab: null, ...extra }, `/broker/customers/businesses/${id}`)
   }
 
@@ -132,8 +197,12 @@ export default function CustomerAreaPage() {
     if (!s) return
     const step = s.step
     const target = step.links.find((l) => l.to.includes('/broker/'))?.to ?? step.receipt?.open_path ?? ''
-    const person = target.match(/\/(?:customers\/people|book\/clients)\/([0-9a-f-]{36})/i)
-    if (person) return openPerson(person[1])
+    const person = target.match(/\/(?:customers\/people|book\/clients)\/([0-9a-f-]{36})(?:\?[^#]*)?(?:&|\?)?offer=([0-9a-f-]{36})?/i)
+    if (person) {
+      return openPerson(person[1], person[2] ? { offer: person[2], rtab: 'quotes' } : {})
+    }
+    const personOnly = target.match(/\/(?:customers\/people|book\/clients)\/([0-9a-f-]{36})/i)
+    if (personOnly) return openPerson(personOnly[1])
     const biz = target.match(/\/(?:customers\/businesses|commercial\/clients)\/([0-9a-f-]{36})/i)
     if (biz) return openBusiness(biz[1])
     if (step.subject?.record_type === 'client') return openPerson(step.subject.id)
@@ -141,15 +210,47 @@ export default function CustomerAreaPage() {
       const fromPath = step.subject.open_path?.match(/\/(?:customers\/businesses|commercial\/clients)\/([0-9a-f-]{36})/i)
       if (fromPath) return openBusiness(fromPath[1])
     }
+    const mem = target.match(/[?&]member=([0-9a-f-]{36})/i)
+    if (mem) {
+      setPane('queue')
+      return setQuery({ tab: 'customers', desk: 'queue', member: mem[1], scope: 'team' }, '/broker/customers')
+    }
+    if (/[?&]desk=team|tab=team/.test(target)) {
+      setPane('work')
+      return setQuery({ tab: 'customers', desk: 'team' }, '/broker/customers')
+    }
+    if (/[?&]desk=referrals|tab=referrals/.test(target)) {
+      setPane('work')
+      return setQuery({ tab: 'customers', desk: 'referrals' }, '/broker/customers')
+    }
   }
 
   const me = p?.member ?? null
+  const live = Boolean(p?.brokerage?.live_available)
   const detailOpen = Boolean(personId || profileId)
+  /** Ava stays hidden while a record slide-out is open; preference restores when it closes. */
+  const showAva = !avaCollapsed && !detailOpen
   const workingLabel = context.person
     ? `${context.person.name} · ${context.person.number}`
     : context.account
       ? `${context.account.name}${context.account.number ? ` · ${context.account.number}` : ''}`
       : 'no record selected'
+  const slideBizName =
+    slideBusiness.data?.profile.trading_name ?? slideBusiness.data?.profile.registered_name ?? context.account?.name
+  const slideTitle = personId
+    ? (slidePerson.data?.name ?? context.person?.name ?? 'Customer')
+    : (slideBizName ?? 'Business')
+  const slideSubtitle = personId
+    ? (() => {
+        const number = slidePerson.data?.client_number ?? context.person?.number
+        const stage = slidePerson.data?.stage
+        if (!number) return undefined
+        return stage ? `${number} · ${STAGE_LABEL[stage] ?? stage}` : number
+      })()
+    : context.account?.number
+  const slideDemo = personId
+    ? (slidePerson.data?.category ?? context.person?.category) === 'sample'
+    : category === 'sample'
 
   const customerColumns = useMemo<ColumnDef<GridRow, unknown>[]>(
     () => [
@@ -171,9 +272,7 @@ export default function CustomerAreaPage() {
         header: 'Mobile / email',
         accessorFn: (r) => `${r.account?.phone ?? ''} ${r.account?.email ?? ''}`,
         cell: ({ row: { original: r } }) => (
-          <span className="text-xs text-navy-700">
-            {[r.account?.phone, r.account?.email].filter(Boolean).join(' · ') || '–'}
-          </span>
+          <span className="text-xs text-navy-700">{[r.account?.phone, r.account?.email].filter(Boolean).join(' · ') || '–'}</span>
         ),
       },
       {
@@ -216,9 +315,8 @@ export default function CustomerAreaPage() {
         cell: ({ row: { original: r } }) => <StatusBadge status={r.contact_stage} />,
       },
     ],
-    // openPerson is stable enough for this screen
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scope],
+    [personId, scope],
   )
 
   type BizRow = NonNullable<typeof businesses.data>[number] & { roles: string[] }
@@ -319,9 +417,31 @@ export default function CustomerAreaPage() {
     setDialog('add-business')
   }
 
+  const onMobilePane = (next: Pane) => {
+    if (next === 'chat') {
+      setAvaCollapsed(false)
+      setPane('chat')
+      return
+    }
+    if (next === 'work') {
+      setPane(detailOpen || tab === 'customers' ? 'work' : 'queue')
+      return
+    }
+    setPane('queue')
+  }
+
+  const mobilePane: Pane = pane === 'chat' && showAva ? 'chat' : detailOpen && pane === 'work' ? 'work' : pane === 'work' ? 'work' : 'queue'
+  const peopleLayout = tab === 'customers'
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!expanded && <MobilePaneSwitch pane={pane} onChange={setPane} queueLabel="Tables" workLabel="Record" chatLabel="Ava" />}
+      <MobilePaneSwitch
+        pane={mobilePane}
+        onChange={onMobilePane}
+        queueLabel={peopleLayout ? 'Queue' : 'Tables'}
+        workLabel={peopleLayout ? 'Workbench' : 'Record'}
+        chatLabel="Ava"
+      />
 
       <div className="border-b border-navy-800/10 bg-white px-3 py-2.5 sm:px-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -333,28 +453,34 @@ export default function CustomerAreaPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {peopleLayout && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setDialog('share')} disabled={!me}>
+                  <Share2 /> Share referral
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialog('offer')}>
+                  <Plus /> Create offer
+                </Button>
+              </>
+            )}
             <CategorySwitch onChange={back} />
             <Button
               size="sm"
-              variant="ghost"
-              className="hidden lg:inline-flex"
+              variant={avaCollapsed || detailOpen ? 'ghost' : 'outline'}
+              className="hidden xl:inline-flex"
+              aria-label={showAva ? 'Hide Ava' : 'Show Ava'}
+              aria-pressed={showAva}
+              title={detailOpen ? 'Close the record to chat with Ava' : showAva ? 'Hide Ava' : 'Show Ava'}
+              disabled={detailOpen}
               onClick={() => {
-                if (expanded) {
-                  setExpanded(false)
-                  setAvaCollapsed(false)
-                } else {
-                  setAvaCollapsed(true)
-                  setExpanded(true)
-                }
+                setAvaCollapsed((c) => !c)
+                setPane((prev) => (prev === 'chat' ? 'queue' : prev))
               }}
             >
-              {expanded ? <Minimize2 /> : <Maximize2 />} {expanded ? 'Show Ava' : 'Expand editor'}
+              <MessageSquare className="h-4 w-4" />
+              <span className="sr-only">{showAva ? 'Hide Ava' : 'Show Ava'}</span>
+              <span className="hidden 2xl:inline">Ava</span>
             </Button>
-            {!expanded && (
-              <Button size="sm" variant="ghost" className="hidden xl:inline-flex" onClick={() => setAvaCollapsed((c) => !c)}>
-                {avaCollapsed ? 'Show Ava' : 'Hide Ava'}
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -363,120 +489,125 @@ export default function CustomerAreaPage() {
         className={cn(
           'grid min-h-0 flex-1 gap-3 p-3 sm:p-4',
           'grid-cols-1',
-          !expanded && !avaCollapsed && 'xl:grid-cols-[minmax(0,1fr)_minmax(16rem,0.9fr)]',
-          !expanded && avaCollapsed && 'xl:grid-cols-1',
-          expanded && 'xl:grid-cols-1',
+          peopleLayout && showAva && 'xl:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.6fr)_minmax(16rem,0.95fr)]',
+          peopleLayout && !showAva && 'xl:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1fr)]',
+          !peopleLayout && showAva && 'xl:grid-cols-[minmax(0,1fr)_minmax(16rem,0.9fr)]',
+          !peopleLayout && !showAva && 'xl:grid-cols-1',
         )}
       >
-        <section className={cn('panel flex min-h-0 flex-col overflow-hidden', !expanded && pane !== 'work' && detailOpen && 'hidden xl:flex', pane !== 'queue' && !detailOpen && 'max-xl:hidden xl:flex')} aria-label="Customer Area">
-          {detailOpen ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-800/10 px-4 py-3">
-                <Button size="sm" variant="ghost" onClick={back}>
-                  ← Back to tables
-                </Button>
-                <p className="text-xs text-navy-600">Working on: {workingLabel}</p>
-              </header>
-              <div className="flex-1 px-4 py-4 xl:scroll-area">
-                {personId && (
-                  <ClientRecordPanel personId={personId} offerId={params.get('offer')} onBack={back} tab={recordTab} onTab={(t) => setQuery({ rtab: t })} />
+        {peopleLayout && (
+          <div className={cn('min-h-0', pane !== 'queue' && 'hidden xl:block')}>
+            <DeskQueue
+              mode={mode}
+              onMode={(m) => setQuery({ mode: m })}
+              filter={filter}
+              onFilter={(f) => setQuery({ qfilter: f })}
+              filterCounts={filterCounts}
+              scope={scope}
+              onScope={(s) => setQuery({ scope: s })}
+              canSeeTeam={canSeeTeam}
+              member={member}
+              onClearMember={() => setQuery({ member: null })}
+              onOpen={(id) => openPerson(id)}
+              selectedId={personId}
+              itemRows={itemRows}
+            />
+          </div>
+        )}
+
+        <section
+          className={cn(
+            'panel flex min-h-0 flex-col overflow-hidden',
+            pane === 'chat' && showAva && 'max-xl:hidden xl:flex',
+            peopleLayout && pane !== 'work' && 'max-xl:hidden xl:flex',
+          )}
+          aria-label="Customer Area"
+        >
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-800/10 px-4 py-3">
+              <div className="flex gap-1 rounded-lg bg-mist p-1" role="tablist" aria-label="Customer Area tables">
+                {(
+                  [
+                    ['customers', 'Customers', Users],
+                    ['businesses', 'Businesses', Building2],
+                  ] as const
+                ).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    onClick={() => {
+                      setPane('queue')
+                      setQuery({ tab: id, role: null, desk: id === 'customers' ? desk : null }, '/broker/customers')
+                    }}
+                    className={cn(
+                      'inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold',
+                      tab === id ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-600 hover:text-navy-900',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tab === 'customers' ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setDialog('seed-demo')}>
+                      <FlaskConical /> Demo clients
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setDialog('import')}>
+                      <Upload /> Import
+                    </Button>
+                    <Button size="sm" variant="accent" onClick={() => setDialog('add-customer')}>
+                      <UserPlus /> Add customer
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setDialog('import')}>
+                      <Upload /> Import
+                    </Button>
+                    {canManage && (
+                      <Button size="sm" variant="outline" onClick={() => setDialog('franchise')}>
+                        <Building2 /> Set up franchisee
+                      </Button>
+                    )}
+                    <Button size="sm" variant="accent" onClick={() => openAddBusiness()}>
+                      <Plus /> Add business
+                    </Button>
+                  </>
                 )}
-                {profileId && <BusinessRecordPanel profileId={profileId} tab={recordTab} onTab={(t) => setQuery({ rtab: t })} canManage={canManage} />}
               </div>
             </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-800/10 px-4 py-3">
-                <div className="flex gap-1 rounded-lg bg-mist p-1" role="tablist" aria-label="Customer Area tables">
-                  {(
-                    [
-                      ['customers', 'Customers', Users],
-                      ['businesses', 'Businesses', Building2],
-                    ] as const
-                  ).map(([id, label, Icon]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={tab === id}
-                      onClick={() => setQuery({ tab: id, role: null })}
-                      className={cn(
-                        'inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold',
-                        tab === id ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-600 hover:text-navy-900',
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" /> {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {tab === 'customers' ? (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => setDialog('seed-demo')}>
-                        <FlaskConical /> Demo clients
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setDialog('import')}>
-                        <Upload /> Import
-                      </Button>
-                      <Button size="sm" variant="accent" onClick={() => setDialog('add-customer')}>
-                        <UserPlus /> Add customer
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => setDialog('import')}>
-                        <Upload /> Import
-                      </Button>
-                      {canManage && (
-                        <Button size="sm" variant="outline" onClick={() => setDialog('franchise')}>
-                          <Building2 /> Set up franchisee
-                        </Button>
-                      )}
-                      <Button size="sm" variant="accent" onClick={() => openAddBusiness()}>
-                        <Plus /> Add business
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
 
-              <div className="flex-1 overflow-auto px-4 py-4">
-                {tab === 'customers' && (
-                  <>
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <div className="flex gap-1 rounded-lg bg-mist p-1">
-                        {(['mine', 'team'] as const).map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            disabled={s === 'team' && !canSeeTeam}
-                            onClick={() => setQuery({ scope: s })}
-                            className={cn(
-                              'rounded-md px-2.5 py-1 text-xs font-semibold capitalize',
-                              scope === s ? 'bg-white text-navy-900 shadow-sm' : 'text-navy-600',
-                              s === 'team' && !canSeeTeam && 'cursor-not-allowed opacity-40',
-                            )}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                      {scope === 'mine' && (grid.data?.rows.length ?? 0) === 0 && canSeeTeam && (
-                        <Button size="sm" variant="outline" onClick={() => setQuery({ scope: 'team' })}>
-                          View team records
-                        </Button>
-                      )}
-                    </div>
+            <div className="flex-1 overflow-auto px-4 py-4">
+              {tab === 'customers' && (
+                <Tabs
+                  value={desk === 'team' || desk === 'referrals' ? desk : 'queue'}
+                  onValueChange={(t) => {
+                    setPane('work')
+                    setQuery({ desk: t === 'queue' ? null : t })
+                  }}
+                  className="flex min-h-0 flex-col"
+                >
+                  <TabsList>
+                    <TabsTrigger value="queue">Customers</TabsTrigger>
+                    {canManage && <TabsTrigger value="team">Team</TabsTrigger>}
+                    {canSeeTeam && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
+                  </TabsList>
+                  <TabsContent value="queue" className="pt-4">
                     {grid.isLoading && <LoadingState label="Loading customers…" />}
                     {grid.error && <ErrorState message={(grid.error as Error).message} />}
                     {grid.data && (
                       <DataGrid
-                        data={grid.data.rows}
+                        data={filter === 'all' ? grid.data.rows : itemRows}
                         columns={customerColumns}
                         getRowId={(r) => r.id}
                         storageKey="customer-area-people"
                         searchPlaceholder="Search name, customer no., mobile or email…"
                         searchText={(r) => `${r.name} ${r.client_number} ${r.account?.phone ?? ''} ${r.account?.email ?? ''} ${r.assigned?.name ?? ''}`}
+                        rowClassName={(r) => (r.id === personId ? 'bg-brand-50/80' : undefined)}
                         bulkActions={(selected, clear) => (
                           <span className="text-xs text-navy-700">
                             {selected.length} selected · Ask Ava to assign, create follow-ups, or link businesses
@@ -486,13 +617,13 @@ export default function CustomerAreaPage() {
                           </span>
                         )}
                         empty={
-                          <EmptyState title={scope === 'mine' ? 'No customers in Mine yet' : 'No customers yet'}>
+                          <EmptyState title={scope === 'mine' ? 'No customers in Mine yet' : 'No customers match this filter'}>
                             <div className="mt-3 flex flex-wrap justify-center gap-2">
                               <Button size="sm" onClick={() => setDialog('add-customer')}>
                                 <UserPlus /> Add customer
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => setDialog('import')}>
-                                <Upload /> Import
+                              <Button size="sm" variant="outline" onClick={() => setQuery({ qfilter: 'all' })}>
+                                Clear filter
                               </Button>
                               {scope === 'mine' && canSeeTeam && (
                                 <Button size="sm" variant="outline" onClick={() => setQuery({ scope: 'team' })}>
@@ -515,79 +646,95 @@ export default function CustomerAreaPage() {
                         }}
                       />
                     )}
-                  </>
-                )}
-
-                {tab === 'businesses' && (
-                  <>
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <select
-                        className="field max-w-[12rem] py-1.5 text-xs"
-                        aria-label="Business role filter"
-                        value={roleFilter}
-                        onChange={(e) => setQuery({ role: e.target.value || null })}
-                      >
-                        <option value="">All roles</option>
-                        <option value="franchisee">Franchisees</option>
-                      </select>
-                      <Link to="/broker/franchise" className="text-xs font-semibold text-brand-700 hover:underline">
-                        Franchise operations
-                      </Link>
-                    </div>
-                    {businesses.isLoading && <LoadingState label="Loading businesses…" />}
-                    {businesses.error && <ErrorState message={businesses.error.message} />}
-                    {businesses.data && (
-                      <DataGrid
-                        data={businessRows}
-                        columns={businessColumns}
-                        getRowId={(r) => r.profile.id}
-                        storageKey="customer-area-businesses"
-                        searchPlaceholder="Search trading name, industry or broker…"
-                        searchText={(r) =>
-                          `${r.profile.trading_name ?? ''} ${r.profile.registered_name} ${r.industry_name} ${r.assigned_broker ?? ''} ${r.roles.join(' ')}`
-                        }
-                        bulkActions={(selected, clear) => (
-                          <span className="text-xs text-navy-700">
-                            {selected.length} selected · Ask Russ (via Ava) for follow-ups or commercial quotes
-                            <button type="button" className="ml-2 font-semibold text-brand-700" onClick={clear}>
-                              Clear
-                            </button>
-                          </span>
-                        )}
-                        empty={
-                          <EmptyState title="No businesses yet">
-                            <div className="mt-3 flex flex-wrap justify-center gap-2">
-                              <Button size="sm" onClick={() => openAddBusiness()}>
-                                <Plus /> Add business
-                              </Button>
-                              {canManage && (
-                                <Button size="sm" variant="outline" onClick={() => setDialog('franchise')}>
-                                  Set up franchisee
-                                </Button>
-                              )}
-                            </div>
-                          </EmptyState>
-                        }
-                        csv={{
-                          filename: 'businesses',
-                          columns: [
-                            { header: 'Trading name', value: (r) => r.profile.trading_name ?? r.profile.registered_name },
-                            { header: 'Roles', value: (r) => r.roles.join('|') },
-                            { header: 'Industry', value: (r) => r.industry_name },
-                            { header: 'Broker', value: (r) => r.assigned_broker },
-                            { header: 'Status', value: (r) => r.profile.status },
-                          ],
+                  </TabsContent>
+                  {canManage && (
+                    <TabsContent value="team" className="pt-4">
+                      <TeamTab canManage={canManage} />
+                    </TabsContent>
+                  )}
+                  {canSeeTeam && (
+                    <TabsContent value="referrals" className="pt-4">
+                      <ReferralsTab
+                        onOpenMember={(m) => {
+                          setPane('queue')
+                          setQuery({ desk: null, member: m.member_id, scope: 'team' })
                         }}
                       />
-                    )}
-                  </>
-                )}
-              </div>
+                    </TabsContent>
+                  )}
+                </Tabs>
+              )}
+
+              {tab === 'businesses' && (
+                <>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <select
+                      className="field max-w-[12rem] py-1.5 text-xs"
+                      aria-label="Business role filter"
+                      value={roleFilter}
+                      onChange={(e) => setQuery({ role: e.target.value || null })}
+                    >
+                      <option value="">All roles</option>
+                      <option value="franchisee">Franchisees</option>
+                    </select>
+                    <Link to="/broker/franchise" className="text-xs font-semibold text-brand-700 hover:underline">
+                      Franchise operations
+                    </Link>
+                  </div>
+                  {businesses.isLoading && <LoadingState label="Loading businesses…" />}
+                  {businesses.error && <ErrorState message={businesses.error.message} />}
+                  {businesses.data && (
+                    <DataGrid
+                      data={businessRows}
+                      columns={businessColumns}
+                      getRowId={(r) => r.profile.id}
+                      storageKey="customer-area-businesses"
+                      searchPlaceholder="Search trading name, industry or broker…"
+                      searchText={(r) =>
+                        `${r.profile.trading_name ?? ''} ${r.profile.registered_name} ${r.industry_name} ${r.assigned_broker ?? ''} ${r.roles.join(' ')}`
+                      }
+                      rowClassName={(r) => (r.profile.id === profileId ? 'bg-brand-50/80' : undefined)}
+                      bulkActions={(selected, clear) => (
+                        <span className="text-xs text-navy-700">
+                          {selected.length} selected · Ask Russ (via Ava) for follow-ups or commercial quotes
+                          <button type="button" className="ml-2 font-semibold text-brand-700" onClick={clear}>
+                            Clear
+                          </button>
+                        </span>
+                      )}
+                      empty={
+                        <EmptyState title="No businesses yet">
+                          <div className="mt-3 flex flex-wrap justify-center gap-2">
+                            <Button size="sm" onClick={() => openAddBusiness()}>
+                              <Plus /> Add business
+                            </Button>
+                            {canManage && (
+                              <Button size="sm" variant="outline" onClick={() => setDialog('franchise')}>
+                                Set up franchisee
+                              </Button>
+                            )}
+                          </div>
+                        </EmptyState>
+                      }
+                      csv={{
+                        filename: 'businesses',
+                        columns: [
+                          { header: 'Trading name', value: (r) => r.profile.trading_name ?? r.profile.registered_name },
+                          { header: 'Roles', value: (r) => r.roles.join('|') },
+                          { header: 'Industry', value: (r) => r.industry_name },
+                          { header: 'Broker', value: (r) => r.assigned_broker },
+                          { header: 'Status', value: (r) => r.profile.status },
+                        ],
+                      }}
+                    />
+                  )}
+                </>
+              )}
             </div>
-          )}
+          </div>
         </section>
 
-        {!expanded && !avaCollapsed && (
+        {showAva && (
           <div className={cn('min-h-0', pane !== 'chat' && 'hidden xl:block')}>
             <AvaDeskPanel
               context={context}
@@ -606,6 +753,43 @@ export default function CustomerAreaPage() {
           </div>
         )}
       </div>
+
+      <RightSlideout
+        open={detailOpen}
+        onClose={back}
+        title={slideTitle}
+        subtitle={slideSubtitle ? `Working on · ${slideSubtitle}` : undefined}
+        demo={slideDemo}
+        size="record"
+        footer={null}
+      >
+        {personId && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2 px-1">
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/broker/concierge?personId=${personId}`}>Concierge requests</Link>
+              </Button>
+              <Button size="sm" variant="accent" asChild>
+                <Link to={`/broker/concierge/providers?job=1&personId=${personId}`}>Create job</Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/broker/concierge/providers">Service providers</Link>
+              </Button>
+            </div>
+            <ClientRecordPanel
+              personId={personId}
+              offerId={params.get('offer')}
+              onBack={back}
+              tab={recordTab}
+              onTab={(t) => setQuery({ rtab: t })}
+              embedded
+            />
+          </div>
+        )}
+        {profileId && (
+          <BusinessRecordPanel profileId={profileId} tab={recordTab} onTab={(t) => setQuery({ rtab: t })} canManage={canManage} />
+        )}
+      </RightSlideout>
 
       {dialog === 'seed-demo' && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-navy-950/40 p-4" role="dialog" aria-modal="true" aria-label="Create demo clients">
@@ -636,7 +820,6 @@ export default function CustomerAreaPage() {
           onCreated={(id, meta) => {
             openPerson(id)
             if (meta.interests.includes('business')) {
-              // Defer so AddClientDialog's onClose does not clear this dialog.
               queueMicrotask(() =>
                 openAddBusiness({
                   contact_name: `${meta.first_names} ${meta.surname}`.trim(),
@@ -648,9 +831,24 @@ export default function CustomerAreaPage() {
               )
             }
           }}
-          team={[]}
+          team={team.data ?? []}
           me={me}
           canAssign={canManage}
+        />
+      )}
+      {dialog === 'share' && me && (
+        <ShareReferralDialog
+          member={me}
+          live={live}
+          brokerage={{ name: p?.brokerage?.name ?? null, logo_url: logoUrl }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'offer' && (
+        <CreateOfferDialog
+          personId={personId ?? null}
+          onClose={() => setDialog(null)}
+          onCreated={(offerId, forPerson) => openPerson(forPerson, { rtab: 'quotes', offer: offerId })}
         />
       )}
       {dialog === 'add-business' && (
@@ -660,9 +858,9 @@ export default function CustomerAreaPage() {
             setBusinessPrefill(undefined)
             setDialog(null)
           }}
-          onCreated={(profileId) => {
+          onCreated={(createdProfileId) => {
             setBusinessPrefill(undefined)
-            openBusiness(profileId)
+            openBusiness(createdProfileId)
           }}
         />
       )}

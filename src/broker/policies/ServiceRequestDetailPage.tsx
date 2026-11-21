@@ -4,8 +4,9 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader, LoadingState, ErrorState } from '../PageHeader'
-import { Page } from '../shared/ui'
+import { Page, zar } from '../shared/ui'
 import { newKey, usePolicyClaimsMutation, useServiceRequestDetail, policyClaimsApi } from '@/copilot/policyClaimsApi'
+import { brokerFinancialsApi, useBfMutation } from '@/copilot/brokerFinancialsApi'
 import { StatusBadge } from '@/components/StatusBadge'
 
 export default function ServiceRequestDetailPage() {
@@ -13,7 +14,9 @@ export default function ServiceRequestDetailPage() {
   const { data, isLoading, error, refetch } = useServiceRequestDetail(requestId)
   const transition = usePolicyClaimsMutation(policyClaimsApi.transitionRequest)
   const confirm = usePolicyClaimsMutation(policyClaimsApi.confirmVehicleReplacement)
+  const earn = useBfMutation(brokerFinancialsApi.confirmReplacementAndEarn)
   const [note, setNote] = useState('')
+  const [earnFlash, setEarnFlash] = useState<string | null>(null)
   const [confirmForm, setConfirmForm] = useState({
     confirmed_effective_at: '',
     confirmation_source: 'insurer_email',
@@ -141,6 +144,50 @@ export default function ServiceRequestDetailPage() {
           {confirm.error && <p className="text-xs text-red-700">{(confirm.error as Error).message}</p>}
           {confirm.isSuccess && <p className="text-xs text-emerald-800">Confirmation recorded.</p>}
         </form>
+      )}
+
+      {(data.status === 'confirmed' || confirm.isSuccess) && (
+        <section className="panel mt-4 space-y-3 p-4">
+          <h2 className="text-sm font-semibold">Post commission earning</h2>
+          <p className="text-xs text-navy-600">
+            Demo-only: updates the policy premium and posts the November earning on the active scale. Does not move real money.
+          </p>
+          <Button
+            size="sm"
+            variant="accent"
+            disabled={earn.isPending || !data.policy_id}
+            onClick={() => {
+              const premium = confirmForm.revised_premium
+                ? Number(confirmForm.revised_premium)
+                : Number((data.requested_change as Record<string, unknown> | null)?.new_premium ?? 1400)
+              earn.mutate(
+                {
+                  policy_id: data.policy_id,
+                  new_premium: premium || 1400,
+                  period: '2025-11-01',
+                  section: 'vehicle',
+                  event_ref: `bf:hv:earn:nov:${premium || 1400}`,
+                  scenario_id: 'broker-financials-highveld',
+                },
+                {
+                  onSuccess: (r) => {
+                    setEarnFlash(String(r.summary ?? 'Earning posted'))
+                    void refetch()
+                  },
+                },
+              )
+            }}
+          >
+            {earn.isPending ? 'Posting…' : `Update premium & post earning${confirmForm.revised_premium ? ` (${zar(Number(confirmForm.revised_premium), true)})` : ''}`}
+          </Button>
+          {earn.error && <p className="text-xs text-red-700">{(earn.error as Error).message}</p>}
+          {earnFlash && (
+            <p className="text-xs text-emerald-800">
+              {earnFlash}{' '}
+              <Link className="underline" to="/broker/financials?tab=transactions">Open broker financials</Link>
+            </p>
+          )}
+        </section>
       )}
 
       <div className="mt-4">

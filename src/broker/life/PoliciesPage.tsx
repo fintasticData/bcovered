@@ -51,14 +51,14 @@ export default function PoliciesPage() {
       {data && !rows.length && (
         <EmptyState title="No policies in this view">
           {category === 'live'
-            ? 'Live has no individual life policies for this brokerage yet. Switch to Sample, or open a customer in My workspace.'
+            ? 'Live has no individual life policies for this brokerage yet. Switch to Sample, or open a customer in Customer Area.'
             : sync.status === 'error'
               ? `Database sync issue: ${sync.lastError ?? 'unknown'}.`
               : (
                 <>
                   Try filter All, or open{' '}
-                  <Link to="/broker/book" className="font-semibold text-brand-600 underline">
-                    My workspace
+                  <Link to="/broker/customers" className="font-semibold text-brand-600 underline">
+                    Customer Area
                   </Link>{' '}
                   for offers and confirmed cover.
                 </>

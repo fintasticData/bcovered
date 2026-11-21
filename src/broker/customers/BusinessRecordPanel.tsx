@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { FileStack, Network, Sparkles, Store } from 'lucide-react'
+import { Eye, FileStack, Network, Sparkles, Store, MessageSquare } from 'lucide-react'
 import { useCommercialClient } from '@/api/hooks'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,13 @@ import { SetupFranchiseDialog } from '../franchise/dialogs'
 import { useState } from 'react'
 import { coverLabel } from './commercialInterests'
 import { lensPath } from '../russ/lenses'
+import { RightSlideout } from '../shared/RightSlideout'
+import {
+  RenewalCompactPanel,
+  findRenewalForBusiness,
+  renewalDecisionHeadline,
+  renewalQueueHref,
+} from '@/fintastic-ux'
 
 export function BusinessRecordPanel({
   profileId,
@@ -28,6 +35,9 @@ export function BusinessRecordPanel({
   const category = useDataCategory()
   const franchise = useFranchiseList(category)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [discussOpen, setDiscussOpen] = useState(false)
+  const [discussSubject, setDiscussSubject] = useState('')
+  const [discussBody, setDiscussBody] = useState('')
 
   if (isLoading) return <LoadingState label="Opening business…" />
   if (error || !data) return <ErrorState message={error?.message ?? 'Business not found'} />
@@ -38,6 +48,8 @@ export function BusinessRecordPanel({
   const roles = ['commercial_client', ...(partner ? ['franchisee'] : [])]
   const activeTab = ['overview', 'relationships', 'outlets', 'quotes', 'activity'].includes(tab) ? tab : 'overview'
   const openTasks = data.tasks.filter((t) => t.status === 'open').length
+  const renewal = findRenewalForBusiness(p.id, name)
+  const renewalDecision = renewal ? renewalDecisionHeadline(renewal) : null
 
   return (
     <div className="space-y-4">
@@ -59,6 +71,11 @@ export function BusinessRecordPanel({
         </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <AskCopilotButton copilot="ava" kind="account" id={p.customer_id} />
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/broker/customers/businesses/${p.id}/business-page?view=fintastic`}>
+              <Eye /> Preview My Business Page
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to={`/broker/commercial/risk-twins/${p.id}`}>
               <Network /> Risk Twin
@@ -85,7 +102,7 @@ export function BusinessRecordPanel({
       </header>
 
       <Tabs value={activeTab} onValueChange={onTab}>
-        <TabsList className="flex-wrap">
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="outlets">Outlets & referrals</TabsTrigger>
@@ -106,11 +123,20 @@ export function BusinessRecordPanel({
             <div className="rounded-xl border border-navy-800/10 bg-white p-3 sm:col-span-2">
               <dt className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Next action</dt>
               <dd className="mt-1 text-navy-900">
-                {openTasks > 0
-                  ? `${openTasks} open request${openTasks === 1 ? '' : 's'}`
-                  : data.risk_profile
-                    ? 'Review exposures and request a quote'
-                    : 'Build the Risk Twin or add franchisee outlets'}
+                {renewal && renewalDecision ? (
+                  <span>
+                    {name} · {renewalDecision}.{' '}
+                    <Link className="font-semibold text-brand-700 hover:underline" to={renewalQueueHref(renewal.id)}>
+                      Open full queue
+                    </Link>
+                  </span>
+                ) : openTasks > 0 ? (
+                  `${openTasks} open request${openTasks === 1 ? '' : 's'}`
+                ) : data.risk_profile ? (
+                  'Review exposures and request a quote'
+                ) : (
+                  'Build the Risk Twin or add franchisee outlets'
+                )}
               </dd>
             </div>
           </dl>
@@ -167,6 +193,20 @@ export function BusinessRecordPanel({
         </TabsContent>
 
         <TabsContent value="quotes" className="space-y-3 pt-4">
+          {renewal && (
+            <div className="rounded-2xl border border-brand-200/80 bg-brand-50/30 p-3">
+              <RenewalCompactPanel
+                row={renewal}
+                onDiscuss={() => {
+                  setDiscussSubject(`Renewal discussion — ${renewal.client} (${renewal.policyNumber})`)
+                  setDiscussBody(
+                    `Hi,\n\nOn the proposed renewal for ${renewal.client}, please review the excess change and confirm how you want to proceed.\n\nRuss · B-Covered`,
+                  )
+                  setDiscussOpen(true)
+                }}
+              />
+            </div>
+          )}
           {(p.cover_interests ?? []).length > 0 && (
             <div className="rounded-xl border border-navy-800/10 bg-white p-3">
               <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Interested cover</p>
@@ -193,26 +233,42 @@ export function BusinessRecordPanel({
               )}
             </div>
           )}
-          <EmptyState title="Quotes & policies">
-            Continue commercial quotes from the Risk Twin or ask Russ via Ava to prepare a commercial property quote for {name}.
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <Button size="sm" asChild>
-                <Link to={`/broker/commercial/risk-twins/${p.id}`}>Open Twin workspace</Link>
+          {!renewal && (
+            <EmptyState title="Quotes & policies">
+              Continue commercial quotes from the Risk Twin or ask Russ via Ava to prepare a commercial property quote for {name}.
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <Button size="sm" asChild>
+                  <Link to={`/broker/commercial/risk-twins/${p.id}`}>Open Twin workspace</Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link
+                    to={lensPath(
+                      'commercial',
+                      (p.cover_interests ?? []).length
+                        ? `Request a commercial quote for ${name} covering ${(p.cover_interests ?? []).map((c) => coverLabel(c.key)).join(', ')}`
+                        : `Request a commercial property quote for ${name}`,
+                    )}
+                  >
+                    Ask Russ
+                  </Link>
+                </Button>
+              </div>
+            </EmptyState>
+          )}
+          {renewal && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/broker/commercial/risk-twins/${p.id}`}>
+                  <Network /> Risk Twin
+                </Link>
               </Button>
               <Button size="sm" variant="outline" asChild>
-                <Link
-                  to={lensPath(
-                    'commercial',
-                    (p.cover_interests ?? []).length
-                      ? `Request a commercial quote for ${name} covering ${(p.cover_interests ?? []).map((c) => coverLabel(c.key)).join(', ')}`
-                      : `Request a commercial property quote for ${name}`,
-                  )}
-                >
-                  Ask Russ
+                <Link to={lensPath('commercial', `Request a commercial property quote for ${name}`)}>
+                  <Sparkles /> Ask Russ for quote
                 </Link>
               </Button>
             </div>
-          </EmptyState>
+          )}
         </TabsContent>
 
         <TabsContent value="activity" className="pt-4">
@@ -231,6 +287,42 @@ export function BusinessRecordPanel({
           onDone={() => setSetupOpen(false)}
         />
       )}
+
+      <RightSlideout
+        open={discussOpen}
+        onClose={() => setDiscussOpen(false)}
+        title={renewal ? `Discuss ${renewal.client} renewal` : 'Discuss renewal'}
+        subtitle="Draft for the policyholder (demo)"
+        footer={
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="accent" type="button" onClick={() => setDiscussOpen(false)}>
+              <MessageSquare /> Send draft
+            </Button>
+            <Button size="sm" variant="outline" type="button" onClick={() => setDiscussOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block text-xs font-semibold text-navy-600">
+            Subject
+            <input
+              className="field mt-1 w-full"
+              value={discussSubject}
+              onChange={(e) => setDiscussSubject(e.target.value)}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-navy-600">
+            Message
+            <textarea
+              className="field mt-1 min-h-[10rem] w-full"
+              value={discussBody}
+              onChange={(e) => setDiscussBody(e.target.value)}
+            />
+          </label>
+        </div>
+      </RightSlideout>
     </div>
   )
 }

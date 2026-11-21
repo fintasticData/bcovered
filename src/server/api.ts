@@ -33,6 +33,7 @@ import type {
   TableName,
 } from './db/schema'
 import { approvalSubjectHandler, type ApprovalDetail } from './tools/approval'
+import { isSampleBookPortalEmail, samplePortalHome } from '@/lib/demo/samplePortal'
 import { TENANT_ID } from './db/seed'
 import type { ApplicationStatus, MemberRole, OrganisationMembership, PlatformRole, PlatformStaff } from './db/onboardingSchema'
 import type { Organisation } from './db/schema'
@@ -46,6 +47,7 @@ import { assessmentReviewPayload } from './tools/assessmentPayload'
 import { ToolError } from './lib/errors'
 import { ADAPTERS, getAssistantAdapter, initialIntakeState, PRIVACY_NOTICE_VERSION, type IntakeState } from './llm'
 import { getWorkflow, onApprovalResolved, recoverJobs } from './jobs/runner'
+import { customerAreaLinkForCustomer } from './tools/lead'
 import { invokeTool, listTools, type Actor } from './tools/registry'
 
 export interface Auth {
@@ -206,15 +208,15 @@ export interface DemoIdentity {
   home: string
 }
 
-/** Where a staff member lands: My Area when active; onboarding until the brokerage is active. */
+/** Where a staff member lands: Customer Area when active; onboarding until the brokerage is active. */
 function staffHome(p: Principal): string {
   if (!p.membership) return p.platform ? '/platform/onboarding' : '/'
-  return p.organisation?.lifecycle_status === 'active' ? '/my' : '/onboarding'
+  return p.organisation?.lifecycle_status === 'active' ? '/broker/customers' : '/onboarding'
 }
 
 function bcoveredIdentities(): DemoIdentity[] {
   const repo = new Repo(TENANT_ID)
-  const order: Role[] = ['broker', 'manager', 'admin', 'customer']
+  const order: Role[] = ['broker', 'manager', 'admin', 'insurer_partner', 'customer']
   return repo
     .list('app_users', (u) => u.tenant_id === TENANT_ID)
     .sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))
@@ -223,31 +225,57 @@ function bcoveredIdentities(): DemoIdentity[] {
       const grants = u.role === 'customer' ? grantsFor(repo, u.id) : new Map()
       const org = u.customer_id ? repo.get('customers', u.customer_id)?.full_name : undefined
       const longTerm = repo.list('adviser_authorisations', (a) => a.user_id === u.id && a.status === 'active' && a.product_category.startsWith('lt_')).length > 0
+      const isVip = u.email === 'naledi.vip@example.demo'
+      const isThandi = u.email === 'thandi.walkthrough@example.demo'
+      const sampleBook = isVip || isThandi
       const description =
-        u.role === 'customer'
-          ? grants.has('employer')
-            ? `Employer HR portal · ${org ?? 'employer'}`
-            : grants.has('cell')
-              ? `Cell owner portal · ${org ?? 'cell owner'}`
-              : business
-                ? `Business portal · ${business.trading_name ?? business.registered_name}`
-                : 'Customer portal'
-          : u.role === 'manager'
-            ? 'Brokerage manager and key individual'
-            : longTerm
-              ? 'Licensed adviser · life, group risk and retirement'
-              : 'Licensed broker · short-term'
+        u.role === 'insurer_partner'
+          ? 'Pilot insurer VIP Concierge desk'
+          : u.role === 'customer'
+            ? grants.has('employer')
+              ? `Employer HR portal · ${org ?? 'employer'}`
+              : grants.has('cell')
+                ? `Cell owner portal · ${org ?? 'cell owner'}`
+                : business
+                  ? `My Business Page · ${business.trading_name ?? business.registered_name}`
+                  : isVip
+                    ? 'VIP Concierge customer'
+                    : isThandi
+                      ? 'Concierge · filed motor policy (clinton walkthrough)'
+                      : 'Customer portal'
+            : u.role === 'manager'
+              ? 'Brokerage manager and key individual'
+              : u.email === 'lerato.mokoena@bcovered.demo'
+                ? 'VIP Concierge · named contact'
+                : longTerm
+                  ? 'Licensed adviser · life, group risk and retirement'
+                  : 'Licensed broker · short-term'
       const home =
-        u.role !== 'customer'
-          ? '/my'
-          : grants.has('employer')
-            ? '/portal/employer'
-            : grants.has('cell')
-              ? '/portal/cell'
-              : business
-                ? '/portal/business'
-                : '/my'
-      return { user_id: u.id, customer_id: u.customer_id, full_name: u.full_name, role: u.role, description, group: 'BCovered (first brokerage)', home }
+        u.role === 'insurer_partner'
+          ? '/partner/concierge'
+          : u.role !== 'customer'
+            ? u.email === 'lerato.mokoena@bcovered.demo'
+              ? '/broker/concierge'
+              : '/broker/customers'
+            : grants.has('employer')
+              ? '/portal/employer'
+              : grants.has('cell')
+                ? '/portal/cell'
+                : business
+                  ? '/my/business'
+                  : sampleBook
+                    ? samplePortalHome()
+                    : '/my'
+      const group = business
+        ? 'My Business Page'
+        : isVip || isThandi
+          ? 'VIP Concierge'
+          : u.role === 'customer'
+            ? 'Customer portal'
+            : u.role === 'insurer_partner'
+              ? 'Broker Concierge desks'
+              : 'BCovered (first brokerage)'
+      return { user_id: u.id, customer_id: u.customer_id, full_name: u.full_name, role: u.role, description, group, home }
     })
 }
 
@@ -343,7 +371,12 @@ export function getSessionUser(auth: Auth): SessionView | null {
     capabilities: p.user.role === 'customer' ? [] : capabilitiesOf(p.membership?.role ?? null),
     read_only: Boolean(p.repo.options.readOnly),
     application_status: application?.status ?? null,
-    home: p.user.role === 'customer' ? '/my' : staffHome(p),
+    home:
+      p.user.role === 'customer'
+        ? isSampleBookPortalEmail(p.user.email)
+          ? samplePortalHome()
+          : '/my'
+        : staffHome(p),
   }
 }
 
@@ -787,6 +820,20 @@ export interface LeadRow extends Lead {
   run_ids: string[]
   assigned_member_id: string | null
   open_tasks: number
+  /** One concrete blocker for the work queue, when relevant. */
+  blocker: string | null
+  /** Customer Area deep-link when a person or business profile exists. */
+  person_id: string | null
+  business_profile_id: string | null
+  customer_area_path: string
+}
+
+function leadBlocker(l: Lead): string | null {
+  if (l.next_action?.trim()) return null
+  if (l.missing_info[0]) return l.missing_info[0].startsWith('Confirm') ? l.missing_info[0] : `Confirm ${l.missing_info[0].toLowerCase()}`
+  if (!l.qualification.confirmed_cover_need && (l.status === 'lead' || l.status === 'contacted')) return 'Confirm cover need'
+  if (!l.qualification.assets && l.status === 'qualified') return 'Confirm assets and values'
+  return null
 }
 
 export function listLeads(auth: Auth): LeadRow[] {
@@ -809,6 +856,7 @@ export function listLeads(auth: Auth): LeadRow[] {
     .map((l) => {
       const customer = p.repo.get('customers', l.customer_id)
       const ms = (matches.get(l.id) ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at))
+      const area = customer ? customerAreaLinkForCustomer(p.repo, customer) : null
       return {
         ...l,
         customer_name: customer?.full_name ?? 'Unknown',
@@ -821,6 +869,10 @@ export function listLeads(auth: Auth): LeadRow[] {
         run_ids: [...new Set([...(l.source_job_id ? [l.source_job_id] : []), ...ms.map((m) => m.job_id)])],
         assigned_member_id: customer?.assigned_member_id ?? null,
         open_tasks: openTasks.get(l.customer_id) ?? 0,
+        blocker: leadBlocker(l),
+        person_id: area?.person_id ?? null,
+        business_profile_id: area?.business_profile_id ?? null,
+        customer_area_path: area?.open_path ?? '/broker/customers',
       }
     })
 }
@@ -900,6 +952,276 @@ export function bulkUpdateLeads(auth: Auth, body: { lead_ids: string[] } & LeadB
   return { updated, skipped }
 }
 
+const DEMO_PIPELINE: Exclude<LeadStatus, 'closed'>[] = [
+  'lead',
+  'contacted',
+  'qualified',
+  'quoting',
+  'offer_sent',
+  'accepted',
+  'live',
+]
+
+export type DemoAdvanceResult = {
+  lead_id: string
+  customer_name: string
+  from_status: LeadStatus
+  to_status: LeadStatus
+  outcome: 'advanced' | 'already_there' | 'skipped' | 'failed'
+  message: string
+  open_path: string
+  quote_id?: string | null
+}
+
+/** Demo-only: advance selected sample leads through real workflow steps with sample payloads. */
+export function demoAdvanceLeads(
+  auth: Auth,
+  body: {
+    lead_ids: string[]
+    mode: 'next' | 'to_stage'
+    target_stage?: Exclude<LeadStatus, 'closed'>
+    close?: boolean
+    close_reason?: string
+  },
+): { results: DemoAdvanceResult[] } {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  const ids = [...new Set(body.lead_ids)].slice(0, 50)
+  if (!ids.length) throw new ToolError('validation', 'Select at least one lead.')
+  if (body.mode === 'to_stage' && !body.close && !body.target_stage) {
+    throw new ToolError('validation', 'Choose a target stage.')
+  }
+  const results: DemoAdvanceResult[] = []
+
+  const advanceOneStep = (lead: Lead, actorId: string | null): Lead => {
+    const now = new Date().toISOString()
+    const due = new Date(Date.now() + 3 * 86400000).toISOString()
+    const idx = DEMO_PIPELINE.indexOf(lead.status as (typeof DEMO_PIPELINE)[number])
+    const next = DEMO_PIPELINE[Math.min(idx + 1, DEMO_PIPELINE.length - 1)]
+    if (lead.status === 'closed' || lead.status === 'live' || next === lead.status) return lead
+
+    const activity = [...(lead.activity ?? [])]
+    const push = (kind: 'contact' | 'note' | 'follow_up' | 'qualification', outcome: string, note: string) => {
+      activity.push({ id: crypto.randomUUID(), kind, outcome, note, at: now, by: actorId ?? 'demo' })
+    }
+
+    let patch: Partial<Lead> = { last_activity_at: now, activity }
+    if (next === 'contacted') {
+      push('contact', 'Reached', 'Demo: broker introduced cover options.')
+      patch = {
+        ...patch,
+        status: 'contacted',
+        next_action: 'Confirm cover need',
+        next_action_due_at: due,
+      }
+    } else if (next === 'qualified') {
+      push('qualification', 'Qualified', 'Demo: cover need and assets confirmed.')
+      patch = {
+        ...patch,
+        status: 'qualified',
+        qualification: {
+          ...lead.qualification,
+          contact_person: lead.qualification.contact_person || 'Demo contact',
+          confirmed_cover_need: lead.qualification.confirmed_cover_need || lead.product_category || 'Commercial property',
+          assets: lead.qualification.assets || 'Workshop equipment (demo)',
+          estimated_values: lead.qualification.estimated_values || 'R850,000',
+        },
+        qualification_confirmed: {
+          ...(lead.qualification_confirmed ?? {}),
+          contact_person: 'broker',
+          confirmed_cover_need: 'broker',
+          assets: 'broker',
+        },
+        next_action: 'Prepare quote request',
+        next_action_due_at: due,
+        missing_info: [],
+      }
+    } else if (next === 'quoting') {
+      push('note', 'Quoting', 'Demo: quote request opened with confirmed details.')
+      let quoteId = p.repo.find('quotes', (q) => q.lead_id === lead.id)?.id
+      if (!quoteId) {
+        const quote = invokeTool<Quote>('quote.create_request', { lead_id: lead.id, covers: lead.product_category ? [lead.product_category] : undefined }, {
+          repo: p.repo,
+          actor: p.actor,
+        })
+        quoteId = quote.id
+      }
+      patch = { ...patch, status: 'quoting', next_action: 'Share offer with customer', next_action_due_at: due }
+      ;(patch as { _quote_id?: string })._quote_id = quoteId
+    } else if (next === 'offer_sent') {
+      push('note', 'Offer sent', 'Demo: sample offer shared with customer (no external send).')
+      patch = { ...patch, status: 'offer_sent', next_action: 'Record acceptance', next_action_due_at: due }
+    } else if (next === 'accepted') {
+      push('note', 'Accepted', 'Demo: customer accepted the sample offer.')
+      patch = { ...patch, status: 'accepted', next_action: 'Confirm cover with insurer', next_action_due_at: due }
+    } else if (next === 'live') {
+      push('note', 'Live', 'Demo: cover confirmation recorded; demo policy linked.')
+      let policy = p.repo.find('policies', (pol) => pol.customer_id === lead.customer_id && pol.status === 'in_force')
+      if (!policy) {
+        const provider = p.repo.list('insurers')[0]
+        policy = p.repo.insert('policies', {
+          customer_id: lead.customer_id,
+          line: 'short_term_personal',
+          provider_id: provider?.id ?? lead.customer_id,
+          policy_number: `DEMO-${lead.id.slice(0, 8).toUpperCase()}`,
+          origin: 'placed',
+          status: 'in_force',
+          underwriting_status: 'accepted',
+          premium_amount: 1250,
+          premium_frequency: 'monthly',
+          is_simulated: true,
+          created_by: null,
+          data_category: 'sample',
+        } as never)
+      }
+      patch = {
+        ...patch,
+        status: 'live',
+        policy_id: policy.id,
+        next_action: null,
+        next_action_due_at: null,
+      }
+    }
+    return p.repo.update('leads', lead.id, patch)
+  }
+
+  db.transaction(() => {
+    for (const id of ids) {
+      const lead0 = p.repo.get('leads', id)
+      const customer = lead0 ? p.repo.get('customers', lead0.customer_id) : null
+      const name = customer?.full_name ?? 'Unknown'
+      if (!lead0) {
+        results.push({ lead_id: id, customer_name: name, from_status: 'lead', to_status: 'lead', outcome: 'failed', message: 'Lead not found', open_path: '/broker/leads' })
+        continue
+      }
+      if (lead0.data_category === 'live') {
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead0.status,
+          outcome: 'skipped',
+          message: 'Live workspace leads cannot be demo-advanced',
+          open_path: `/broker/leads/${id}`,
+        })
+        continue
+      }
+
+      if (body.close) {
+        if (lead0.status === 'closed') {
+          results.push({
+            lead_id: id,
+            customer_name: name,
+            from_status: 'closed',
+            to_status: 'closed',
+            outcome: 'already_there',
+            message: 'Already closed',
+            open_path: `/broker/leads/${id}`,
+          })
+          continue
+        }
+        const closed = invokeTool<Lead>(
+          'lead.close',
+          {
+            lead_id: id,
+            reason: body.close_reason?.trim() || 'Demo closed',
+            closed_at_stage: DEMO_PIPELINE.includes(lead0.status as (typeof DEMO_PIPELINE)[number])
+              ? (lead0.status as (typeof DEMO_PIPELINE)[number])
+              : 'lead',
+          },
+          { repo: p.repo, actor: p.actor },
+        )
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: 'closed',
+          outcome: 'advanced',
+          message: `Closed · ${closed.closed_reason}`,
+          open_path: `/broker/leads/${id}`,
+        })
+        continue
+      }
+
+      const target =
+        body.mode === 'next'
+          ? DEMO_PIPELINE[Math.min(DEMO_PIPELINE.indexOf(lead0.status as (typeof DEMO_PIPELINE)[number]) + 1, DEMO_PIPELINE.length - 1)]
+          : body.target_stage!
+
+      const fromIdx = DEMO_PIPELINE.indexOf(lead0.status as (typeof DEMO_PIPELINE)[number])
+      const toIdx = DEMO_PIPELINE.indexOf(target)
+      if (lead0.status === 'closed') {
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead0.status,
+          outcome: 'skipped',
+          message: 'Closed leads are not advanced',
+          open_path: `/broker/leads/${id}`,
+        })
+        continue
+      }
+      if (fromIdx >= toIdx && lead0.status === target) {
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead0.status,
+          outcome: 'already_there',
+          message: `Already at ${target}`,
+          open_path: `/broker/leads/${id}`,
+        })
+        continue
+      }
+      if (fromIdx > toIdx) {
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead0.status,
+          outcome: 'already_there',
+          message: `Already beyond ${target}`,
+          open_path: `/broker/leads/${id}`,
+        })
+        continue
+      }
+
+      let lead = lead0
+      let quoteId: string | null = p.repo.find('quotes', (q) => q.lead_id === lead.id)?.id ?? null
+      try {
+        while (DEMO_PIPELINE.indexOf(lead.status as (typeof DEMO_PIPELINE)[number]) < toIdx) {
+          lead = advanceOneStep(lead, p.user?.id ?? null)
+          quoteId = p.repo.find('quotes', (q) => q.lead_id === lead.id)?.id ?? quoteId
+          if (lead.status === 'live' || lead.status === target) break
+        }
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead.status,
+          outcome: 'advanced',
+          message: `${lead0.status} → ${lead.status}`,
+          open_path: `/broker/leads/${id}`,
+          quote_id: quoteId,
+        })
+      } catch (e) {
+        results.push({
+          lead_id: id,
+          customer_name: name,
+          from_status: lead0.status,
+          to_status: lead.status,
+          outcome: 'failed',
+          message: e instanceof Error ? e.message : 'Advance failed',
+          open_path: `/broker/leads/${id}`,
+        })
+      }
+    }
+  })
+
+  return { results }
+}
+
 export interface LeadOpportunitySummary {
   id: string
   product_category: string | null
@@ -920,6 +1242,9 @@ export interface LeadDetail {
   matches: Array<LeadProspectMatch & { run_title: string; lead_status: string | null }>
   /** Other opportunities for the same person or business. */
   sibling_opportunities: LeadOpportunitySummary[]
+  person_id: string | null
+  business_profile_id: string | null
+  customer_area_path: string
 }
 
 export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
@@ -946,15 +1271,20 @@ export function getLead(auth: Auth, body: { lead_id: string }): LeadDetail {
       closed_reason: l.closed_reason ?? null,
       closed_at_stage: l.closed_at_stage ?? null,
     }))
+  const customer = p.repo.require('customers', lead.customer_id)
+  const area = customerAreaLinkForCustomer(p.repo, customer)
   return {
     lead,
-    customer: p.repo.require('customers', lead.customer_id),
+    customer,
     consents: p.repo.list('customer_consents', (c) => c.customer_id === lead.customer_id),
     quotes: p.repo.list('quotes', (q) => q.lead_id === lead.id),
     jobs: p.repo.list('jobs', (j) => j.lead_id === lead.id || (lead.source_job_id !== undefined && j.id === lead.source_job_id)).map((j) => summariseJob(p.repo, j)),
     prospect,
     matches,
     sibling_opportunities,
+    person_id: area?.person_id ?? null,
+    business_profile_id: area?.business_profile_id ?? null,
+    customer_area_path: area?.open_path ?? '/broker/customers',
     messages: lead.conversation_id
       ? p.repo
           .list('conversation_messages', (m) => m.conversation_id === lead.conversation_id)
@@ -976,13 +1306,57 @@ export type CaptureLeadInput = {
 export function captureLead(auth: Auth, body: CaptureLeadInput) {
   const p = principal(auth)
   requireRole(p, STAFF_ROLES)
-  return invokeTool<{ customer: Customer; lead: Lead; created: boolean }>('lead.capture', body, { repo: p.repo, actor: p.actor })
+  return invokeTool<{
+    customer: Customer
+    lead: Lead
+    created: boolean
+    person_id: string | null
+    business_profile_id: string | null
+    open_path: string
+  }>('lead.capture', body, { repo: p.repo, actor: p.actor })
 }
 
 export function closeLead(auth: Auth, body: { lead_id: string; reason: string; closed_at_stage?: Exclude<LeadStatus, 'closed'> }) {
   const p = principal(auth)
   requireRole(p, STAFF_ROLES)
   return invokeTool<Lead>('lead.close', body, { repo: p.repo, actor: p.actor })
+}
+
+export function saveLeadQualification(
+  auth: Auth,
+  body: {
+    lead_id: string
+    contact_person?: string
+    confirmed_cover_need?: string
+    assets?: string
+    estimated_values?: string
+    existing_cover?: string
+    renewal_date?: string
+    next_action?: string
+    next_action_due_at?: string | null
+    mark_qualified?: boolean
+  },
+) {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  return invokeTool<Lead>('lead.save_qualification', body, { repo: p.repo, actor: p.actor })
+}
+
+export function logLeadActivity(
+  auth: Auth,
+  body: {
+    lead_id: string
+    kind: 'contact' | 'note' | 'follow_up'
+    outcome?: string
+    note?: string
+    next_action?: string
+    next_action_due_at?: string | null
+    successful_contact?: boolean
+  },
+) {
+  const p = principal(auth)
+  requireRole(p, STAFF_ROLES)
+  return invokeTool<Lead>('lead.log_activity', body, { repo: p.repo, actor: p.actor })
 }
 
 // ---------------------------------------------------------------- quotes
@@ -1294,7 +1668,7 @@ export function getOverview(auth: Auth): OverviewData {
   requireRole(p, STAFF_ROLES)
   const leads = p.repo.list('leads')
   const jobs = p.repo.list('jobs')
-  const statuses = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted', 'live', 'closed']
+  const statuses = ['lead', 'contacted', 'qualified', 'quoting', 'offer_sent', 'accepted', 'live', 'closed']
   return {
     kpis: {
       open_leads: leads.filter((l) => !['closed', 'live'].includes(l.status)).length,

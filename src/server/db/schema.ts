@@ -11,7 +11,7 @@ export type UUID = string
 export type ISODate = string
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json }
 
-export type Role = 'visitor' | 'customer' | 'broker' | 'claims_admin' | 'manager' | 'admin'
+export type Role = 'visitor' | 'customer' | 'broker' | 'claims_admin' | 'manager' | 'admin' | 'insurer_partner'
 
 export interface Organisation {
   id: UUID
@@ -136,21 +136,34 @@ export interface ConversationMessage {
 export type LeadStatus =
   | 'lead'
   | 'contacted'
+  | 'qualified'
   | 'quoting'
-  | 'proposal_released'
+  | 'offer_sent'
   | 'accepted'
   | 'live'
   | 'closed'
 
-export const LEAD_OPEN_STAGES: LeadStatus[] = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted']
+export const LEAD_OPEN_STAGES: LeadStatus[] = ['lead', 'contacted', 'qualified', 'quoting', 'offer_sent', 'accepted']
 export const LEAD_PIPELINE_STAGES: Exclude<LeadStatus, 'closed'>[] = [
   'lead',
   'contacted',
+  'qualified',
   'quoting',
-  'proposal_released',
+  'offer_sent',
   'accepted',
   'live',
 ]
+
+export type LeadActivityKind = 'contact' | 'note' | 'follow_up' | 'qualification'
+
+export interface LeadActivityEntry {
+  id: string
+  kind: LeadActivityKind
+  outcome?: string | null
+  note?: string | null
+  at: ISODate
+  by?: string | null
+}
 
 export interface MotorDetails {
   make?: string
@@ -185,6 +198,12 @@ export interface LeadQualification {
   vehicle?: MotorDetails
   summary?: string
   risk?: RiskAssessment
+  contact_person?: string
+  confirmed_cover_need?: string
+  assets?: string
+  estimated_values?: string
+  existing_cover?: string
+  renewal_date?: string
 }
 
 export interface Lead {
@@ -212,6 +231,12 @@ export interface Lead {
   closed_at?: ISODate | null
   /** Linked in-force policy that marks this opportunity Live. */
   policy_id?: UUID | null
+  next_action?: string | null
+  next_action_due_at?: ISODate | null
+  last_activity_at?: ISODate | null
+  /** Field key → research | broker | customer */
+  qualification_confirmed?: Record<string, string>
+  activity?: LeadActivityEntry[]
 }
 
 export type ProspectStatus = 'active' | 'archived' | 'do_not_contact'

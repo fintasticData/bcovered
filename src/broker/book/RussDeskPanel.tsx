@@ -49,7 +49,7 @@ export function RussDeskPanel({
 
   const jobs = [
     { label: 'Customer Area', to: '/broker/customers' },
-    { label: 'My workspace queue', to: '/broker/book' },
+    { label: 'Customer Area queue', to: '/broker/customers' },
     { label: 'Routes · What you wanna do!', to: '/broker/routes' },
     { label: 'Leads', to: '/broker/leads' },
     { label: 'Approvals', to: '/broker/approvals' },

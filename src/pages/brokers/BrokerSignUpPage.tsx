@@ -44,7 +44,7 @@ export default function BrokerSignUpPage() {
             // Workspace is ready; branding can be finished under Settings → Brokerage profile.
           }
         }
-        navigate('/broker/book', { replace: true })
+        navigate('/broker/customers', { replace: true })
       }
     } catch (err) {
       setError((err as Error).message)
@@ -92,7 +92,7 @@ export default function BrokerSignUpPage() {
                 We sent a confirmation link to <strong>{form.email}</strong>. Open it, then sign in: your workspace <strong>{form.brokerage_name}</strong> is created on
                 your first sign-in.
               </p>
-              <Link to="/sign-in?next=/broker/book" className="btn-dark mt-2 inline-flex">
+              <Link to="/sign-in?next=/broker/customers" className="btn-dark mt-2 inline-flex">
                 Go to sign in <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -155,7 +155,7 @@ export default function BrokerSignUpPage() {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Create account and open my workspace
               </button>
               <p className="text-center text-xs text-ink/60">
-                Already have an account? <Link to="/sign-in?next=/broker/book" className="font-semibold text-brand-600 underline">Sign in</Link>
+                Already have an account? <Link to="/sign-in?next=/broker/customers" className="font-semibold text-brand-600 underline">Sign in</Link>
               </p>
             </form>
           )}

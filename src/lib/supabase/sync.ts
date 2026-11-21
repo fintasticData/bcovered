@@ -137,7 +137,8 @@ type Whoami = {
   at: number
 }
 
-const CLIENT_SYNC_TABLES = new Set(['customers', 'conversations', 'conversation_messages'])
+/** Portal customers sync their account row only — chat stays local (avoids RLS 403/409 console spam). */
+const CLIENT_SYNC_TABLES = new Set(['customers'])
 
 let sessionWhoami: Whoami | null = null
 async function signedInWhoami(fresh = false): Promise<Whoami | null> {
@@ -165,17 +166,10 @@ async function signedInTenant(fresh = false): Promise<string | null> {
   return (await signedInWhoami(fresh))?.tenantId ?? null
 }
 
-/** Portal customers only sync their own account rows; staff sync the brokerage book. */
+/** Portal customers only sync their own account row; staff sync the brokerage book. */
 function clientMaySync(change: RowChange, me: Whoami): boolean {
   if (!me.customerId || !CLIENT_SYNC_TABLES.has(change.table)) return false
   if (change.table === 'customers') return change.row.id === me.customerId
-  if (change.table === 'conversations') return change.row.customer_id === me.customerId
-  if (change.table === 'conversation_messages') {
-    const conversationId = change.row.conversation_id as string | undefined
-    if (!conversationId) return false
-    const conversation = db.snapshot().conversations?.find((c) => c.id === conversationId)
-    return conversation?.customer_id === me.customerId
-  }
   return false
 }
 

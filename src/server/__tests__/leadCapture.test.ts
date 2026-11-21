@@ -14,15 +14,20 @@ describe('person-first lead capture', () => {
     expect(first.created).toBe(true)
     expect(first.lead.status).toBe('lead')
     expect(first.lead.product_category).toBeNull()
+    expect(first.person_id).toBeTruthy()
+    expect(first.open_path).toMatch(/^\/broker\/customers\/people\//)
 
     const second = captureLead(broker, { kind: 'person', full_name: 'Lerato M.', phone: '0825550199', product_category: 'motor' })
     expect(second.created).toBe(false)
     expect(second.customer.id).toBe(first.customer.id)
     expect(second.lead.id).not.toBe(first.lead.id)
     expect(second.lead.product_category).toBe('motor')
+    expect(second.person_id).toBe(first.person_id)
 
     const detail = getLead(broker, { lead_id: second.lead.id })
     expect(detail.sibling_opportunities).toHaveLength(2)
+    expect(detail.person_id).toBe(first.person_id)
+    expect(detail.customer_area_path).toBe(first.open_path)
 
     const closed = closeLead(broker, { lead_id: first.lead.id, reason: 'Declined', closed_at_stage: 'lead' })
     expect(closed.status).toBe('closed')
@@ -32,6 +37,21 @@ describe('person-first lead capture', () => {
     const rows = listLeads(broker).filter((l) => l.customer_id === first.customer.id)
     expect(rows.some((l) => l.status === 'closed')).toBe(true)
     expect(rows.some((l) => l.status === 'lead' && l.product_category === 'motor')).toBe(true)
+  })
+
+  it('captures a business into Customer Area businesses', () => {
+    const captured = captureLead(broker, {
+      kind: 'business',
+      full_name: 'CARtime Test Gardens',
+      email: 'office@cartime-test.example.demo',
+      region: 'Montague Gardens',
+    })
+    expect(captured.created).toBe(true)
+    expect(captured.business_profile_id).toBeTruthy()
+    expect(captured.open_path).toMatch(/^\/broker\/customers\/businesses\//)
+    const detail = getLead(broker, { lead_id: captured.lead.id })
+    expect(detail.business_profile_id).toBe(captured.business_profile_id)
+    expect(detail.customer_area_path).toBe(captured.open_path)
   })
 
   it('marks an opportunity live when the linked policy is in force', () => {

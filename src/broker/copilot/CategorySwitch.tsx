@@ -1,7 +1,9 @@
 import { FlaskConical, Radio } from 'lucide-react'
 import { useCopilotHealth } from '@/copilot/api'
 import { CATEGORY_HINT, CATEGORY_LABEL, dataCategory, useDataCategory, type DataCategory } from '@/lib/supabase/category'
+import { lastDemoBrokerage } from '@/lib/supabase/demoBrokerage'
 import { useSupabaseAuth } from '@/lib/supabase/client'
+import { useSwitchWorkspace } from '@/api/hooks'
 import { cn } from '@/lib/utils'
 
 /** Why Production (Live) cannot be selected right now, or null when it is available. */
@@ -30,9 +32,14 @@ export function CategorySwitch({
 }) {
   const category = useDataCategory()
   const productionBlock = useProductionBlockReason()
+  const switcher = useSwitchWorkspace()
   const choose = (next: DataCategory) => {
     if (next === category) return
     dataCategory.set(next)
+    if (next === 'sample') {
+      const last = lastDemoBrokerage.get()
+      switcher.mutate(last.id)
+    }
     onChange?.(next)
   }
   const dark = variant === 'dark' || variant === 'sidebar'

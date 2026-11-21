@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { QeSuburbSelect } from '@/components/qe/QeSuburbSelect'
 import { FieldShell } from '@/onboarding/ui'
 import { COVER_OPTIONS, type MotorFormErrors, type MotorQuoteForm, type QeMotorRequest } from '@/lib/qe/types'
 import { Section } from '../shared/ui'
@@ -93,8 +94,21 @@ export function MotorRequestForm({
           <Section title="Address">
             <div className="grid grid-cols-1 gap-x-3 sm:grid-cols-[2fr_1.5fr_1fr]">
               {text('street', 'Street')}
-              {text('suburb', 'Suburb')}
-              {text('postalCode', 'Postal code', { inputMode: 'numeric' })}
+              <FieldShell label="Suburb" htmlFor="qe-suburb" error={errors.suburb} hint="Shared with Concierge · live QE address API next" required>
+                <QeSuburbSelect
+                  id="qe-suburb"
+                  value={form.suburb}
+                  valueMode="suburb"
+                  placeholder="Search suburb or postal code…"
+                  inputClassName={input}
+                  onChange={(v) => onChange('suburb', v)}
+                  onSelectHit={(hit) => {
+                    onChange('suburb', hit.suburb)
+                    onChange('postalCode', hit.postalCode)
+                  }}
+                />
+              </FieldShell>
+              {text('postalCode', 'Postal code', { inputMode: 'numeric', hint: 'Filled when you pick a suburb' })}
             </div>
           </Section>
         )}

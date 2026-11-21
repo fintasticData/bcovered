@@ -4,7 +4,10 @@ import { uploadMedia, type MediaKind } from '@/lib/supabase/media'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-/** Upload to Supabase Storage, then push the returned URL into a form field. */
+/**
+ * Single-file upload into a form field.
+ * For multi-file images/PDFs/docs with a file list, use `MediaAttachPanel` instead.
+ */
 export function MediaField({
   label,
   hint,
@@ -15,7 +18,7 @@ export function MediaField({
   previewUrl,
   disabled,
   accept,
-  ownerTable = 'organisations',
+  ownerTable,
   ownerId,
   onChange,
   onUploaded,
@@ -29,8 +32,8 @@ export function MediaField({
   previewUrl?: string | null
   disabled?: boolean
   accept: string
-  ownerTable?: string
-  ownerId?: string
+  ownerTable?: string | null
+  ownerId?: string | null
   onChange: (url: string | null) => void
   onUploaded?: (url: string) => void
 }) {
@@ -50,8 +53,8 @@ export function MediaField({
         file,
         purpose,
         kind,
-        ownerTable,
-        ownerId: ownerId ?? tenantId,
+        ownerTable: ownerTable ?? undefined,
+        ownerId: ownerId ?? undefined,
       })
       onChange(uploaded.url)
       onUploaded?.(uploaded.url)

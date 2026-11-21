@@ -57,7 +57,7 @@ export default function PortalBusinessPage() {
                 {data.exposures.length} potential exposures identified across {data.locations.length} location{data.locations.length === 1 ? '' : 's'}. Your
                 broker confirms which ones need cover; nothing has been sent to an insurer from this demo.
               </p>
-              <Link to="/portal/business/risk-profile" className="btn-dark mt-4 px-4 py-2 text-xs">
+              <Link to="/my/business/risk-profile" className="btn-dark mt-4 px-4 py-2 text-xs">
                 <Network className="h-4 w-4" /> View my risk profile <ArrowRight className="h-4 w-4" />
               </Link>
             </section>

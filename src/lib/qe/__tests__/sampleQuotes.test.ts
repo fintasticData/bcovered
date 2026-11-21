@@ -91,33 +91,31 @@ describe('getSampleQuotes', () => {
   it('returns the fixed outcomes for insurers A, B and C', () => {
     const [a, b, c] = getSampleQuotes(request, NOW).quotes!
 
-    expect(a).toMatchObject({ insurerName: 'Demo Insurer A', hasQuote: true, totalPremium: 780 })
-    expect(vehicleItem(a)).toMatchObject({ status: 'Quoted', premium: 780 })
+    expect(a).toMatchObject({ insurerName: 'Demo Insurer A', hasQuote: true, totalPremium: 1250 })
+    expect(vehicleItem(a)).toMatchObject({ status: 'Quoted', premium: 1250 })
     expect(basicExcess(vehicleItem(a))?.value).toBe(5000)
 
-    expect(b).toMatchObject({ insurerName: 'Demo Insurer B', hasQuote: true, totalPremium: 855 })
-    expect(vehicleItem(b)).toMatchObject({ status: 'Quoted', premium: 855 })
-    expect(basicExcess(vehicleItem(b))?.value).toBe(3500)
+    expect(b).toMatchObject({ insurerName: 'Demo Insurer B', hasQuote: true, totalPremium: 1100 })
+    expect(vehicleItem(b)).toMatchObject({ status: 'Quoted', premium: 1100 })
+    expect(basicExcess(vehicleItem(b))?.value).toBe(7500)
 
-    expect(c).toMatchObject({ insurerName: 'Demo Insurer C', hasQuote: false, totalPremium: 0, status: 'Complete' })
-    expect(vehicleItem(c)).toMatchObject({ status: 'No Quote', premium: 0, excess: [] })
-    expect(vehicleItem(c)?.messages).toEqual([
-      expect.objectContaining({ messageTypeName: 'QuoteItem', message: 'Vehicle outside this insurer’s demo acceptance criteria.' }),
-    ])
+    expect(c).toMatchObject({ insurerName: 'Demo Insurer C', hasQuote: true, totalPremium: 1320, status: 'Complete' })
+    expect(vehicleItem(c)).toMatchObject({ status: 'Quoted', premium: 1320 })
+    expect(basicExcess(vehicleItem(c))?.value).toBe(4000)
     expect(isQuoted(a)).toBe(true)
-    expect(isQuoted(c)).toBe(false)
+    expect(isQuoted(b)).toBe(true)
+    expect(isQuoted(c)).toBe(true)
   })
 
   it('dates quoted offers on submission with a 30-day expiry', () => {
     const [a, b, c] = getSampleQuotes(request, NOW).quotes!
-    for (const q of [a, b]) {
+    for (const q of [a, b, c]) {
       expect(q.validDays).toBe(30)
       expect(q.hasExpired).toBe(false)
       const days = (new Date(q.quoteExpires!).getTime() - new Date(q.quoteDate!).getTime()) / 86_400_000
       expect(Math.round(days)).toBe(30)
       expect(new Date(q.quoteDate!).getTime()).toBe(NOW.getTime())
     }
-    expect(c.quoteExpires).toBeNull()
   })
 
   it('returns a fresh object every time and never mutates the template', () => {
@@ -126,14 +124,14 @@ describe('getSampleQuotes', () => {
     first.quotes![0].totalPremium = 1
     const second = getSampleQuotes(request, NOW)
     expect(second).not.toBe(first)
-    expect(second.quotes![0].totalPremium).toBe(780)
+    expect(second.quotes![0].totalPremium).toBe(1250)
     expect(second.requestID).toBeGreaterThan(first.requestID)
     expect(JSON.stringify(SAMPLE_MOTOR_RESULT)).toBe(before)
   })
 
   it('keeps premiums fixed when the request changes', () => {
     const edited = buildMotorRequest({ ...formFromRequest(), surname: 'Other', year: '2015', cover: '2' })
-    expect(getSampleQuotes(edited, NOW).quotes!.map((q) => q.totalPremium)).toEqual([780, 855, 0])
+    expect(getSampleQuotes(edited, NOW).quotes!.map((q) => q.totalPremium)).toEqual([1250, 1100, 1320])
   })
 })
 

@@ -61,13 +61,13 @@ export default function PortalPage() {
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
           <div className="space-y-6">
             {data.business_profile_id && (
-              <Link to="/portal/business" className="panel group flex items-center gap-4 border-brand-500/30 p-5 transition hover:border-brand-500/60">
+              <Link to="/my/business" className="panel group flex items-center gap-4 border-brand-500/30 p-5 transition hover:border-brand-500/60">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
                   <Building2 className="h-6 w-6" />
                 </span>
                 <span className="flex-1">
-                  <span className="block text-base font-semibold text-navy-900">Business portal</span>
-                  <span className="block text-xs text-navy-600">Your business risk review, risk profile and the documents your broker needs.</span>
+                  <span className="block text-base font-semibold text-navy-900">My Business Page</span>
+                  <span className="block text-xs text-navy-600">Your business assets, risk profile and the documents your broker needs.</span>
                 </span>
                 <ArrowRight className="h-5 w-5 text-brand-500 transition group-hover:translate-x-1" />
               </Link>
@@ -156,7 +156,7 @@ export default function PortalPage() {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {isBusiness ? (
-                  <Link to="/portal/business" className="btn-dark px-4 py-2 text-xs">Business portal</Link>
+                  <Link to="/my/business" className="btn-dark px-4 py-2 text-xs">My Business Page</Link>
                 ) : (
                   <Link to="/assist" className="btn-dark px-4 py-2 text-xs">Talk to Ava</Link>
                 )}

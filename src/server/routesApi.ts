@@ -139,9 +139,20 @@ export interface StartRouteBody {
   person_id?: string | null
   policy_id?: string | null
   claim_id?: string | null
+  /** Accepted sales offer to confirm cover from (seeds policy_setup). */
+  offer_id?: string | null
   business_key?: string | null
   intent?: string | null
   key: string
+  /** Optional prefill when starting from an accepted offer. */
+  offer_prefill?: {
+    insurer_name?: string | null
+    cover_type?: string | null
+    premium_amount?: number | null
+    item_label?: string | null
+    item_type?: string | null
+    reference?: string | null
+  } | null
 }
 
 /** Starts or resumes a Route. From a client record the client is selected straight away, through the same action. */
@@ -160,6 +171,7 @@ export async function startRoute(
       policy_id: body.policy_id,
       claim_id: body.claim_id,
       intent: body.intent ?? def.id,
+      draft_id: body.offer_id ?? null,
     })
   const started = invokeTool<{ run_id: string; resumed: boolean; subject_id: string | null }>(
     'route.start',
@@ -175,8 +187,9 @@ export async function startRoute(
   await persistProgress(port, auth, started.run_id)
   const progressBefore = getRouteProgress(auth, { run_id: started.run_id }, as)
   const selectDone = progressBefore.phases.flatMap((p) => p.actions).find((a) => a.id === def.selectActionId)?.status === 'done'
+  let last = null as Awaited<ReturnType<typeof runRouteAction>> | null
   if (body.person_id && !selectDone) {
-    const r = await runRouteAction(
+    last = await runRouteAction(
       auth,
       {
         run_id: started.run_id,
@@ -187,8 +200,38 @@ export async function startRoute(
       port,
       as,
     )
-    return { ...r, resumed: started.resumed }
   }
+  // Seed accepted-offer source for Confirm cover → policy_setup.
+  if (body.offer_id && def.id === 'policy_setup') {
+    const sourceDone = getRouteProgress(auth, { run_id: started.run_id }, as)
+      .phases.flatMap((p) => p.actions)
+      .find((a) => a.id === 'policy_setup.source.confirm')?.status === 'done'
+    if (!sourceDone) {
+      const pre = body.offer_prefill
+      last = await runRouteAction(
+        auth,
+        {
+          run_id: started.run_id,
+          action_id: 'policy_setup.source.confirm',
+          input: {
+            source_type: 'accepted_quote',
+            quote_id: body.offer_id,
+            offer_id: body.offer_id,
+            draft_id: body.offer_id,
+            ...(pre?.insurer_name ? { insurer_name: pre.insurer_name } : {}),
+            ...(pre?.cover_type ? { cover_type: pre.cover_type } : {}),
+            ...(pre?.premium_amount != null ? { premium_amount: pre.premium_amount } : {}),
+            ...(pre?.item_label ? { item_label: pre.item_label } : {}),
+            ...(pre?.item_type ? { item_type: pre.item_type } : {}),
+          },
+          key: `${body.key}:source`,
+        },
+        port,
+        as,
+      )
+    }
+  }
+  if (last) return { ...last, resumed: started.resumed }
   const progress = getRouteProgress(auth, { run_id: started.run_id }, as)
   return {
     outcome: {

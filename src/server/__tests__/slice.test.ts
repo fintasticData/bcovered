@@ -122,7 +122,7 @@ describe('motor_new_lead vertical slice', () => {
 
     expect(r.require('jobs', job.id).status).toBe('completed')
     expect(r.require('quotes', job.quote_id!).status).toBe('released')
-    expect(r.require('leads', job.lead_id!).status).toBe('proposal_released')
+    expect(r.require('leads', job.lead_id!).status).toBe('offer_sent')
     const portal = getPortal({ userId: sarahUser.id })
     expect(portal.proposals).toHaveLength(1)
     expect(portal.notifications).toHaveLength(1)

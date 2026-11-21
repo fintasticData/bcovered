@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Building2, Check, ChevronDown, LogOut } from 'lucide-react'
 import { useMe, useSignOut, useSwitchWorkspace } from '@/api/hooks'
+import { lastDemoBrokerage } from '@/lib/supabase/demoBrokerage'
+import { useDataCategory } from '@/lib/supabase/category'
 import { StatusBadge } from './StatusBadge'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +23,7 @@ export function WorkspaceSwitcher({
   const switcher = useSwitchWorkspace()
   const signOut = useSignOut()
   const navigate = useNavigate()
+  const category = useDataCategory()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -66,6 +69,10 @@ export function WorkspaceSwitcher({
               onClick={() =>
                 switcher.mutate(w.organisation_id, {
                   onSuccess: () => {
+                    if (category === 'sample') {
+                      if (w.name === 'Highveld Demo Brokers') lastDemoBrokerage.set({ id: w.organisation_id, slug: 'highveld-demo-brokers' })
+                      if (w.name === 'Coastal Demo Brokers') lastDemoBrokerage.set({ id: w.organisation_id, slug: 'coastal-demo-brokers' })
+                    }
                     setOpen(false)
                     navigate(w.lifecycle_status === 'active' ? '/broker' : '/onboarding')
                   },

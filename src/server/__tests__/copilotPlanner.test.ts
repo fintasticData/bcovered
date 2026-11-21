@@ -191,7 +191,7 @@ describe('copilot rule planner', () => {
 describe('copilot sales book rules', () => {
   const ME: MemberRef = { member_id: id(901), name: 'Naledi Mokoena', role: 'broker', role_label: 'Broker', referral_code: 'NALEDI-MZRL', referral_path: '/r/NALEDI-MZRL?mode=sample', is_me: true }
   const LERATO: MemberRef = { member_id: id(902), name: 'Lerato Dube', role: 'agent', role_label: 'Agent', referral_code: 'LERATO-QSA4', referral_path: '/r/LERATO-QSA4?mode=sample', service_area: 'Benoni' }
-  const THANDI = { id: id(950), client_number: 'CL-S1150', name: 'Thandi Customer', contact_stage: 'prospect', category: 'sample', open_path: `/broker/book/clients/${id(950)}`, account: null, assigned: LERATO, referred_by: LERATO }
+  const THANDI = { id: id(950), client_number: 'CL-S1150', name: 'Thandi Customer', contact_stage: 'prospect', category: 'sample', open_path: `/broker/customers/people/${id(950)}`, account: null, assigned: LERATO, referred_by: LERATO }
   const OFFER = { id: id(960), reference: 'OF-S1001', status: 'draft', person_id: id(950), insurer: 'Santam', product: 'motor', premium_amount: 865.5, premium_frequency: 'monthly' }
   const thandiRef: EntityRef = { record_type: 'client', id: id(950), number: 'CL-S1150', name: 'Thandi Customer', category: 'sample', open_path: THANDI.open_path }
 
@@ -205,7 +205,7 @@ describe('copilot sales book rules', () => {
           case 'sales.team.list':
             return { ok: true, data: [ME, LERATO] }
           case 'sales.team.invite':
-            return { ok: true, data: { record_type: 'team_member', reference: LERATO.referral_code, member: LERATO, invite_status: 'pending', invite_path: '/team/join/tok123', existing: false, summary: 'Added Lerato Dube as an agent in Benoni. Customer referral code LERATO-QSA4', open_path: '/broker/book?tab=team' } }
+            return { ok: true, data: { record_type: 'team_member', reference: LERATO.referral_code, member: LERATO, invite_status: 'pending', invite_path: '/team/join/tok123', existing: false, summary: 'Added Lerato Dube as an agent in Benoni. Customer referral code LERATO-QSA4', open_path: '/broker/customers?desk=team' } }
           case 'records.search':
             return { ok: true, data: String(args.query).toUpperCase() === 'CL-S1150' ? [thandiRef] : [] }
           case 'sales.client.record':
@@ -298,6 +298,6 @@ describe('copilot sales book rules', () => {
     const res = await runTurn(turn('Show Lerato’s referrals, latest comms and sales'), tools)
     expect(res.steps[0].status).toBe('retrieved')
     expect(calls.find((c) => c.name === 'sales.book.grid')!.args).toMatchObject({ member_id: id(902) })
-    expect(res.steps[0].links[0].to).toBe(`/broker/book?member=${id(902)}`)
+    expect(res.steps[0].links[0].to).toBe(`/broker/customers?member=${id(902)}`)
   })
 })

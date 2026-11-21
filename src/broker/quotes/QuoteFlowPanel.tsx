@@ -1,16 +1,17 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SAMPLE_MOTOR_REQUEST } from '@/data/qe/sampleMotorRequest'
 import { generateAiSampleQuote, generateFixedSampleQuote } from '@/lib/quotes/generateSampleQuote'
 import { quoteSourceBadge, type QuoteSource } from '@/lib/quotes/sources'
-import { buildMotorRequest, formFromRequest, validateMotorForm } from '@/lib/qe/sampleQuotes'
+import { basicExcess, buildMotorRequest, coverLabel, formFromRequest, isQuoted, validateMotorForm, vehicleItem } from '@/lib/qe/sampleQuotes'
 import type { MotorFormErrors, MotorQuoteForm, QeMotorRequest, QeResult } from '@/lib/qe/types'
 import { cn } from '@/lib/utils'
+import { ReferenceComparisonView, useLayoutView, ViewModeToggle, type ComparisonOffer } from '@/fintastic-ux'
 import { MotorRequestForm } from './MotorRequestForm'
 import { QeOfferDialog } from './QeOfferDialog'
-import { QeQuoteComparison, SubmittedRequestSummary } from './QeQuoteComparison'
+import { excessText, premiumText, QeQuoteComparison, SubmittedRequestSummary } from './QeQuoteComparison'
 import { QuoteSourcePicker } from './QuoteSourcePicker'
 import { DemoSampleBadge } from './shared'
 import { ManualQuoteForm } from './ManualQuoteForm'
@@ -44,6 +45,32 @@ export function QuoteFlowPanel({
   const [busy, setBusy] = useState(false)
   const [openQuoteID, setOpenQuoteID] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { view, setView, isFintastic } = useLayoutView()
+
+  const comparisonOffers: ComparisonOffer[] = useMemo(() => {
+    if (!submission) return []
+    const benefitSets = [
+      ['Roadside assist', 'Courtesy car 7 days'],
+      ['Roadside assist', 'Courtesy car 14 days'],
+      ['Roadside assist'],
+    ]
+    return (submission.result.quotes ?? []).map((q, i) => {
+      const quoted = isQuoted(q)
+      const excess = quoted ? basicExcess(vehicleItem(q)) : undefined
+      return {
+        id: String(q.quoteID),
+        label: `Offer ${String.fromCharCode(65 + i)}`,
+        insurerName: q.insurerName,
+        premiumLabel: premiumText(q),
+        excessLabel: excessText(q),
+        premiumValue: quoted ? q.totalPremium : null,
+        excessValue: excess?.value ?? null,
+        coverLabel: coverLabel(submission.request.vehicles[0]?.cover),
+        benefits: quoted ? benefitSets[i] ?? ['Roadside assist'] : [],
+        selectable: quoted,
+      }
+    })
+  }, [submission])
 
   const change = (field: keyof MotorQuoteForm, value: string) => {
     setDraft((d) => ({ ...d, [field]: value }))
@@ -175,7 +202,23 @@ export function QuoteFlowPanel({
             </p>
           )}
           <SubmittedRequestSummary request={submission.request} onEdit={() => setStep('request')} />
-          <QeQuoteComparison result={submission.result} request={submission.request} onOpen={setOpenQuoteID} />
+          <div className="flex justify-end">
+            <ViewModeToggle view={view} onChange={setView} />
+          </div>
+          {isFintastic ? (
+            <ReferenceComparisonView
+              offers={comparisonOffers}
+              clientLabel={`${submission.request.policyholder.name} ${submission.request.policyholder.surname}`}
+              objectLabel={
+                submission.request.vehicles[0]
+                  ? `${submission.request.vehicles[0].year} · M&M ${submission.request.vehicles[0].meadCode}`
+                  : undefined
+              }
+              onOpen={(id) => setOpenQuoteID(Number(id))}
+            />
+          ) : (
+            <QeQuoteComparison result={submission.result} request={submission.request} onOpen={setOpenQuoteID} />
+          )}
           <p className="text-xs text-navy-600">
             Next: create a <strong>manual or sample-linked offer</strong> on the client record (Quotes &amp; decisions → Create offer). Cover is only confirmed after acceptance and sale recording.
           </p>

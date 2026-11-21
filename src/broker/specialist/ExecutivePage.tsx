@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useExecutive, useOpportunities } from '@/api/hooks'
+import { useBfExecutive } from '@/copilot/brokerFinancialsApi'
 import { humanise } from '@/components/StatusBadge'
 import { ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { Notice, Page, Section, Stat, zar } from '../shared/ui'
@@ -7,19 +8,30 @@ import { Notice, Page, Section, Stat, zar } from '../shared/ui'
 export default function ExecutivePage() {
   const { data, isLoading, error } = useExecutive()
   const { data: opportunities = [] } = useOpportunities()
+  const bf = useBfExecutive()
   if (isLoading) return <LoadingState />
   if (error || !data) return <div className="p-6"><ErrorState message={error?.message ?? 'Managers only'} /></div>
   const maxRevenue = Math.max(...data.revenue.by_period.map((p) => p.amount), 1)
+  const stPremium = Number(bf.data?.short_term_premium_monthly ?? 0)
+  const stPeriod = String(bf.data?.period ?? '')
+  const stBasis = String(bf.data?.basis ?? data.premiums.short_term_note)
   return (
     <Page wide>
       <PageHeader title="Executive dashboard" description="Consolidated across short-term, life, group risk and retirement. Premiums, fund contributions, assets and broker revenue are different measures and are never added together." />
-      <Notice>Each tile states its basis. Reported figures come from insurers, administrators and managers; estimated and calculated figures are B-Covered’s own and are labelled so.</Notice>
+      <Notice>Each tile states its basis. Reported figures come from insurers, administrators and managers; estimated and calculated figures are B-Covered’s own and are labelled so. Click broker financial tiles to open underlying rows.</Notice>
 
       <Section title="Premiums (insurer income, not B-Covered revenue)">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Stat label="Individual life, annualised" value={zar(data.premiums.individual_life_annual)} hint={`${data.book.policies_in_force} policies in force`} basis="declared" />
           <Stat label="Group risk, annualised" value={zar(data.premiums.group_risk_annual_estimate)} hint="Scheme premium rate × covered salary roll" basis="estimated" />
-          <Stat label="Short-term" value="Not shown" hint={data.premiums.short_term_note} />
+          <Link to="/broker/financials" className="block rounded-xl transition hover:ring-2 hover:ring-brand-300">
+            <Stat
+              label="Short-term (monthly)"
+              value={stPremium > 0 ? zar(stPremium, true) : 'Not shown'}
+              hint={stPremium > 0 ? `${stPeriod} · ${stBasis}` : data.premiums.short_term_note}
+              basis={stPremium > 0 ? 'calculated' : undefined}
+            />
+          </Link>
         </div>
       </Section>
 
@@ -39,9 +51,23 @@ export default function ExecutivePage() {
       </div>
 
       <Section title="Broker revenue (commission and fees actually earned)">
+        <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Link to="/broker/financials?tab=transactions" className="block rounded-xl transition hover:ring-2 hover:ring-brand-300">
+            <Stat label="Short-term earned" value={zar(Number(bf.data?.commission_earned ?? 0), true)} basis="calculated" />
+          </Link>
+          <Link to="/broker/financials?tab=transactions" className="block rounded-xl transition hover:ring-2 hover:ring-brand-300">
+            <Stat label="Cash received" value={zar(Number(bf.data?.cash_received ?? 0), true)} basis="calculated" />
+          </Link>
+          <Link to="/broker/financials?tab=statements" className="block rounded-xl transition hover:ring-2 hover:ring-brand-300">
+            <Stat label="Outstanding (insurer)" value={zar(Number(bf.data?.outstanding ?? 0), true)} basis="calculated" />
+          </Link>
+          <Link to="/broker/financials?tab=payouts" className="block rounded-xl transition hover:ring-2 hover:ring-brand-300">
+            <Stat label="Allocations payable" value={zar(Number(bf.data?.allocations_payable ?? 0), true)} basis="calculated" />
+          </Link>
+        </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_2fr]">
           <div className="space-y-2">
-            <Stat label="Total recorded" value={zar(data.revenue.total, true)} basis="reported" />
+            <Stat label="Total recorded (life/group)" value={zar(data.revenue.total, true)} basis="reported" />
             {data.revenue.by_type.map((t) => (
               <p key={t.type} className="flex justify-between text-xs text-navy-700">
                 <span>{humanise(t.type)}</span>

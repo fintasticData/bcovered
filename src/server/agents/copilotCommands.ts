@@ -497,7 +497,7 @@ const LATER_PHASE: Array<[RegExp, string]> = [
   [/portfolio|commission|premium|summari[sz]e/, 'Portfolio intelligence is Scenario 6 and needs policy data, which arrives in Phase 3.'],
 ]
 
-const OPEN_LEAD: LeadStatus[] = ['lead', 'contacted', 'quoting', 'proposal_released', 'accepted']
+const OPEN_LEAD: LeadStatus[] = ['lead', 'contacted', 'qualified', 'quoting', 'offer_sent', 'accepted']
 const TERMINAL = ['completed', 'failed', 'cancelled']
 
 export type CopilotMode = 'personal' | 'commercial' | 'life' | 'controls'
@@ -535,7 +535,7 @@ export function handleCopilotCommand(repo: Repo, actor: Actor, text: string, mod
     const existing = repo
       .list('jobs', (j: Job) => j.lead_id === lead.id && j.workflow_type === 'motor_new_lead')
       .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
-    if (existing && (!TERMINAL.includes(existing.status) || lead.status === 'proposal_released')) {
+    if (existing && (!TERMINAL.includes(existing.status) || lead.status === 'offer_sent')) {
       return {
         reply: `There is already a comparison job for ${customer.full_name} (${existing.status.replace(/_/g, ' ')}). Opening it instead of starting a duplicate.`,
         view: { kind: 'job', title: `Comparison for ${customer.full_name}`, job_id: existing.id },

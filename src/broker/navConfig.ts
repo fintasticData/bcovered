@@ -3,7 +3,6 @@ import {
   BarChart3,
   Bot,
   Boxes,
-  BriefcaseBusiness,
   Car,
   Building2,
   CheckSquare,
@@ -29,6 +28,7 @@ import {
   Store,
   UserRound,
   Users,
+  Wrench,
 } from 'lucide-react'
 import type { FeatureKey } from '@/lib/features'
 
@@ -75,14 +75,16 @@ export const NAV: NavSection[] = [
   {
     id: 'main',
     items: [
-      { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers'] },
-      { to: '/broker/book', label: 'My workspace', icon: BriefcaseBusiness },
+      { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers', '/broker/book'] },
       { to: '/broker/policies', label: 'Policies', icon: ScrollText, match: ['/broker/policies'] },
-      { to: '/broker/claims', label: 'Claims', icon: ClipboardCheck, match: ['/broker/claims'] },
+      { to: '/broker/renewals', label: 'Renewals', icon: ArrowLeftRight, match: ['/broker/renewals'] },
+      { to: '/broker/claims', label: 'Claims', icon: ClipboardCheck, match: ['/broker/claims'], badge: true },
+      { to: '/broker/concierge', label: 'Concierge', icon: Sparkles, match: ['/broker/concierge'] },
+      { to: '/broker/concierge/providers', label: 'Service providers', icon: Wrench, match: ['/broker/concierge/providers'] },
       { to: '/broker/routes', label: 'Routes', icon: Route },
       { to: '/broker/franchise', label: 'Franchise', icon: Store },
       { to: '/broker/overview', label: 'Overview', icon: LayoutDashboard },
-      { to: '/broker/workspace', label: 'Ava · records', icon: Sparkles },
+      { to: '/broker/workspace', label: 'Ava · records', icon: Bot },
       { to: '/broker/leads', label: 'Leads', icon: Users },
       { to: '/broker/approvals', label: 'Approvals', icon: CheckSquare, badge: true },
       { to: '/broker/jobs', label: 'Tasks & Jobs', icon: ListChecks },
@@ -142,6 +144,7 @@ export const NAV: NavSection[] = [
       { to: '/broker/investigations', label: 'Investigations', icon: Search, feature: 'controls' },
       { to: '/broker/compliance', label: 'Compliance register', icon: ClipboardCheck, feature: 'specialist' },
       { to: '/broker/executive', label: 'Executive dashboard', icon: BarChart3, feature: 'specialist', roles: MANAGERS },
+      { to: '/broker/financials', label: 'Broker financials', icon: Landmark, match: ['/broker/financials'] },
       { to: '/broker/settings/profile', label: 'Brokerage settings', icon: Settings2, match: ['/broker/settings', '/broker/imports'] },
     ],
   },
@@ -157,13 +160,14 @@ export const NAV: NavSection[] = [
   },
 ]
 
-/** Slim daily shell: Customer Area → quote → approve → Ava. Product lines live under More. */
+/** Slim daily shell: Customer Area → policies/claims/renewals → Concierge → Ava. Product lines live under More. */
 export const PRIMARY_NAV: NavItem[] = [
-  { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers'] },
-  { to: '/broker/leads', label: 'Leads', icon: Users },
-  { to: '/broker/quotes/sample-motor', label: 'Quotes', icon: Car, match: ['/broker/quotes'] },
-  { to: '/broker/approvals', label: 'Approvals', icon: CheckSquare, badge: true },
-  { to: '/broker/workspace', label: 'Ava · records', icon: Sparkles },
+  { to: '/broker/customers', label: 'Customer Area', icon: UserRound, match: ['/broker/customers', '/broker/book'] },
+  { to: '/broker/policies', label: 'Policies', icon: ScrollText, match: ['/broker/policies'] },
+  { to: '/broker/claims', label: 'Claims', icon: ClipboardCheck, match: ['/broker/claims'], badge: true },
+  { to: '/broker/renewals', label: 'Renewals', icon: ArrowLeftRight, match: ['/broker/renewals'] },
+  { to: '/broker/concierge', label: 'Concierge', icon: Sparkles, match: ['/broker/concierge'] },
+  { to: '/broker/workspace', label: 'Ava · records', icon: Bot },
 ]
 
 /** Full product nav under More (Routes, Franchise, lines, Team/Settings, systems, etc.). */

@@ -150,6 +150,48 @@ export const supabaseRoutePort: RoutePort = {
     return { id: r.request_id, reference: r.reference }
   },
 
+  async filePolicy(a) {
+    const r = await policyClaimsApi.filePolicy(dataCategory.get(), {
+      person_id: a.person_id,
+      policy_number: a.policy_number,
+      confirmed_effective_at: a.confirmed_effective_at,
+      confirmation_source: a.confirmation_source,
+      provider_id: a.provider_id ?? null,
+      insurer_name: a.insurer_name ?? null,
+      quote_id: a.quote_id ?? null,
+      source_type: a.source_type ?? null,
+      schedule_note: a.schedule_note ?? null,
+      insurer_reference: a.insurer_reference ?? null,
+      cover_type: a.cover_type ?? null,
+      premium_amount: a.premium_amount ?? null,
+      premium_frequency: a.premium_frequency ?? null,
+      item_label: a.item_label ?? null,
+      item_type: a.item_type ?? null,
+      excess: a.excess ?? null,
+      key: a.key,
+    })
+    if (r.outcome !== 'saved' || !r.policy_id || !r.reference) throw new Error(r.summary || 'Policy was not filed.')
+    return { id: r.policy_id, reference: r.reference, policy_number: r.policy_number ?? a.policy_number }
+  },
+
+  async syncCoverConfirmation(a) {
+    const r = await policyClaimsApi.syncCoverConfirmation(dataCategory.get(), {
+      person_id: a.person_id,
+      policy_id: a.policy_id,
+      offer_id: a.offer_id ?? null,
+      insurer_reference: a.insurer_reference ?? null,
+      cover_start_date: a.cover_start_date ?? null,
+      key: a.key,
+    })
+    if (r.outcome !== 'saved' || !r.policy_id) throw new Error(r.summary || 'Cover confirmation sync failed.')
+    return {
+      policy_id: r.policy_id,
+      open_path: r.open_path,
+      summary: r.summary,
+      lead_updated: r.lead_updated,
+    }
+  },
+
   async persistRun(run) {
     try {
       await rpc('route_upsert_run', { p_run: run, p_category: dataCategory.get() })

@@ -13,7 +13,7 @@ export type Stage = 'new_enquiry' | 'offer_sent' | 'accepted' | 'sold' | 'client
 export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'sold' | 'declined' | 'withdrawn'
 export type Frequency = 'monthly' | 'quarterly' | 'annually' | 'single'
 export type Channel = 'whatsapp' | 'email' | 'call' | 'in_person' | 'other'
-export type CommKind = 'call' | 'whatsapp' | 'email' | 'meeting' | 'note'
+export type CommKind = 'call' | 'whatsapp' | 'email' | 'meeting' | 'note' | 'in_app_chat'
 export type Direction = 'outbound' | 'inbound' | 'internal'
 
 export const STAGE_LABEL: Record<Stage, string> = { new_enquiry: 'New enquiry', offer_sent: 'Offer sent', accepted: 'Accepted', sold: 'Sold', client: 'Client' }
@@ -107,7 +107,7 @@ export interface Offer {
 export interface Communication {
   id: string
   reference: string
-  kind: 'note' | 'call' | 'meeting' | 'email' | 'callback_request' | 'whatsapp'
+  kind: 'note' | 'call' | 'meeting' | 'email' | 'callback_request' | 'whatsapp' | 'in_app_chat'
   direction: Direction
   event: 'logged' | 'whatsapp_opened' | 'message_sent' | 'reply'
   body: string

@@ -20,6 +20,8 @@ export interface ToolContext {
   agentRunId?: string | null
   idempotencyKey?: string | null
   isCancelled?: () => boolean
+  /** When set by a tool, replaces the default `{ after: result }` audit payload. */
+  auditChange?: { before?: unknown; after?: unknown }
 }
 
 export interface ToolDef<S extends z.ZodType = z.ZodType, O = unknown> {
@@ -119,7 +121,14 @@ export function invokeTool<O = unknown>(name: string, rawInput: unknown, ctx: To
     const result = db.transaction(() => {
       const out = def.run(ctx, parsed.data)
       if (def.sideEffect) {
-        audit(ctx.repo, ctx.actor, name, def.auditEntity?.(out) ?? null, { after: out }, ctx.jobId ?? null)
+        audit(
+          ctx.repo,
+          ctx.actor,
+          name,
+          def.auditEntity?.(out) ?? null,
+          ctx.auditChange ?? { after: out },
+          ctx.jobId ?? null,
+        )
       }
       return out
     })

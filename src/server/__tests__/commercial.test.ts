@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { decideApproval, getOverview, listApprovals, listIdentities, sendMessage, startConversation, type Auth } from '../api'
 import { handleCopilotCommand } from '../agents/copilotCommands'
-import { getRiskTwinPortfolio, loadCompletedSubmissions, loadDemoBusinesses, startTwinBuildForProfile } from '../commercialApi'
+import {
+  getPortalBusiness,
+  getRiskTwinPortfolio,
+  loadCompletedSubmissions,
+  loadDemoBusinesses,
+  startTwinBuildForProfile,
+  updatePortalAsset,
+  updatePortalProfile,
+} from '../commercialApi'
+import { DEMO_BUSINESSES } from '../demo/demoBusinesses'
 import { RESTAURANT_GROUP } from '../demo/scenarios'
 import { SEED_IDS, TENANT_ID } from '../db/seed'
 import { db, Repo } from '../db/store'
@@ -160,9 +169,9 @@ describe('commercial_discovery_review vertical slice', () => {
   it('lands the new business contact on the business portal and personal customers on the personal portal', async () => {
     await runRestaurantScenario()
     const identities = listIdentities()
-    expect(identities.find((i) => i.full_name === 'Nomsa Dlamini')?.home).toBe('/portal/business')
+    expect(identities.find((i) => i.full_name === 'Nomsa Dlamini')?.home).toBe('/my/business')
     expect(identities.find((i) => i.full_name === 'Johan van der Merwe')?.home).toBe('/my')
-    expect(identities.find((i) => i.role === 'broker')?.home).toBe('/my')
+    expect(identities.find((i) => i.role === 'broker')?.home).toBe('/broker/customers')
     expect(getOverview(broker).kpis.approvals_pending).toBe(1)
   })
 
@@ -278,9 +287,18 @@ describe('Risk Twin portfolio', () => {
     expect(repo().list('business_risk_profiles', (p) => p.business_profile_id === ubuntu)).toHaveLength(1)
   })
 
-  it('loads the demo businesses once, deterministically, and reset removes them', async () => {
+  it('keeps the three demo businesses + portal contacts on seed, and load is idempotent', async () => {
+    const portalContacts = () =>
+      listIdentities().filter((i) => ['Anil Pillay', 'Lerato Molefe', 'Kagiso Mokoena'].includes(i.full_name))
+    expect(portalContacts()).toHaveLength(3)
+    expect(portalContacts().every((i) => i.role === 'customer' && i.home === '/my/business' && i.group === 'My Business Page')).toBe(
+      true,
+    )
+
     const first = loadDemoBusinesses(broker)
-    expect(first.inserted).toBe(3)
+    // Seed already includes Thali / Swift / Mokoena — load only starts missing Twin builds.
+    expect(first.inserted).toBe(0)
+    expect(first.profile_ids).toHaveLength(3)
     expect(first.builds_started).toBe(3)
     await Promise.all(repo().list('jobs', (j) => j.status === 'queued' || j.status === 'running').map((j) => kick(TENANT_ID, j.id)))
     const count = () => {
@@ -295,7 +313,9 @@ describe('Risk Twin portfolio', () => {
     expect(count()).toEqual(snapshot)
 
     db.reset()
-    expect(repo().list('business_profiles', (p) => first.profile_ids.includes(p.id))).toHaveLength(0)
+    // Reset re-seeds the three businesses (always-on My Business Page demos).
+    expect(repo().list('business_profiles', (p) => first.profile_ids.includes(p.id))).toHaveLength(3)
+    expect(portalContacts()).toHaveLength(3)
   })
 
   it('loads three completed submission packs through the real workflow, once', async () => {
@@ -356,5 +376,50 @@ describe('Risk Twin portfolio', () => {
     const out = handleCopilotCommand(repo(), brokerActor, 'Which Risk Twins need attention?', 'commercial')
     expect(out.view.kind).toBe('businesses')
     expect(out.reply).toMatch(/Ubuntu Foods: no Risk Twin yet/)
+  })
+})
+
+describe('Portal risk profile edits', () => {
+  const thali = DEMO_BUSINESSES[0]
+  const anil: Auth = { userId: thali.user_id }
+
+  it('lets the customer update declared turnover and records before/after audit', () => {
+    const before = getPortalBusiness(anil)
+    expect(before.profile.annual_turnover).toBe(14_500_000)
+    expect(before.recent_changes).toHaveLength(0)
+
+    const after = updatePortalProfile(anil, { changes: { annual_turnover: 16_000_000 } })
+    expect(after.profile.annual_turnover).toBe(16_000_000)
+    expect(after.profile.field_sources.annual_turnover).toBe('declared')
+    expect(after.recent_changes[0]).toMatchObject({
+      field_label: 'Annual turnover',
+      actor_label: 'you',
+      from: expect.stringMatching(/R14/),
+      to: expect.stringMatching(/R16/),
+    })
+
+    const event = repo()
+      .list('audit_events', (e) => e.action === 'business.update_profile' && e.entity_id === thali.profile_id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    expect(event.before).toMatchObject({ annual_turnover: 14_500_000 })
+    expect(event.after).toMatchObject({ annual_turnover: 16_000_000 })
+  })
+
+  it('blocks the customer from changing a verified registration number', () => {
+    expect(() => updatePortalProfile(anil, { changes: { registration_number: '2019/111111/07' } })).toThrowError(/Verified values/)
+    expect(getPortalBusiness(anil).profile.registration_number).toBe('2018/402311/07')
+  })
+
+  it('lets the customer correct an asset value and shows it in recent changes', () => {
+    const assetId = thali.assets[0].id
+    const view = updatePortalAsset(anil, { asset_id: assetId, declared_value: 550_000, value_basis: 'replacement' })
+    expect(view.assets.find((a) => a.id === assetId)?.declared_value).toBe(550_000)
+    expect(view.recent_changes.some((c) => c.field_label.includes('Declared value') && c.to.includes('550'))).toBe(true)
+
+    const event = repo()
+      .list('audit_events', (e) => e.action === 'business.update_asset' && e.entity_id === assetId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    expect(event.before).toMatchObject({ declared_value: 520_000 })
+    expect(event.after).toMatchObject({ declared_value: 550_000, source: 'declared' })
   })
 })

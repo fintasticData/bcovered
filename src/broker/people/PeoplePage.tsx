@@ -21,8 +21,8 @@ export default function PeoplePage() {
       />
       <p className="text-xs text-navy-600">
         Prefer the customer queue in{' '}
-        <Link to="/broker/book" className="font-semibold text-brand-600 underline">
-          My workspace
+        <Link to="/broker/customers" className="font-semibold text-brand-600 underline">
+          Customer Area
         </Link>
         .
       </p>
@@ -36,12 +36,12 @@ export default function PeoplePage() {
       {data && data.length === 0 && (
         <EmptyState title={query ? 'Nobody matches that search' : 'No people in this view'}>
           {category === 'live'
-            ? 'Live has no person rows for this brokerage yet. Switch to Sample, or open My workspace for the sales book.'
+            ? 'Live has no person rows for this brokerage yet. Switch to Sample, or open Customer Area for the sales book.'
             : sync.status === 'hydrating'
               ? 'Loading Sample people from Supabase…'
               : sync.status === 'error'
                 ? `Database sync issue: ${sync.lastError ?? 'unknown'}. Try Demo as Thabo Nkosi, then refresh.`
-                : 'Open My workspace to work from the customer queue, or clear the search.'}
+                : 'Open Customer Area to work from the customer queue, or clear the search.'}
         </EmptyState>
       )}
       {data && data.length > 0 && (

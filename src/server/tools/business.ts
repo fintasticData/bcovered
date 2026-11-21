@@ -88,6 +88,15 @@ const EDITABLE = {
 export type EditableProfileField = keyof typeof EDITABLE
 export const EDITABLE_PROFILE_FIELDS = Object.keys(EDITABLE) as EditableProfileField[]
 
+export const PROFILE_FIELD_LABELS: Record<EditableProfileField, string> = {
+  trading_name: 'Trading name',
+  registration_number: 'Company registration number',
+  vat_number: 'VAT number',
+  years_trading: 'Years trading',
+  annual_turnover: 'Annual turnover',
+  employee_count: 'Employees',
+}
+
 export function profileSnapshot(repo: Repo, profileId: string): ProfileSnapshot {
   const profile = repo.require('business_profiles', profileId)
   const of = <T extends { business_profile_id: string }>(rows: T[]) => rows.filter((r) => r.business_profile_id === profileId)
@@ -283,48 +292,55 @@ export const businessTools = [
 
   defineTool({
     name: 'business.update_profile',
-    description: 'Change profile fields, recording the source of each value. Agents cannot overwrite verified values.',
-    allow: ['agent', ...STAFF],
+    description: 'Change profile fields, recording the source of each value. Agents and customers cannot overwrite verified values.',
+    allow: ['agent', 'customer', ...STAFF],
     sideEffect: true,
     input: z.object({
       profile_id: z.uuid(),
       changes: z.object(EDITABLE).partial(),
       source: z.enum(['verified', 'declared', 'inferred']),
     }),
-    run: ({ repo, actor }, { profile_id, changes, source: src }) => {
+    run: (ctx, { profile_id, changes, source: src }) => {
+      const { repo, actor } = ctx
       const profile = repo.require('business_profiles', profile_id)
       const keys = Object.keys(changes) as EditableProfileField[]
       if (!keys.length) throw new ToolError('validation', 'No changes supplied')
-      if (actor.type === 'agent') {
+      if (actor.type === 'agent' || actor.role === 'customer') {
         const locked = keys.filter((k) => profile.field_sources[k] === 'verified')
         if (locked.length) {
-          throw new ToolError('approval_required', `Verified values can only be changed by a broker: ${locked.join(', ')}`)
+          throw new ToolError(
+            actor.role === 'customer' ? 'forbidden' : 'approval_required',
+            `Verified values can only be changed by a broker: ${locked.join(', ')}`,
+          )
         }
-        if (src === 'verified') throw new ToolError('forbidden', 'Agents cannot mark a value as verified')
+        if (src === 'verified') throw new ToolError('forbidden', `${actor.role === 'customer' ? 'Customers' : 'Agents'} cannot mark a value as verified`)
       }
+      const before: Record<string, unknown> = {}
+      const after: Record<string, unknown> = {}
+      keys.forEach((k) => {
+        before[k] = profile[k]
+        after[k] = changes[k]
+      })
+      before.field_sources = Object.fromEntries(keys.map((k) => [k, profile.field_sources[k] ?? 'missing']))
+      after.field_sources = Object.fromEntries(keys.map((k) => [k, changes[k] === null ? 'missing' : src]))
       const field_sources: Record<string, FieldSource> = { ...profile.field_sources }
       keys.forEach((k) => (field_sources[k] = changes[k] === null ? 'missing' : src))
-      const labels: Record<string, string> = {
-        registration_number: 'Company registration number',
-        vat_number: 'VAT number',
-        years_trading: 'Years trading',
-        annual_turnover: 'Annual turnover',
-        employee_count: 'Employees',
-      }
-      const filled = keys.filter((k) => changes[k] !== null).map((k) => labels[k])
-      return repo.update('business_profiles', profile_id, {
+      const filled = keys.filter((k) => changes[k] !== null).map((k) => PROFILE_FIELD_LABELS[k] ?? k)
+      const updated = repo.update('business_profiles', profile_id, {
         ...(changes as Partial<BusinessProfile>),
         field_sources,
         missing_info: profile.missing_info.filter((m) => !filled.includes(m)),
       })
+      ctx.auditChange = { before, after }
+      return updated
     },
     auditEntity: (r) => ({ table: 'business_profiles', id: r.id }),
   }),
 
   defineTool({
     name: 'business.update_asset',
-    description: 'Change an asset’s quantity, value or valuation basis, recording the source. Agents cannot overwrite verified values.',
-    allow: ['agent', ...STAFF],
+    description: 'Change an asset’s quantity, value or valuation basis, recording the source. Agents and customers cannot overwrite verified values.',
+    allow: ['agent', 'customer', ...STAFF],
     sideEffect: true,
     input: z.object({
       asset_id: z.uuid(),
@@ -333,14 +349,29 @@ export const businessTools = [
       value_basis: z.enum(['replacement', 'market', 'book', 'unknown']).optional(),
       source: z.enum(['verified', 'declared', 'extracted', 'inferred']),
     }),
-    run: ({ repo, actor }, { asset_id, source: src, ...changes }) => {
+    run: (ctx, { asset_id, source: src, ...changes }) => {
+      const { repo, actor } = ctx
       const asset = repo.require('commercial_assets', asset_id)
-      if (!Object.keys(changes).length) throw new ToolError('validation', 'No changes supplied')
-      if (actor.type === 'agent') {
-        if (asset.source === 'verified') throw new ToolError('approval_required', 'Verified asset values can only be changed by a broker')
-        if (src === 'verified') throw new ToolError('forbidden', 'Agents cannot mark a value as verified')
+      const keys = Object.keys(changes) as Array<'quantity' | 'declared_value' | 'value_basis'>
+      if (!keys.length) throw new ToolError('validation', 'No changes supplied')
+      if (actor.type === 'agent' || actor.role === 'customer') {
+        if (asset.source === 'verified') {
+          throw new ToolError(
+            actor.role === 'customer' ? 'forbidden' : 'approval_required',
+            'Verified asset values can only be changed by a broker',
+          )
+        }
+        if (src === 'verified') throw new ToolError('forbidden', `${actor.role === 'customer' ? 'Customers' : 'Agents'} cannot mark a value as verified`)
       }
-      return repo.update('commercial_assets', asset_id, { ...changes, source: src })
+      const before: Record<string, unknown> = { source: asset.source }
+      const after: Record<string, unknown> = { source: src }
+      keys.forEach((k) => {
+        before[k] = asset[k]
+        after[k] = changes[k]
+      })
+      const updated = repo.update('commercial_assets', asset_id, { ...changes, source: src })
+      ctx.auditChange = { before, after }
+      return updated
     },
     auditEntity: (r) => ({ table: 'commercial_assets', id: r.id }),
   }),

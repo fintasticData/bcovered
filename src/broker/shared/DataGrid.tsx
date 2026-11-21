@@ -1,7 +1,7 @@
 // A broker data grid: search, sortable headers, column choice (remembered per grid), pagination, row selection across
 // every filtered row, a bulk action bar and CSV export. Search, sort and page live in the URL so a view can be shared and
 // survives a refresh. Below the md breakpoint rows render as cards.
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   flexRender,
@@ -19,6 +19,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Columns3, Download, Rows3, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { RowContextMenu, type ContextMenuItem, type ContextMenuState } from './RowContextMenu'
 
 export interface CsvColumn<T> {
   header: string
@@ -41,8 +42,15 @@ export interface DataGridProps<T> {
   csv?: { filename: string; columns: CsvColumn<T>[] }
   mobileCard?: (row: T, selection: { selected: boolean; toggle: () => void }) => ReactNode
   rowClassName?: (row: T) => string | undefined
+  /** Right-click / long-press row menu. Return null to keep the browser menu. */
+  getRowContextMenu?: (row: T) => ContextMenuItem[] | null | undefined
   empty?: ReactNode
   minWidth?: number
+  /** Controlled expanded row (one at a time). Pair with `renderExpandedRow`. */
+  expandedRowId?: string | null
+  onExpandedRowChange?: (id: string | null) => void
+  /** Full-width panel rendered under the expanded row (desktop table only). */
+  renderExpandedRow?: (row: T) => ReactNode
 }
 
 const PAGE_SIZES = [25, 50, 100]
@@ -91,11 +99,17 @@ export function DataGrid<T>({
   csv,
   mobileCard,
   rowClassName,
+  getRowContextMenu,
   empty,
   minWidth = 900,
+  expandedRowId = null,
+  onExpandedRowChange: _onExpandedRowChange,
+  renderExpandedRow,
 }: DataGridProps<T>) {
+  void _onExpandedRowChange
   const [params, setParams] = useSearchParams()
   const prefs = useMemo(() => readPrefs(storageKey), [storageKey])
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null)
   const [visibility, setVisibility] = useState<VisibilityState>(() =>
     Object.fromEntries((prefs.hidden ?? defaultHidden).map((id) => [id, false])),
   )
@@ -274,7 +288,18 @@ export function DataGrid<T>({
           {mobileCard && (
             <ul className="space-y-2 md:hidden">
               {pageRows.map((r) => (
-                <li key={r.id}>{mobileCard(r.original, { selected: r.getIsSelected(), toggle: toggle(r) })}</li>
+                <li
+                  key={r.id}
+                  onContextMenu={(e) => {
+                    if (!getRowContextMenu) return
+                    const items = getRowContextMenu(r.original)
+                    if (!items?.length) return
+                    e.preventDefault()
+                    setContextMenu({ x: e.clientX, y: e.clientY, items })
+                  }}
+                >
+                  {mobileCard(r.original, { selected: r.getIsSelected(), toggle: toggle(r) })}
+                </li>
               ))}
             </ul>
           )}
@@ -302,20 +327,57 @@ export function DataGrid<T>({
                 ))}
               </thead>
               <tbody className="divide-y divide-navy-800/5">
-                {pageRows.map((r) => (
-                  <tr key={r.id} className={cn('hover:bg-mist/60', r.getIsSelected() && 'bg-brand-50/60', rowClassName?.(r.original))}>
-                    {r.getVisibleCells().map((c) => (
-                      <td key={c.id} className={cn(cellPad, 'align-top')}>
-                        {flexRender(c.column.columnDef.cell, c.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {pageRows.map((r) => {
+                  const isExpanded = Boolean(renderExpandedRow) && expandedRowId === r.id
+                  const expandRegionId = `datagrid-expand-${storageKey}-${r.id}`
+                  const colCount = r.getVisibleCells().length
+                  return (
+                    <Fragment key={r.id}>
+                      <tr
+                        className={cn(
+                          'hover:bg-mist/60',
+                          r.getIsSelected() && 'bg-brand-50/60',
+                          isExpanded && 'bg-brand-50/40',
+                          rowClassName?.(r.original),
+                        )}
+                        onContextMenu={(e) => {
+                          if (!getRowContextMenu) return
+                          const items = getRowContextMenu(r.original)
+                          if (!items?.length) return
+                          e.preventDefault()
+                          setContextMenu({ x: e.clientX, y: e.clientY, items })
+                        }}
+                      >
+                        {r.getVisibleCells().map((c) => (
+                          <td key={c.id} className={cn(cellPad, 'align-top')}>
+                            {flexRender(c.column.columnDef.cell, c.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-brand-50/30 hover:bg-brand-50/30">
+                          <td
+                            colSpan={colCount}
+                            className="p-0 align-top"
+                            id={expandRegionId}
+                            role="region"
+                            aria-label="Expanded row detail"
+                          >
+                            <div className="max-h-[min(52vh,28rem)] overflow-auto border-t border-brand-200/60 px-3 py-3 sm:px-4">
+                              {renderExpandedRow?.(r.original)}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </>
       )}
+      <RowContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-navy-600">
         <span>

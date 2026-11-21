@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 
 type MenuPlacement = 'below' | 'above' | 'aside'
 
-/** Presentation-only Preview as control. Does not grant permissions. */
+/** Staff presentation lens only — Customer option removed (use Preview customer page on a record). */
+const STAFF_PERSPECTIVES: WorkspacePerspective[] = ['visitor', 'broker', 'manager', 'observer', 'admin']
+
 export function PerspectiveSwitcher({
   compact = false,
   dark = false,
@@ -22,6 +24,11 @@ export function PerspectiveSwitcher({
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const shown = perspective === 'customer' ? 'broker' : perspective
+
+  useEffect(() => {
+    if (perspective === 'customer') perspectiveStore.set('broker')
+  }, [perspective])
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -32,10 +39,10 @@ export function PerspectiveSwitcher({
   }, [])
 
   const choose = (p: WorkspacePerspective) => {
+    if (p === 'customer') return
     perspectiveStore.set(p)
     setOpen(false)
-    if (p === 'customer') navigate('/my')
-    if (p === 'broker' || p === 'manager') navigate('/broker/book')
+    if (p === 'broker' || p === 'manager') navigate('/broker/customers')
   }
 
   return (
@@ -54,7 +61,7 @@ export function PerspectiveSwitcher({
         )}
       >
         <Eye className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">Preview as: {perspectiveStore.label(perspective)}</span>
+        <span className="min-w-0 flex-1 truncate text-left">View as: {perspectiveStore.label(shown)}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
       </button>
       {open && (
@@ -66,9 +73,9 @@ export function PerspectiveSwitcher({
           )}
         >
           <p className="px-2 pb-2 text-[11px] leading-snug text-navy-600">
-            Changes presentation only. Access stays limited by your role and Demo / Production.
+            Presentation only. To see a customer’s My Page, open their record and choose Preview customer page.
           </p>
-          {perspectiveStore.all.map((p) => (
+          {STAFF_PERSPECTIVES.map((p) => (
             <button
               key={p}
               type="button"
@@ -76,7 +83,7 @@ export function PerspectiveSwitcher({
               onClick={() => choose(p)}
               className={cn(
                 'flex w-full cursor-pointer items-center rounded-lg px-2.5 py-2 text-left text-xs font-semibold',
-                p === perspective ? 'bg-brand-50 text-brand-800' : 'text-navy-800 hover:bg-navy-50',
+                p === shown ? 'bg-brand-50 text-brand-800' : 'text-navy-800 hover:bg-navy-50',
               )}
             >
               {perspectiveStore.label(p)}

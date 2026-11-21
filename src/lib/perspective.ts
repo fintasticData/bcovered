@@ -1,4 +1,6 @@
 // Presentation-only perspective for the unified workspace. Never grants access; RLS and Repo grants remain authoritative.
+// CUT LINE (customer portal GTM): do not use "customer" perspective as impersonation or portal entry.
+// True preview = /broker/customers/people/:id/your-page. Customer option is removed from LIVE workspace UX.
 import { useSyncExternalStore } from 'react'
 
 export type WorkspacePerspective = 'visitor' | 'customer' | 'broker' | 'manager' | 'observer' | 'admin'

@@ -96,6 +96,34 @@ export interface RoutePort {
     notes?: string | null
     key: string
   }): Promise<{ id: string; reference: string }>
+  filePolicy?(a: {
+    person_id: string
+    policy_number: string
+    confirmed_effective_at: string
+    confirmation_source: string
+    provider_id?: string | null
+    insurer_name?: string | null
+    quote_id?: string | null
+    source_type?: string | null
+    schedule_note?: string | null
+    insurer_reference?: string | null
+    cover_type?: string | null
+    premium_amount?: number | null
+    premium_frequency?: string | null
+    item_label?: string | null
+    item_type?: string | null
+    excess?: number | null
+    key: string
+  }): Promise<{ id: string; reference: string; policy_number?: string | null }>
+  /** After filing: record sale from accepted offer, set lead Live, complete Confirm-cover tasks. */
+  syncCoverConfirmation?(a: {
+    person_id: string
+    policy_id: string
+    offer_id?: string | null
+    insurer_reference?: string | null
+    cover_start_date?: string | null
+    key: string
+  }): Promise<{ policy_id: string; open_path?: string; summary?: string; lead_updated?: boolean }>
   persistRun?(run: Json): Promise<void>
   persistResult?(result: Json): Promise<void>
 }
@@ -204,6 +232,7 @@ export function businessKeyOf(defId: string, parts: { person_id?: string | null;
   if (parts.claim_id) return `${defId}:claim:${parts.claim_id}:${intent}`
   if (parts.policy_id && parts.draft_id) return `${defId}:policy:${parts.policy_id}:draft:${parts.draft_id}`
   if (parts.policy_id) return `${defId}:policy:${parts.policy_id}:${intent}`
+  if (parts.person_id && parts.draft_id) return `${defId}:person:${parts.person_id}:draft:${parts.draft_id}`
   if (parts.person_id) return `${defId}:person:${parts.person_id}:${intent}`
   return null
 }

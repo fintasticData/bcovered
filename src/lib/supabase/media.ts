@@ -136,6 +136,36 @@ export interface MediaAssetRow {
   created_at: string
 }
 
+/** Upload several files (multi-select). Continues after individual failures and returns successes + errors. */
+export async function uploadMediaMany(
+  a: {
+    tenantId: string
+    files: File[]
+    purpose: string
+    ownerTable?: string
+    ownerId?: string
+  },
+): Promise<{ uploaded: MediaUploadResult[]; errors: Array<{ file: string; message: string }> }> {
+  const uploaded: MediaUploadResult[] = []
+  const errors: Array<{ file: string; message: string }> = []
+  for (const file of a.files) {
+    try {
+      uploaded.push(
+        await uploadMedia({
+          tenantId: a.tenantId,
+          file,
+          purpose: a.purpose,
+          ownerTable: a.ownerTable,
+          ownerId: a.ownerId,
+        }),
+      )
+    } catch (e) {
+      errors.push({ file: file.name, message: e instanceof Error ? e.message : 'Upload failed' })
+    }
+  }
+  return { uploaded, errors }
+}
+
 /** List media rows for a tenant, optionally filtered by owner. */
 export async function listMediaAssets(a: {
   tenantId: string

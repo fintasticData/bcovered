@@ -115,6 +115,10 @@ export const api = {
   lead: (id: string) => call(() => server.getLead(auth(), { lead_id: id })),
   captureLead: (body: Parameters<typeof server.captureLead>[1]) => call(() => server.captureLead(auth(), body)),
   closeLead: (body: Parameters<typeof server.closeLead>[1]) => call(() => server.closeLead(auth(), body)),
+  saveLeadQualification: (body: Parameters<typeof server.saveLeadQualification>[1]) =>
+    call(() => server.saveLeadQualification(auth(), body)),
+  logLeadActivity: (body: Parameters<typeof server.logLeadActivity>[1]) => call(() => server.logLeadActivity(auth(), body)),
+  demoAdvanceLeads: (body: Parameters<typeof server.demoAdvanceLeads>[1]) => call(() => server.demoAdvanceLeads(auth(), body)),
   bulkLeads: (body: Parameters<typeof server.bulkUpdateLeads>[1]) => call(() => server.bulkUpdateLeads(auth(), body)),
   quote: (id: string) => call(() => server.getQuote(auth(), { quote_id: id })),
   createQuoteRequest: (body: { lead_id: string; covers?: string[] }) => call(() => server.createQuoteRequest(auth(), body)),
@@ -148,6 +152,10 @@ export const api = {
     requestApproval: (id: string) => call(() => commercial.requestSubmissionApproval(auth(), { submission_id: id })),
     updateTask: (body: Parameters<typeof commercial.updateTask>[1]) => call(() => commercial.updateTask(auth(), body)),
     portal: () => call(() => commercial.getPortalBusiness(auth())),
+    updatePortalProfile: (body: Parameters<typeof commercial.updatePortalProfile>[1]) =>
+      call(() => commercial.updatePortalProfile(auth(), body)),
+    updatePortalAsset: (body: Parameters<typeof commercial.updatePortalAsset>[1]) =>
+      call(() => commercial.updatePortalAsset(auth(), body)),
   },
 
   // /api/v1/short-term
@@ -396,6 +404,15 @@ export const api = {
         person_id?: string | null
         policy_id?: string | null
         claim_id?: string | null
+        offer_id?: string | null
+        offer_prefill?: {
+          insurer_name?: string | null
+          cover_type?: string | null
+          premium_amount?: number | null
+          item_label?: string | null
+          item_type?: string | null
+          reference?: string | null
+        } | null
         business_key?: string | null
         intent?: string | null
         key: string

@@ -1,10 +1,12 @@
 import { ToolError } from '../lib/errors'
+import { insertDemoBusinesses } from '../demo/demoBusinesses'
 import type { ScopeType } from './lifeSchema'
 import { GLOBAL_TABLES, type Row, type TableName, type Tables } from './schema'
-import { seedTables } from './seed'
+import { seedTables, TENANT_ID } from './seed'
 
 /** Bumped when stored rows gain required fields, so an older browser copy is replaced by fresh seed data. */
-const STORAGE_KEY = 'insureflow_demo_v7'
+/** v11: commercial asset mobility + Thali cold room / manager phone map demo. */
+const STORAGE_KEY = 'insureflow_demo_v11'
 
 /** Evidence must never change once captured. */
 const APPEND_ONLY: TableName[] = ['audit_evidence']
@@ -65,6 +67,11 @@ const rowListeners = new Set<RowChangeListener>()
 let rowChanges: RowChange[] = []
 let flushScheduled = false
 
+/** Always-on My Business Page demos (Thali / Swift / Mokoena) + portal contacts. */
+function ensureDemoBusinessPortal() {
+  insertDemoBusinesses(new Repo(TENANT_ID))
+}
+
 function recordChange(change: RowChange) {
   if (!rowListeners.size) return
   rowChanges.push({ ...change, row: structuredClone(change.row) })
@@ -99,6 +106,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key !== STORAGE_KEY) return
     tables = load()
+    ensureDemoBusinessPortal()
     listeners.forEach((l) => l(Object.keys(tables) as TableName[]))
   })
 }
@@ -171,6 +179,7 @@ export const db = {
 
   reset(): void {
     tables = seedTables()
+    ensureDemoBusinessPortal()
     ;(Object.keys(tables) as TableName[]).forEach(markChanged)
   },
 
@@ -501,3 +510,6 @@ const UPDATED_AT_TABLES: TableName[] = [
   'route_runs',
 ]
 const hasUpdatedAt = (t: TableName) => UPDATED_AT_TABLES.includes(t)
+
+// After helpers exist — always-on Thali / Swift / Mokoena portal contacts for My Business Page.
+ensureDemoBusinessPortal()

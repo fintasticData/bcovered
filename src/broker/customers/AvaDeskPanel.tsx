@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Briefcase, Lightbulb, MessageSquare } from 'lucide-react'
 import type { StepResult, TurnContext } from '@/copilot/api'
 import { useClientRecord } from '@/copilot/salesApi'
@@ -32,7 +32,6 @@ export function AvaDeskPanel({
   onOpenPerson?: (personId: string) => void
 }) {
   const [tab, setTab] = useState<AvaTab>('chat')
-  const navigate = useNavigate()
   const perspective = usePerspective()
   const record = useClientRecord(personId)
   const r = record.data
@@ -56,20 +55,22 @@ export function AvaDeskPanel({
     if (personId) {
       out.push({
         label: 'Report an incident from notes',
-        action: () => navigate(`/broker/claims/new?personId=${personId}`),
+        action: () => onOpenTab?.('claims'),
       })
     }
     out.push({ label: 'Log a customer conversation', action: () => onOpenTab?.('activity') })
     out.push({ label: 'Show items and cover', action: () => onOpenTab?.('items') })
     return out
-  }, [r, profileId, onOpenTab, personId, navigate])
+  }, [r, profileId, onOpenTab, personId])
 
   const jobs = [
     { label: 'Customer Area', to: '/broker/customers' },
     { label: 'Leads', to: '/broker/leads' },
     { label: 'Claims', to: '/broker/claims' },
     { label: 'Policies', to: '/broker/policies' },
-    ...(personId ? [{ label: 'Report an incident', to: `/broker/claims/new?personId=${personId}` }] : []),
+    ...(personId
+      ? [{ label: 'Client claims', to: `/broker/customers/people/${personId}?rtab=claims` }]
+      : []),
     { label: 'Franchise operations', to: '/broker/franchise' },
     { label: 'Quotes', to: '/broker/quotes/sample-motor' },
     { label: 'Approvals', to: '/broker/approvals' },

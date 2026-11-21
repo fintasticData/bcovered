@@ -7,12 +7,14 @@ import { RoleSwitcher } from '@/components/RoleSwitcher'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
 import { CATEGORY_LABEL, useDataCategory } from '@/lib/supabase/category'
 import { fetchOrganisationMedia } from '@/lib/supabase/organisations'
-import { usePerspective } from '@/lib/perspective'
 import { isFeatureOn } from '@/lib/features'
 import { cn } from '@/lib/utils'
 import { LoadingState } from './PageHeader'
 import { MARKET_ACTIVE, MARKET_DOT, MARKET_LABEL, MORE_NAV, PRIMARY_NAV, TERM_LABEL, TERM_STYLE, itemMatches, type NavItem, type NavSection, type Term } from './navConfig'
 import { WorkspaceContextPanel } from './WorkspaceContextPanel'
+import { FintasticDemoHost } from '@/fintastic-ux'
+import { BrokerSpecialAlertsBar } from '@/broker/alerts/BrokerSpecialAlertsBar'
+import { useBrokerClaimAlerts } from '@/copilot/policyClaimsApi'
 
 const COLLAPSED_KEY = 'bc.nav.collapsed'
 
@@ -77,6 +79,7 @@ function NavItemLink({
   pathname,
   collapsed,
   pending,
+  claimAlerts,
   market,
   term,
 }: {
@@ -84,11 +87,13 @@ function NavItemLink({
   pathname: string
   collapsed: boolean
   pending: number
+  claimAlerts: number
   market?: NavSection['market']
   term?: Term
 }) {
   const active = itemMatches(item, pathname)
   const line = term && market ? ` · ${TERM_LABEL[term]} · ${MARKET_LABEL[market]}` : ''
+  const badgeCount = item.to.includes('/claims') ? claimAlerts : item.to.includes('/approvals') ? pending : 0
   return (
     <Link
       to={item.to}
@@ -108,14 +113,22 @@ function NavItemLink({
         )}
       </span>
       {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-      {item.badge && pending > 0 && (
-        <span className={cn('rounded-full bg-amber-400 px-1.5 text-[11px] font-bold text-navy-900', collapsed && 'absolute top-0.5 right-1')}>{pending}</span>
+      {item.badge && badgeCount > 0 && (
+        <span
+          className={cn(
+            'rounded-full px-1.5 text-[11px] font-bold text-navy-900',
+            item.to.includes('/claims') ? 'bg-rose-400' : 'bg-amber-400',
+            collapsed && 'absolute top-0.5 right-1',
+          )}
+        >
+          {badgeCount}
+        </span>
       )}
     </Link>
   )
 }
 
-function NavLinks({ collapsed, pending }: { collapsed: boolean; pending: number }) {
+function NavLinks({ collapsed, pending, claimAlerts }: { collapsed: boolean; pending: number; claimAlerts: number }) {
   const { pathname } = useLocation()
   const moreSections = useVisibleMoreSections()
   const moreActive = moreSections.some((s) => s.items.some((i) => itemMatches(i, pathname)))
@@ -143,7 +156,14 @@ function NavLinks({ collapsed, pending }: { collapsed: boolean; pending: number 
     <nav className="scroll-area flex-1 px-2 py-3" aria-label="Broker sections">
       <div className="space-y-1">
         {PRIMARY_NAV.map((item) => (
-          <NavItemLink key={item.to} item={item} pathname={pathname} collapsed={collapsed} pending={pending} />
+          <NavItemLink
+            key={item.to}
+            item={item}
+            pathname={pathname}
+            collapsed={collapsed}
+            pending={pending}
+            claimAlerts={claimAlerts}
+          />
         ))}
       </div>
 
@@ -206,6 +226,7 @@ function NavLinks({ collapsed, pending }: { collapsed: boolean; pending: number 
                             pathname={pathname}
                             collapsed={collapsed}
                             pending={pending}
+                            claimAlerts={claimAlerts}
                             market={section.market}
                             term={section.term}
                           />
@@ -305,7 +326,7 @@ function NotActive({ status, reason }: { status: string; reason: string | null }
 }
 
 /** Before activation a brokerage still works in Demo: its sales book and the copilots read only Sample records. */
-const SAMPLE_BEFORE_ACTIVATION = ['/broker/customers', '/broker/book', '/broker/workspace', '/broker/routes']
+const SAMPLE_BEFORE_ACTIVATION = ['/broker/customers', '/broker/workspace', '/broker/routes']
 
 export default function BrokerLayout() {
   const { data: me } = useMe()
@@ -322,13 +343,13 @@ function ActiveBrokerLayout() {
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const { data: pending = [] } = useApprovals(['pending'])
+  const claimAlertsQ = useBrokerClaimAlerts()
+  const claimAlertCount = claimAlertsQ.data?.count ?? 0
   const { data: me } = useMe()
-  const perspective = usePerspective()
   const category = useDataCategory()
   const mode = CATEGORY_LABEL[category]
   const orgName = me?.organisation?.name ?? 'Brokerage'
   const business = pathname.startsWith('/broker/commercial') || (pathname === '/broker/workspace' && new URLSearchParams(search).get('lens') === 'commercial')
-  const customerPreview = perspective === 'customer'
 
   useEffect(() => setDrawer(false), [pathname])
   useEffect(() => {
@@ -354,7 +375,7 @@ function ActiveBrokerLayout() {
         <div className={cn('flex h-14 items-center', collapsed ? 'justify-center px-2' : 'px-4')}>
           <Brand collapsed={collapsed} />
         </div>
-        <NavLinks collapsed={collapsed} pending={pending.length} />
+        <NavLinks collapsed={collapsed} pending={pending.length} claimAlerts={claimAlertCount} />
         <WorkspaceContextPanel collapsed={collapsed} />
         <div className="space-y-1 border-t border-white/10 px-2 py-3">
           <HelpMenu collapsed={collapsed} />
@@ -386,7 +407,7 @@ function ActiveBrokerLayout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <NavLinks collapsed={false} pending={pending.length} />
+            <NavLinks collapsed={false} pending={pending.length} claimAlerts={claimAlertCount} />
             <WorkspaceContextPanel collapsed={false} />
             <div className="space-y-1 border-t border-white/10 px-2 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <HelpMenu collapsed={false} />
@@ -439,14 +460,11 @@ function ActiveBrokerLayout() {
             </span>
           </div>
         </header>
+        <FintasticDemoHost />
+        <BrokerSpecialAlertsBar />
         {category === 'sample' && (
           <div className="bg-amber-50 px-3 py-1.5 text-center text-[11px] font-semibold text-amber-900 sm:px-5" role="status">
             Demo view — sample records only. Switch to Production in the side menu Workspace panel when your brokerage is activated.
-          </div>
-        )}
-        {customerPreview && (
-          <div className="bg-sky-50 px-3 py-1.5 text-center text-[11px] font-semibold text-sky-900 sm:px-5" role="status">
-            Customer preview — presentation only. Your broker permissions are unchanged.
           </div>
         )}
         <main className="scroll-area flex-1" data-identity={business ? 'business' : undefined}>

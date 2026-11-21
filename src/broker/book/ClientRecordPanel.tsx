@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, ExternalLink, FileUp, Loader2, Lock, PencilLine, Plus, Repeat2, Route as RouteIcon, ShieldCheck } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, CheckCircle2, ExternalLink, Eye, FileUp, Loader2, Lock, PencilLine, Plus, Repeat2, Route as RouteIcon, Share2, ShieldCheck } from 'lucide-react'
+import { useCustomerPageInvite } from '@/api/customerPage'
+import { ShareInvite } from '@/components/ShareInvite'
 import { usePerson, useStartRoute } from '@/api/hooks'
-import { MediaField } from '@/components/MediaField'
+import { MediaAttachPanel } from '@/components/MediaAttachPanel'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopilotError } from '@/copilot/api'
 import { newKey, salesApi, useClientRecord, useSalesMutation, useSalesProfile, type ClientRecord, type CommKind, type Communication, type Direction } from '@/copilot/salesApi'
 import { listMediaAssets, resolveMediaUrl, type MediaAssetRow, type MediaBucket } from '@/lib/supabase/media'
+import { cn } from '@/lib/utils'
 import { EmptyState, LoadingState } from '../PageHeader'
 import { CategoryBadge, CommIcon, ErrorText, EVENT_LABEL, Field, inputClass, KIND_LABEL, MemberLabel, StageBadge, dateTime, money, perFrequency, shortDate } from './bits'
 import { AddCoversDialog, CreateOfferDialog } from './dialogs'
@@ -17,6 +20,15 @@ import { EnquiryAttribution, FranchiseReferrer } from '../franchise/EnquiryAttri
 import { StatusBadge } from '@/components/StatusBadge'
 import { QuoteFlowPanel } from '../quotes/QuoteFlowPanel'
 import { ClientClaimsTab, ClientPoliciesTab } from '../policies/ClientPoliciesClaimsTabs'
+import { CustomerFinancialsPanel } from '../financials/CustomerFinancialsPanel'
+import { CustomerPageMirror } from '@/pages/your-page/CustomerPageMirror'
+import { useClaimsQueue } from '@/copilot/policyClaimsApi'
+import {
+  installStatusLabel,
+  usePartnerStatusMutation,
+  usePersonInstallRequests,
+  type PartnerInstallRequest,
+} from '@/copilot/partnerTrackingApi'
 
 function Facts({ r }: { r: ClientRecord }) {
   const firstEnquiry = r.enquiries[r.enquiries.length - 1]
@@ -189,17 +201,23 @@ function FollowUps({ r }: { r: ClientRecord }) {
   if (!r.follow_ups.length) return <p className="text-sm text-navy-500">No open follow-ups.</p>
   return (
     <ul className="space-y-2">
-      {r.follow_ups.map((t) => (
-        <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-navy-800/10 px-3 py-2 text-sm">
-          <span className="min-w-0">
-            <span className="block truncate font-medium text-navy-900">{t.title}</span>
-            <span className="block text-xs text-navy-500">
-              <span className="font-mono">{t.reference}</span> · due {t.due_date ? shortDate(t.due_date) : 'no date'} · {t.assigned_to ?? 'Unassigned'}
+      {r.follow_ups.map((t) => {
+        const confirmCoverTask = /^confirm cover/i.test(t.title)
+        return (
+          <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-navy-800/10 px-3 py-2 text-sm">
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-navy-900">{t.title}</span>
+              <span className="block text-xs text-navy-500">
+                <span className="font-mono">{t.reference}</span> · due {t.due_date ? shortDate(t.due_date) : 'no date'} · {t.assigned_to ?? 'Unassigned'}
+              </span>
+              {confirmCoverTask && (
+                <span className="mt-0.5 block text-[11px] text-violet-800">Done closes the reminder only. Use Confirm cover on the offer to place cover.</span>
+              )}
             </span>
-          </span>
-          <Button size="sm" variant="outline" disabled={done.isPending} onClick={() => done.mutate(t.id)}><CheckCircle2 /> Done</Button>
-        </li>
-      ))}
+            <Button size="sm" variant="outline" disabled={done.isPending} onClick={() => done.mutate(t.id)}><CheckCircle2 /> Done</Button>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -236,39 +254,15 @@ function ItemMediaUpload({
   ownerId: string
   compact?: boolean
 }) {
-  const qc = useQueryClient()
-  const [url, setUrl] = useState<string | null>(null)
-  if (compact) {
-    return (
-      <MediaField
-        label="Upload"
-        tenantId={tenantId}
-        purpose="item_document"
-        accept="image/*,.pdf,.doc,.docx"
-        value={url}
-        ownerTable={ownerTable}
-        ownerId={ownerId}
-        onChange={setUrl}
-        onUploaded={() => {
-          void qc.invalidateQueries({ queryKey: ['media-assets', tenantId] })
-        }}
-      />
-    )
-  }
   return (
-    <MediaField
-      label="Client document"
-      hint="Invoice, photo or schedule — stored on this client."
+    <MediaAttachPanel
       tenantId={tenantId}
       purpose="item_document"
-      accept="image/*,.pdf,.doc,.docx"
-      value={url}
       ownerTable={ownerTable}
       ownerId={ownerId}
-      onChange={setUrl}
-      onUploaded={() => {
-        void qc.invalidateQueries({ queryKey: ['media-assets', tenantId] })
-      }}
+      compact={compact}
+      label={compact ? 'Upload' : 'Client documents'}
+      hint={compact ? undefined : 'One or more invoices, photos or schedules — stored on this client.'}
     />
   )
 }
@@ -343,6 +337,116 @@ function ClientDocuments({ r, tenantId }: { r: ClientRecord; tenantId: string | 
   )
 }
 
+function ItemFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold tracking-wide text-navy-500 uppercase">{label}</dt>
+      <dd className="mt-0.5 text-sm text-navy-900">{children}</dd>
+    </div>
+  )
+}
+
+/** One cover / offer / sale as a stacked card — fits the Customer Area slide-out. */
+function CoverItemCard({
+  title,
+  subtitle,
+  meta,
+  value,
+  premium,
+  insurer,
+  status,
+  next,
+  documents,
+}: {
+  title: ReactNode
+  subtitle?: ReactNode
+  meta?: ReactNode
+  value: ReactNode
+  premium: ReactNode
+  insurer: ReactNode
+  status: ReactNode
+  next: ReactNode
+  documents?: ReactNode
+}) {
+  return (
+    <article className="min-w-0 rounded-xl border border-navy-800/10 bg-white p-3 shadow-sm">
+      <header className="min-w-0">
+        <div className="text-sm font-semibold text-navy-900">{title}</div>
+        {subtitle && <div className="mt-0.5 text-xs text-navy-500">{subtitle}</div>}
+        {meta}
+      </header>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+        <ItemFact label="Value / sum insured">{value}</ItemFact>
+        <ItemFact label="Premium">{premium}</ItemFact>
+        <ItemFact label="Insurer / policy">{insurer}</ItemFact>
+        <ItemFact label="Status">{status}</ItemFact>
+        <ItemFact label="Next action">{next}</ItemFact>
+        {documents != null && <ItemFact label="Documents">{documents}</ItemFact>}
+      </dl>
+    </article>
+  )
+}
+
+function PartnerInstallsSection({ personId }: { personId: string }) {
+  const q = usePersonInstallRequests(personId)
+  const update = usePartnerStatusMutation()
+  const rows = q.data?.rows ?? []
+  if (q.isLoading) return <p className="text-xs text-navy-500">Loading tracking requests…</p>
+  if (rows.length === 0) return null
+
+  const advance = (r: PartnerInstallRequest) => {
+    const next: PartnerInstallRequest['status'] | null =
+      r.status === 'requested' ? 'partner_contacting'
+        : r.status === 'partner_contacting' ? 'booked'
+          : r.status === 'booked' ? 'fitted'
+            : null
+    if (!next) return
+    update.mutate({
+      request_id: r.id,
+      status: next,
+      appointment_at: next === 'booked' ? new Date(Date.now() + 3 * 86400000).toISOString() : undefined,
+      appointment_note: next === 'booked' ? 'Demo booking — partner to confirm' : undefined,
+    })
+  }
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">
+        Vehicle tracking requests ({rows.length})
+      </h3>
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} className="rounded-xl border border-navy-800/10 px-3 py-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-mono text-xs text-navy-500">{r.reference}</p>
+                <p className="font-semibold text-navy-900">
+                  {r.vehicle_label || 'Vehicle'} · {r.package_name}
+                </p>
+                <p className="text-xs text-navy-600">
+                  Partner: {r.partner_name}
+                  {r.preferred_area ? ` · ${r.preferred_area}` : ''}
+                  {r.request_kind === 'fleet_quote' ? ' · Fleet quote' : ''}
+                </p>
+                <p className="mt-1 text-xs font-medium text-amber-900">
+                  {installStatusLabel(r.status)}
+                  {r.appointment_at ? ` · ${new Date(r.appointment_at).toLocaleString()}` : ''}
+                </p>
+                {r.next_action && <p className="text-xs text-navy-600">{r.next_action}</p>}
+              </div>
+              {['requested', 'partner_contacting', 'booked'].includes(r.status) && (
+                <Button size="sm" variant="outline" disabled={update.isPending} onClick={() => advance(r)}>
+                  {r.status === 'requested' ? 'Mark contacting' : r.status === 'partner_contacting' ? 'Mark booked' : 'Mark fitted'}
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function ItemsCoverTab({ r, onAddCovers }: { r: ClientRecord; onAddCovers: () => void }) {
   const person = usePerson(r.id)
   const profile = useSalesProfile()
@@ -359,6 +463,7 @@ function ItemsCoverTab({ r, onAddCovers }: { r: ClientRecord; onAddCovers: () =>
         <EmptyState title="Nothing to protect on record yet">
           Add one or more insurance covers with estimate quotes, prepare motor quotes, or link an existing policy. Missing amounts stay blank — they are never shown as zero.
         </EmptyState>
+        <PartnerInstallsSection personId={r.id} />
         <Button size="sm" variant="accent" onClick={onAddCovers}><Plus /> Add covers</Button>
         {tenantId && <ItemMediaUpload tenantId={tenantId} ownerTable="persons" ownerId={r.id} />}
       </div>
@@ -366,116 +471,120 @@ function ItemsCoverTab({ r, onAddCovers }: { r: ClientRecord; onAddCovers: () =>
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-5">
       <div className="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="accent" onClick={onAddCovers}><Plus /> Add covers</Button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-navy-800/10 bg-white">
-        <table className="w-full min-w-[820px] text-left text-sm">
-          <thead className="bg-navy-50/80 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">
-            <tr>
-              <th className="px-3 py-2">Item / risk / benefit</th>
-              <th className="px-3 py-2">Value / sum insured</th>
-              <th className="px-3 py-2">Premium</th>
-              <th className="px-3 py-2">Insurer / policy</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Next action</th>
-              <th className="px-3 py-2">Documents</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-navy-800/5">
-            {policies.map(({ policy, provider, benefits }) => {
-              const life = benefits.find((b) => b.benefit_type_key === 'life')
-              const sum = life?.sum_assured
-              const covered = ['in_force', 'accepted', 'reinstated'].includes(policy.status)
-              return (
-                <tr key={policy.id} className="align-top">
-                  <td className="px-3 py-2.5">
-                    <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
-                      {policy.line.replace(/_/g, ' ')}
-                    </Link>
-                    <span className="mt-0.5 block text-xs text-navy-500">{policy.policy_number ?? 'Application'}</span>
-                  </td>
-                  <td className="px-3 py-2.5">{sum != null ? money(sum) : <span className="text-navy-400">Not set</span>}</td>
-                  <td className="px-3 py-2.5">
-                    {policy.premium_amount != null ? (
-                      <>
-                        {money(policy.premium_amount)} <span className="text-[11px] text-navy-500">pm</span>
-                      </>
-                    ) : (
-                      <span className="text-navy-400">Not set</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">{provider}</td>
-                  <td className="px-3 py-2.5">
+      <PartnerInstallsSection personId={r.id} />
+
+      {policies.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Policies ({policies.length})</h3>
+          {policies.map(({ policy, provider, benefits }) => {
+            const life = benefits.find((b) => b.benefit_type_key === 'life')
+            const sum = life?.sum_assured
+            const covered = ['in_force', 'accepted', 'reinstated'].includes(policy.status)
+            return (
+              <CoverItemCard
+                key={policy.id}
+                title={(
+                  <Link to={`/broker/life/policies/${policy.id}`} className="text-brand-700 hover:underline">
+                    {policy.line.replace(/_/g, ' ')}
+                  </Link>
+                )}
+                subtitle={policy.policy_number ?? 'Application'}
+                value={sum != null ? money(sum) : <span className="text-navy-400">Not set</span>}
+                premium={
+                  policy.premium_amount != null ? (
+                    <>
+                      {money(policy.premium_amount)} <span className="text-[11px] text-navy-500">pm</span>
+                    </>
+                  ) : (
+                    <span className="text-navy-400">Not set</span>
+                  )
+                }
+                insurer={<span className="text-xs">{provider}</span>}
+                status={(
+                  <div>
                     <StatusBadge status={policy.status} />
                     {!covered && <span className="mt-1 block text-[11px] text-amber-800">Not confirmed cover</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-navy-700">
-                    {covered ? (
-                      <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
-                        Service policy
-                      </Link>
-                    ) : (
-                      <Link to={`/broker/life/policies/${policy.id}`} className="font-medium text-brand-700 hover:underline">
-                        Complete requirements
-                      </Link>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-navy-400">—</td>
-                </tr>
-              )
-            })}
-            {offerItems.map((o) => (
-              <tr key={o.id} className="align-top">
-                <td className="px-3 py-2.5">
-                  <span className="font-medium text-navy-900">{o.product || 'Offer'}</span>
-                  <span className="mt-0.5 block font-mono text-[11px] text-navy-500">{o.reference}</span>
-                  {o.from_sample_quote && <span className="mt-0.5 block text-[11px] font-semibold text-amber-800">DEMO · Sample quote</span>}
-                </td>
-                <td className="px-3 py-2.5"><span className="text-navy-400">Not set</span></td>
-                <td className="px-3 py-2.5">
+                  </div>
+                )}
+                next={(
+                  <Link to={`/broker/life/policies/${policy.id}`} className="text-xs font-medium text-brand-700 hover:underline">
+                    {covered ? 'Service policy' : 'Complete requirements'}
+                  </Link>
+                )}
+                documents={<span className="text-xs text-navy-400">—</span>}
+              />
+            )
+          })}
+        </section>
+      )}
+
+      {offerItems.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Offers ({offerItems.length})</h3>
+          {offerItems.map((o) => (
+            <CoverItemCard
+              key={o.id}
+              title={o.product || 'Offer'}
+              subtitle={<span className="font-mono">{o.reference}</span>}
+              meta={o.from_sample_quote ? <span className="mt-1 inline-block text-[11px] font-semibold text-amber-800">DEMO · Sample quote</span> : undefined}
+              value={<span className="text-navy-400">Not set</span>}
+              premium={(
+                <>
                   {money(o.premium_amount)} <span className="text-[11px] text-navy-500">{perFrequency(o.premium_frequency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-xs">{o.insurer}</td>
-                <td className="px-3 py-2.5 text-xs capitalize">{o.status.replace(/_/g, ' ')}</td>
-                <td className="px-3 py-2.5 text-xs text-navy-700">
+                </>
+              )}
+              insurer={<span className="text-xs">{o.insurer}</span>}
+              status={<span className="text-xs capitalize">{o.status.replace(/_/g, ' ')}</span>}
+              next={(
+                <span className="text-xs text-navy-700">
                   {o.status === 'sent' ? 'Follow up' : o.status === 'accepted' ? 'Record decision' : o.status === 'sold' ? 'Manage cover' : 'Complete offer'}
-                </td>
-                <td className="px-3 py-2.5">
-                  {tenantId ? (
-                    <ItemMediaUpload tenantId={tenantId} ownerTable="sales_offers" ownerId={o.id} compact />
-                  ) : (
-                    <span className="text-xs text-navy-400">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {r.sales.map((s) => (
-              <tr key={s.id} className="align-top">
-                <td className="px-3 py-2.5">
-                  <span className="font-medium text-navy-900">Confirmed cover</span>
-                  <span className="mt-0.5 block font-mono text-[11px] text-navy-500">{s.reference}</span>
-                </td>
-                <td className="px-3 py-2.5"><span className="text-navy-400">See policy</span></td>
-                <td className="px-3 py-2.5">
+                </span>
+              )}
+              documents={
+                tenantId ? (
+                  <ItemMediaUpload tenantId={tenantId} ownerTable="sales_offers" ownerId={o.id} compact />
+                ) : (
+                  <span className="text-xs text-navy-400">—</span>
+                )
+              }
+            />
+          ))}
+        </section>
+      )}
+
+      {r.sales.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Confirmed cover ({r.sales.length})</h3>
+          {r.sales.map((s) => (
+            <CoverItemCard
+              key={s.id}
+              title="Confirmed cover"
+              subtitle={<span className="font-mono">{s.reference}</span>}
+              value={<span className="text-navy-400">See policy</span>}
+              premium={(
+                <>
                   {money(s.premium_amount)} <span className="text-[11px] text-navy-500">{perFrequency(s.premium_frequency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-xs">Insurer ref {s.insurer_reference}</td>
-                <td className="px-3 py-2.5 text-xs font-semibold text-emerald-800">Cover confirmed</td>
-                <td className="px-3 py-2.5 text-xs text-navy-700">Service from {shortDate(s.cover_start_date)}</td>
-                <td className="px-3 py-2.5">
-                  {tenantId ? (
-                    <ItemMediaUpload tenantId={tenantId} ownerTable="sales_sales" ownerId={s.id} compact />
-                  ) : (
-                    <span className="text-xs text-navy-400">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </>
+              )}
+              insurer={<span className="text-xs">Insurer ref {s.insurer_reference}</span>}
+              status={<span className="text-xs font-semibold text-emerald-800">Cover confirmed</span>}
+              next={<span className="text-xs text-navy-700">Service from {shortDate(s.cover_start_date)}</span>}
+              documents={
+                tenantId ? (
+                  <ItemMediaUpload tenantId={tenantId} ownerTable="sales_sales" ownerId={s.id} compact />
+                ) : (
+                  <span className="text-xs text-navy-400">—</span>
+                )
+              }
+            />
+          ))}
+        </section>
+      )}
+
       {person.error && (
         <p className="text-xs text-navy-500">Life/policy hydrate unavailable for this person right now — offers and sales above still come from the live sales book.</p>
       )}
@@ -587,10 +696,28 @@ function PrepareMotorQuotes({ personId }: { personId: string }) {
   )
 }
 
-export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { personId: string; offerId?: string | null; onBack: () => void; tab: string; onTab: (t: string) => void }) {
+export function ClientRecordPanel({
+  personId,
+  offerId,
+  onBack,
+  tab,
+  onTab,
+  embedded,
+}: {
+  personId: string
+  offerId?: string | null
+  onBack: () => void
+  tab: string
+  onTab: (t: string) => void
+  /** When true (slide-out), hide queue back chrome — the panel owns close. */
+  embedded?: boolean
+}) {
   const q = useClientRecord(personId)
+  const newClaims = useClaimsQueue({ person_id: personId, filter: 'new' })
   const [creating, setCreating] = useState(false)
   const [addingCovers, setAddingCovers] = useState(false)
+  const [shareInvite, setShareInvite] = useState<{ path: string; expires_at: string } | null>(null)
+  const invite = useCustomerPageInvite()
   useEffect(() => {
     if (offerId && q.data) document.getElementById(`offer-${offerId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [offerId, q.data, tab])
@@ -600,7 +727,9 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
     const denied = q.error instanceof CopilotError && (q.error.status === 404 || q.error.status === 403)
     return (
       <div className="space-y-4">
-        <Button size="sm" variant="ghost" onClick={onBack}><ArrowLeft /> Clients</Button>
+        {!embedded && (
+          <Button size="sm" variant="ghost" onClick={onBack}><ArrowLeft /> Clients</Button>
+        )}
         <div className="panel p-6 text-center">
           <Lock className="mx-auto h-8 w-8 text-amber-500" />
           <h2 className="mt-3 text-base font-semibold text-navy-900">{denied ? 'You don’t have access to this client' : 'This client could not be opened'}</h2>
@@ -613,46 +742,130 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
   }
   const r = q.data
   const sold = r.sales[0]
-  const accepted = r.offers.find((o) => o.status === 'accepted')
+  const accepted = r.offers.find((o) => o.status === 'accepted' && !o.sale)
+  const awaitingCover = Boolean(accepted)
   const itemCount = r.offers.length + r.sales.length
   const coveredCount = r.sales.length + r.offers.filter((o) => o.status === 'sold').length
-  const attention = r.follow_ups.length + r.offers.filter((o) => o.status === 'sent' || o.status === 'accepted').length
+  const attention = r.follow_ups.length + r.offers.filter((o) => o.status === 'sent' || (o.status === 'accepted' && !o.sale)).length
   const activeTab = tab === 'offers' ? 'quotes' : tab === 'comms' ? 'activity' : tab
+  const claimAlerts = (newClaims.data?.rows ?? []).filter(
+    (c) => c.intake_source === 'customer' && !c.broker_acknowledged_at,
+  )
+  const claimAlert = claimAlerts[0]
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Button size="sm" variant="ghost" className="-ml-2" onClick={onBack}><ArrowLeft /> Queue</Button>
-          <p className="mt-1 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Customers / {r.name}</p>
-          <h2 className="mt-0.5 flex flex-wrap items-center gap-2 text-lg font-semibold text-navy-900">
-            {r.name} <span className="font-mono text-sm font-normal text-navy-500">{r.client_number}</span>
-            <StageBadge stage={r.stage} /> <CategoryBadge category={r.category} />
-          </h2>
-          <p className="text-xs text-navy-600">
+        <div className="min-w-0 flex-1">
+          {!embedded && (
+            <>
+              <Button size="sm" variant="ghost" className="-ml-2" onClick={onBack}><ArrowLeft /> Queue</Button>
+              <p className="mt-1 text-[11px] font-semibold tracking-wide text-navy-500 uppercase">Customers / {r.name}</p>
+              <h2 className="mt-0.5 flex flex-wrap items-center gap-2 text-lg font-semibold text-navy-900">
+                {r.name} <span className="font-mono text-sm font-normal text-navy-500">{r.client_number}</span>
+                <StageBadge stage={r.stage} /> <CategoryBadge category={r.category} />
+              </h2>
+            </>
+          )}
+          {embedded && (
+            <div className="flex flex-wrap items-center gap-2">
+              <StageBadge stage={r.stage} />
+              <CategoryBadge category={r.category} />
+            </div>
+          )}
+          <p className={cn('text-xs text-navy-600', embedded ? 'mt-1' : '')}>
             Broker {r.assigned?.name ?? 'unassigned'}
             {r.account?.phone ? ` · ${r.account.phone}` : ''}
             {r.referred_by ? ` · referred by ${r.referred_by.name}` : ''}
           </p>
           <p className="mt-1 text-xs text-navy-700">
-            {itemCount} item{itemCount === 1 ? '' : 's'} · {coveredCount} covered · {attention} need attention
+            Contact stage: {r.contact_stage === 'client' ? 'Client' : 'Prospect'}
+            {' · '}
+            {itemCount} item{itemCount === 1 ? '' : 's'} · {coveredCount} covered
+            {awaitingCover ? ' · 1 awaiting cover confirmation' : ''}
+            {attention ? ` · ${attention} need attention` : ''}
             {r.follow_ups[0] ? ` · Next: ${r.follow_ups[0].title}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link to={`/broker/customers/people/${r.id}/your-page`}><Eye /> Preview customer page</Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={invite.isPending}
+            onClick={() =>
+              invite.mutate(r.id, {
+                onSuccess: (inv) => setShareInvite({ path: inv.path, expires_at: inv.expires_at }),
+              })
+            }
+          >
+            {invite.isPending ? <Loader2 className="animate-spin" /> : <Share2 />} Share customer page
+          </Button>
           {r.category === 'sample' && <PrepareMotorQuotes personId={r.id} />}
           <Button size="sm" variant="outline" onClick={() => setAddingCovers(true)}><Plus /> Add covers</Button>
           <Button size="sm" variant="accent" onClick={() => setCreating(true)}><Plus /> Create offer</Button>
         </div>
       </div>
 
-      {(sold || accepted) && (
+      {shareInvite && (
+        <div className="mt-3">
+          <ShareInvite
+            url={shareInvite.path}
+            title="Customer page invitation"
+            hint="The customer signs in and lands on Your page for this record."
+            expiresAt={shareInvite.expires_at}
+            whatsappText={`Open your B-Covered page: ${typeof window !== 'undefined' ? window.location.origin : ''}${shareInvite.path}`}
+            onRevoke={() => setShareInvite(null)}
+            revokeLabel="Hide"
+          />
+        </div>
+      )}
+      {invite.error && (
+        <p className="mt-2 text-xs text-red-700" role="alert">{(invite.error as Error).message}</p>
+      )}
+
+      {claimAlert && (
+        <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-3 text-xs text-rose-950">
+          <p className="font-semibold text-rose-950">New claim submitted</p>
+          <p className="mt-1">
+            <span className="font-mono font-semibold">{claimAlert.reference}</span>
+            {' · '}
+            <span className="capitalize">{claimAlert.incident_type.replace(/_/g, ' ')}</span>
+            {claimAlert.created_at
+              ? ` · reported ${new Date(claimAlert.created_at).toLocaleString()}`
+              : null}
+            {claimAlerts.length > 1 ? ` · +${claimAlerts.length - 1} more` : null}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="accent" onClick={() => onTab('claims')}>
+              Open claims
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/broker/claims/${claimAlert.id}?view=fintastic`}>Review on desk</Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {awaitingCover && accepted && (
+        <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-3 text-xs text-violet-900">
+          <p className="font-semibold text-violet-950">Offer accepted · Awaiting cover confirmation</p>
+          <p className="mt-1">
+            <span className="font-mono font-semibold">{accepted.reference}</span> · {accepted.insurer} · {money(accepted.premium_amount)}{' '}
+            {perFrequency(accepted.premium_frequency)}. Completing a follow-up as Done does not place cover — use Confirm cover on the offer.
+          </p>
+          <div className="mt-2">
+            <Button size="sm" variant="accent" onClick={() => onTab('quotes')}>
+              Go to offer · Confirm cover
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {(sold || (accepted && !awaitingCover)) && (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {accepted && (
-            <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
-              Accepted offer <span className="font-mono font-semibold">{accepted.reference}</span> · {accepted.insurer} · {money(accepted.premium_amount)} {perFrequency(accepted.premium_frequency)}
-            </p>
-          )}
           {sold && (
             <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
               Sale <span className="font-mono font-semibold">{sold.reference}</span> · {sold.offer_reference} · insurer reference <span className="font-mono font-semibold">{sold.insurer_reference}</span> · cover from {shortDate(sold.cover_start_date)}
@@ -662,24 +875,62 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
       )}
 
       <Tabs value={activeTab} onValueChange={onTab} className="mt-4 flex min-h-0 flex-col">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="items">Items & cover</TabsTrigger>
           <TabsTrigger value="policies">Policies</TabsTrigger>
-          <TabsTrigger value="claims">Claims</TabsTrigger>
+          <TabsTrigger value="financials">Financials</TabsTrigger>
+          <TabsTrigger value="claims">
+            Claims
+            {claimAlerts.length > 0 ? (
+              <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                {claimAlerts.length}
+              </span>
+            ) : null}
+          </TabsTrigger>
           <TabsTrigger value="quotes">Quotes & decisions ({r.offers.length})</TabsTrigger>
           <TabsTrigger value="activity">Activity & documents ({r.communications.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-5 pt-4">
+          <section
+            className="rounded-xl border border-navy-800/10 bg-navy-50/40 px-3 py-3"
+            aria-label="Items on this customer"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Items on this customer</h3>
+                <p className="mt-1 text-sm text-navy-800">
+                  {itemCount} item{itemCount === 1 ? '' : 's'} · {coveredCount} covered
+                  {awaitingCover ? ' · 1 awaiting cover' : ''}
+                  {attention ? ` · ${attention} need attention` : ''}
+                </p>
+                {r.offers[0] && (
+                  <p className="mt-0.5 text-xs text-navy-600">
+                    Latest: {r.offers[0].insurer} · {r.offers[0].product.replace(/_/g, ' ')} · {r.offers[0].status.replace(/_/g, ' ')}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" type="button" onClick={() => onTab('items')}>
+                  Items & cover
+                </Button>
+                <Button size="sm" variant="accent" type="button" onClick={() => onTab('quotes')}>
+                  Quotes ({r.offers.length})
+                </Button>
+              </div>
+            </div>
+          </section>
           <Facts r={r} />
           <section>
             <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">What happens next</h3>
             <FollowUps r={r} />
           </section>
           {r.enquiries.length > 0 && (
-            <section>
-              <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Enquiries</h3>
-              <ul className="space-y-1.5 text-sm">
+            <details className="rounded-lg border border-navy-800/10 open:bg-navy-50/30 sm:open:bg-transparent" open>
+              <summary className="cursor-pointer px-3 py-2 text-xs font-semibold tracking-wide text-navy-500 uppercase select-none">
+                Enquiries
+              </summary>
+              <ul className="space-y-1.5 px-3 pb-3 text-sm">
                 {r.enquiries.map((e) => (
                   <li key={e.id} className="rounded-lg border border-navy-800/10 px-3 py-2">
                     <span className="font-mono text-xs">{e.reference}</span> · {shortDate(e.created_at)} · {e.source.replace(/_/g, ' ')}
@@ -688,38 +939,71 @@ export function ClientRecordPanel({ personId, offerId, onBack, tab, onTab }: { p
                   </li>
                 ))}
               </ul>
-            </section>
+            </details>
           )}
           <EnquiryAttribution personId={r.id} />
           {r.can_reassign && (
-            <section>
-              <h3 className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase">Assignment</h3>
-              <Reassign r={r} />
-              {r.assignment_history.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs text-navy-600">
-                  {r.assignment_history.map((a, i) => <li key={i}>{shortDate(a.at)}: {a.from?.name ?? 'Unassigned'} → {a.to?.name} by {a.by}{a.reason ? ` (${a.reason})` : ''}</li>)}
-                </ul>
-              )}
-            </section>
+            <details className="rounded-lg border border-navy-800/10 open:bg-navy-50/30 sm:open:bg-transparent" open>
+              <summary className="cursor-pointer px-3 py-2 text-xs font-semibold tracking-wide text-navy-500 uppercase select-none">
+                Assignment
+              </summary>
+              <div className="space-y-2 px-3 pb-3">
+                <Reassign r={r} />
+                {r.assignment_history.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs text-navy-600">
+                    {r.assignment_history.map((a, i) => <li key={i}>{shortDate(a.at)}: {a.from?.name ?? 'Unassigned'} → {a.to?.name} by {a.by}{a.reason ? ` (${a.reason})` : ''}</li>)}
+                  </ul>
+                )}
+              </div>
+            </details>
           )}
         </TabsContent>
-        <TabsContent value="items" className="pt-4">
+        <TabsContent value="items" className="space-y-5 pt-4">
           <ItemsCoverTab r={r} onAddCovers={() => setAddingCovers(true)} />
+          <CustomerPageMirror personId={r.id} slice="items" category={r.category} />
         </TabsContent>
         <TabsContent value="policies" className="pt-4">
           <ClientPoliciesTab personId={r.id} />
         </TabsContent>
-        <TabsContent value="claims" className="pt-4">
-          <ClientClaimsTab personId={r.id} />
+        <TabsContent value="financials" className="space-y-5 pt-4">
+          <CustomerFinancialsPanel
+            customerId={r.account?.id ?? null}
+            personId={r.id}
+            portalBasePath={r.category === 'sample' ? '/demo/my' : '/my'}
+          />
+          <CustomerPageMirror personId={r.id} slice="values" category={r.category} />
         </TabsContent>
-        <TabsContent value="quotes" className="pt-4">
+        <TabsContent value="claims" className="space-y-5 pt-4">
+          <ClientClaimsTab personId={r.id} />
+          <div className="rounded-xl border border-navy-800/10 bg-navy-50/30 p-3">
+            <CustomerPageMirror personId={r.id} slice="claims" category={r.category} />
+          </div>
+        </TabsContent>
+        <TabsContent value="quotes" className="space-y-5 pt-4">
           <QuotesDecisionsTab r={r} offerId={offerId} onCreate={() => setCreating(true)} onAddCovers={() => setAddingCovers(true)} />
+          <div className="rounded-xl border border-navy-800/10 bg-navy-50/30 p-3">
+            <CustomerPageMirror personId={r.id} slice="quotes" category={r.category} />
+          </div>
         </TabsContent>
         <TabsContent value="activity" className="space-y-4 pt-4">
           <LogCommunication r={r} />
           <RetentionNotice r={r} />
-          <ActivityDocumentsSection r={r} />
-          <Timeline r={r} />
+          <details className="rounded-lg border border-navy-800/10 open:bg-navy-50/30 sm:open:bg-transparent" open>
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold tracking-wide text-navy-500 uppercase select-none">
+              Documents
+            </summary>
+            <div className="px-3 pb-3">
+              <ActivityDocumentsSection r={r} />
+            </div>
+          </details>
+          <details className="rounded-lg border border-navy-800/10 open:bg-navy-50/30 sm:open:bg-transparent" open>
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold tracking-wide text-navy-500 uppercase select-none">
+              Timeline
+            </summary>
+            <div className="px-3 pb-3">
+              <Timeline r={r} />
+            </div>
+          </details>
         </TabsContent>
       </Tabs>
 

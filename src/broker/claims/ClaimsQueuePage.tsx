@@ -1,36 +1,37 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Search, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader, LoadingState, ErrorState } from '../PageHeader'
 import { Page } from '../shared/ui'
-import { newKey, policyClaimsApi, useClaimsQueue, usePolicyClaimsMutation } from '@/copilot/policyClaimsApi'
+import { useClaimsQueue } from '@/copilot/policyClaimsApi'
 import { StatusBadge } from '@/components/StatusBadge'
 import { RouteStartButtons } from '../routes/RouteActionsMenu'
+import { ReportClaimSlideout } from '@/pages/my/ReportClaimSlideout'
+import { ClaimsRussSlideout } from './ClaimsRussSlideout'
 
 const BATCH_CAP = 12
-
-type FollowUpRow = {
-  claim_id: string
-  reference: string
-  customer_name: string
-  status: string
-  due_at: string | null
-  overdue: boolean
-  draft: string
-  shared?: boolean
-}
 
 export default function ClaimsQueuePage() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const filter = params.get('filter') ?? ''
   const { data, isLoading, error, refetch } = useClaimsQueue({ query: q || null, filter: filter || null })
-  const draft = usePolicyClaimsMutation(policyClaimsApi.russDraftUpdate)
   const [selected, setSelected] = useState<string[]>([])
-  const [results, setResults] = useState<FollowUpRow[] | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [batchError, setBatchError] = useState<string | null>(null)
+  const [slideoutOpen, setSlideoutOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const reportPersonId = params.get('personId')
+  const reportPolicyId = params.get('policyId')
+
+  useEffect(() => {
+    const flag = params.get('reportClaim')
+    if (flag !== '1' && flag !== 'true') return
+    setReportOpen(true)
+    const next = new URLSearchParams(params)
+    next.delete('reportClaim')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once from URL
+  }, [params.get('reportClaim')])
 
   const rows = data?.rows ?? []
   const selectedRows = useMemo(() => rows.filter((r) => selected.includes(r.id)), [rows, selected])
@@ -49,57 +50,33 @@ export default function ClaimsQueuePage() {
     setSelected(allOn ? [] : ids)
   }
 
-  const prepareFollowUps = async () => {
-    if (selectedRows.length === 0) return
-    setBusy(true)
-    setBatchError(null)
-    try {
-      const out: FollowUpRow[] = []
-      for (const r of selectedRows.slice(0, BATCH_CAP)) {
-        const res = await draft.mutateAsync({ claim_id: r.id, share: false, key: newKey() })
-        out.push({
-          claim_id: r.id,
-          reference: r.reference,
-          customer_name: r.customer_name,
-          status: r.status,
-          due_at: r.due_at,
-          overdue: Boolean(r.due_at && new Date(r.due_at).getTime() < Date.now() && !['closed', 'decision_received'].includes(r.status)),
-          draft: res.draft ?? res.summary,
-        })
-      }
-      setResults(out)
-    } catch (e) {
-      setBatchError(e instanceof Error ? e.message : 'Follow-up prep failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const shareOne = async (claimId: string) => {
-    const res = await draft.mutateAsync({ claim_id: claimId, share: true, key: newKey() })
-    setResults((prev) =>
-      (prev ?? []).map((r) => (r.claim_id === claimId ? { ...r, shared: true, draft: res.draft ?? res.summary } : r)),
-    )
-    void refetch()
-  }
-
-  const shareOverdue = async () => {
-    const overdue = (results ?? []).filter((r) => r.overdue && !r.shared)
-    for (const r of overdue) {
-      await shareOne(r.claim_id)
-    }
-  }
-
   return (
     <Page>
       <PageHeader
         title="Claims"
         description="Brokerage-wide claims across clients you can access. Select up to 12 cases for Russ follow-ups, or open a claim to work it."
         actions={
-          <Button size="sm" variant="accent" asChild>
-            <Link to="/broker/claims/new"><Plus /> Report an incident</Link>
+          <Button size="sm" variant="accent" type="button" onClick={() => setReportOpen(true)}>
+            <Plus /> Report an incident
           </Button>
         }
+      />
+
+      <ReportClaimSlideout
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        mode="broker"
+        target={
+          reportPersonId
+            ? { personId: reportPersonId, policyId: reportPolicyId }
+            : null
+        }
+        onDone={(res) => {
+          void refetch()
+          if (res.claim_id) {
+            window.location.assign(`/broker/claims/${res.claim_id}?view=fintastic`)
+          }
+        }}
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -132,57 +109,35 @@ export default function ClaimsQueuePage() {
           <option value="missing_evidence">Missing evidence</option>
           <option value="awaiting_insurer">Awaiting insurer</option>
           <option value="overdue">Overdue follow-ups</option>
-          <option value="version_review">Policy version review</option>
+          <option value="version_review">Schedule review required</option>
+          <option value="handler">By next action</option>
         </select>
       </div>
 
       {selected.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-navy-800/10 bg-navy-50/50 px-3 py-2">
-          <p className="text-xs text-navy-700">{selected.length} selected (max {BATCH_CAP})</p>
-          <Button size="sm" variant="accent" disabled={busy || draft.isPending} onClick={() => void prepareFollowUps()}>
-            Prepare follow-ups for selected
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2">
+          <p className="text-xs font-semibold text-navy-800">{selected.length} selected (max {BATCH_CAP})</p>
+          <Button size="sm" variant="accent" onClick={() => setSlideoutOpen(true)}>
+            Open Russ actions
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { setSelected([]); setResults(null) }}>Clear</Button>
+          <Button size="sm" variant="outline" onClick={() => setSelected([])}>Clear</Button>
         </div>
       )}
 
-      {batchError && <p className="mb-3 text-xs text-red-700">{batchError}</p>}
-
-      {results && (
-        <section className="panel mb-4 space-y-3 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-navy-900">Russ · proposed follow-ups</h2>
-            <Button size="sm" variant="outline" disabled={draft.isPending} onClick={() => void shareOverdue()}>
-              Share all overdue
-            </Button>
-          </div>
-          <ul className="space-y-2">
-            {results.map((r) => (
-              <li key={r.claim_id} className="rounded-lg border border-navy-800/10 bg-white p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <Link className="font-medium text-navy-900 hover:underline" to={`/broker/claims/${r.claim_id}`}>
-                      {r.customer_name} · {r.reference}
-                    </Link>
-                    <p className="text-xs text-navy-600">
-                      {r.status.replace(/_/g, ' ')}
-                      {r.due_at ? ` · due ${new Date(r.due_at).toLocaleDateString()}` : ''}
-                      {r.overdue ? ' · overdue' : ''}
-                      {r.shared ? ' · shared' : ''}
-                    </p>
-                  </div>
-                  {!r.shared && (
-                    <Button size="sm" variant="accent" disabled={draft.isPending} onClick={() => void shareOne(r.claim_id)}>
-                      Share update
-                    </Button>
-                  )}
-                </div>
-                <pre className="mt-2 max-h-28 overflow-auto rounded bg-navy-50 p-2 text-xs whitespace-pre-wrap">{r.draft}</pre>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <ClaimsRussSlideout
+        open={slideoutOpen}
+        onClose={() => setSlideoutOpen(false)}
+        selected={selectedRows.map((r) => ({
+          id: r.id,
+          reference: r.reference,
+          customer_name: r.customer_name,
+          person_id: r.person_id,
+          status: r.status,
+          incident_at: r.incident_at,
+          due_at: r.due_at,
+        }))}
+        onCleared={() => setSelected([])}
+      />
 
       {isLoading ? (
         <LoadingState label="Loading claims…" />
@@ -219,8 +174,18 @@ export default function ClaimsQueuePage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-navy-800/10 hover:bg-sky-50/40">
+              {rows.map((r) => {
+                const customerNew =
+                  r.intake_source === 'customer' && !r.broker_acknowledged_at
+                return (
+                <tr
+                  key={r.id}
+                  className={
+                    customerNew
+                      ? 'border-t border-rose-200 bg-rose-50/50 hover:bg-rose-50'
+                      : 'border-t border-navy-800/10 hover:bg-sky-50/40'
+                  }
+                >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -231,11 +196,16 @@ export default function ClaimsQueuePage() {
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <Link className="font-medium text-navy-900 hover:underline" to={`/broker/claims/${r.id}`}>{r.customer_name}</Link>
+                    <Link className="font-medium text-navy-900 hover:underline" to={`/broker/claims/${r.id}?view=fintastic`}>{r.customer_name}</Link>
                     <div className="font-mono text-[10px] text-navy-500">
                       <Link className="text-brand-700 hover:underline" to={`/broker/customers/people/${r.person_id}?rtab=claims`}>{r.client_number}</Link>
                       {' · '}{r.reference}
                     </div>
+                    {customerNew && (
+                      <span className="mt-0.5 inline-block rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-rose-900 uppercase">
+                        Customer reported
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="capitalize">{r.incident_type.replace(/_/g, ' ')}</div>
@@ -246,7 +216,7 @@ export default function ClaimsQueuePage() {
                   <td className="px-3 py-2 font-mono text-xs">{r.insurer_reference ?? '—'}</td>
                   <td className="px-3 py-2">
                     <StatusBadge status={r.status} />
-                    {r.version_review_needed && <span className="ml-1 text-[10px] font-semibold text-amber-800">Version review</span>}
+                    {r.version_review_needed && <span className="ml-1 text-[10px] font-semibold text-amber-800">Schedule review required</span>}
                   </td>
                   <td className="px-3 py-2">{r.owner_name ?? '—'}</td>
                   <td className="px-3 py-2 text-navy-700">{r.next_action ?? '—'}</td>
@@ -266,7 +236,7 @@ export default function ClaimsQueuePage() {
                     />
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

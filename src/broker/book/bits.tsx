@@ -61,8 +61,24 @@ export const dateTime = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–'
 export const today = () => new Date().toISOString().slice(0, 10)
 
-const KIND_ICON: Record<string, typeof Phone> = { call: Phone, whatsapp: MessageCircle, email: Mail, meeting: Users, note: NotebookPen, callback_request: Phone }
-export const KIND_LABEL: Record<string, string> = { call: 'Call', whatsapp: 'WhatsApp', email: 'Email', meeting: 'Meeting', note: 'Note', callback_request: 'Callback request' }
+const KIND_ICON: Record<string, typeof Phone> = {
+  call: Phone,
+  whatsapp: MessageCircle,
+  email: Mail,
+  meeting: Users,
+  note: NotebookPen,
+  callback_request: Phone,
+  in_app_chat: MessageCircle,
+}
+export const KIND_LABEL: Record<string, string> = {
+  call: 'Call',
+  whatsapp: 'WhatsApp',
+  email: 'Email',
+  meeting: 'Meeting',
+  note: 'Note',
+  callback_request: 'Callback request',
+  in_app_chat: 'In-app chat',
+}
 export const EVENT_LABEL: Record<Communication['event'], string> = { logged: 'Logged', whatsapp_opened: 'WhatsApp opened', message_sent: 'Message sent', reply: 'Reply' }
 
 export function CommIcon({ kind, direction }: { kind: string; direction: string }) {

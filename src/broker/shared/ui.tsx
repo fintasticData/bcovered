@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
+import { zar as formatZar } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
-const zar0 = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 })
-const zar2 = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
 /** Rand amount. Whole rands by default; exact cents for reconciliation figures. */
-export const zar = (n: number | null | undefined, exact = false) => (n === null || n === undefined ? '–' : (exact ? zar2 : zar0).format(n).replace('ZAR', 'R'))
+export const zar = formatZar
 export const pct = (n: number | null | undefined, digits = 1) => (n === null || n === undefined || !Number.isFinite(n) ? '–' : `${(n * 100).toFixed(digits)}%`)
 export const num = (n: number | null | undefined, digits = 0) =>
   n === null || n === undefined ? '–' : n.toLocaleString('en-ZA', { minimumFractionDigits: digits, maximumFractionDigits: digits })

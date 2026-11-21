@@ -19,6 +19,7 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [website, setWebsite] = useState('')
   const [region, setRegion] = useState('')
   const [notes, setNotes] = useState('')
   const [cover, setCover] = useState('')
@@ -31,6 +32,7 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
     setFullName('')
     setPhone('')
     setEmail('')
+    setWebsite('')
     setRegion('')
     setNotes('')
     setCover('')
@@ -43,7 +45,13 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
       setError('Add a name.')
       return
     }
+    const hasContact = Boolean(phone.trim() || email.trim() || (kind === 'business' && website.trim()))
+    if (!hasContact) {
+      setError(kind === 'business' ? 'Add a phone, email or website.' : 'Add a phone or email.')
+      return
+    }
     setError(null)
+    const noteParts = [notes.trim(), website.trim() ? `Website: ${website.trim()}` : ''].filter(Boolean)
     capture.mutate(
       {
         kind,
@@ -51,7 +59,7 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         region: region.trim() || undefined,
-        notes: notes.trim() || undefined,
+        notes: noteParts.join('\n') || undefined,
         product_category: cover || undefined,
       },
       {
@@ -73,7 +81,9 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
           <h2 id="new-lead-title" className="text-base font-semibold text-navy-900">
             New lead
           </h2>
-          <p className="mt-0.5 text-xs text-navy-600">Capture a person or business before you know the cover. Cover is optional.</p>
+          <p className="mt-0.5 text-xs text-navy-600">
+            {kind === 'person' ? 'Person: name plus phone or email. Cover is optional.' : 'Business: name plus phone, email or website. Cover is optional.'}
+          </p>
         </div>
 
         <div className="flex gap-2" role="group" aria-label="Lead type">
@@ -105,6 +115,13 @@ export function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => 
             <input value={email} onChange={(e) => setEmail(e.target.value)} className="field mt-1" type="email" placeholder="optional" />
           </label>
         </div>
+
+        {kind === 'business' && (
+          <label className="block text-xs font-medium text-navy-700">
+            Website
+            <input value={website} onChange={(e) => setWebsite(e.target.value)} className="field mt-1" placeholder="https://…" />
+          </label>
+        )}
 
         <label className="block text-xs font-medium text-navy-700">
           Area

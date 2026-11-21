@@ -32,8 +32,8 @@ export function MemberCard({ member, invitePath }: { member: MemberRef; invitePa
         </div>
       )}
       <div className="flex gap-2">
-        <Button size="sm" asChild><Link to="/broker/book">Open my workspace</Link></Button>
-        <Button size="sm" variant="outline" asChild><Link to="/broker/book?tab=team">Team</Link></Button>
+        <Button size="sm" asChild><Link to="/broker/customers">Open Customer Area</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/broker/customers?desk=team">Team</Link></Button>
       </div>
     </div>
   )

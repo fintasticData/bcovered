@@ -189,14 +189,15 @@ export default function SignInPage() {
   const zone = params.get('zone')
   const done = async (home?: string) => {
     const me = await api.me().catch(() => null)
-    navigate(next && next.startsWith('/') ? next : home || me?.home || '/my')
+    const fallback = me?.role === 'customer' ? '/my' : '/broker/customers'
+    navigate(next && next.startsWith('/') ? next : home || me?.home || fallback)
   }
   const zoneCopy =
     zone === 'broker'
-      ? 'Broker zone sign-in uses the live database. After you authenticate you land in My Area with your BLP# and workspace shortcuts.'
+      ? 'Broker zone sign-in uses the live database. After you authenticate you land in Customer Area with your workspace shortcuts.'
       : zone === 'client'
-        ? 'Client zone create/sign-in checks Supabase Auth. After you authenticate Russ welcomes you in My Area.'
-        : 'Sign in against the live database. You land in My Area with Russ.'
+        ? 'Client zone create/sign-in checks Supabase Auth. After you authenticate you open My Page with your cover.'
+        : 'Sign in against the live database. Customers open My Page; brokers open Customer Area.'
   return (
     <div className="container-x grid min-h-[70vh] place-items-center py-12">
       <div className="card w-full max-w-md p-8">

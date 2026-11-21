@@ -1183,13 +1183,42 @@ export async function runTurn(input: TurnInput, tools: ToolPort): Promise<TurnRe
         if (!subject) { result = needSubject('whose policies to list'); break }
         const job: JobName = handledBy === 'russ' ? 'russ.policies.list' : 'ava.policies.list'
         const r = await tools.call(job, handledBy === 'russ' ? { customer_id: account?.id, cover_type: step.cover_type ?? undefined } : { person_id: person?.id, customer_id: person ? undefined : account?.id, cover_type: step.cover_type ?? undefined })
-        result = fromTool(job, r, (d) => {
-          const list = asPolicies(d)
+        if (!r.ok) { result = fromTool(job, r, () => null as never); break }
+        {
+          const list = asPolicies(r.data)
           if (list.length === 1) policy = list[0]
-          return { ...base, ...stamp, job, status: 'retrieved', title: 'Policies', subject, data: list,
-            summary: list.length ? `${list.length} ${list.length === 1 ? 'policy' : 'policies'} for ${label(subject)}.` : `No policies on record for ${label(subject)}.`,
-            links: list.slice(0, 6).map((p) => ({ label: p.display_number, to: p.open_path })) }
-        })
+          if (list.length) {
+            result = { ...base, ...stamp, job, status: 'retrieved', title: 'Policies', subject, data: list,
+              summary: `${list.length} ${list.length === 1 ? 'policy' : 'policies'} for ${label(subject)}.`,
+              links: list.slice(0, 6).map((p) => ({ label: p.display_number, to: p.open_path })) }
+            break
+          }
+          // No active policy — check accepted offers awaiting cover confirmation.
+          if (person?.id) {
+            const rec = await tools.call('sales.client.record', { person_id: person.id })
+            if (rec.ok) {
+              const d = rec.data as { offers?: Array<{ id: string; reference: string; status: string; insurer?: string; sale?: unknown }>; follow_ups?: Array<{ id: string; title: string; reference?: string }> }
+              const accepted = (d.offers ?? []).find((o) => o.status === 'accepted' && !o.sale)
+              const confirmTask = (d.follow_ups ?? []).find((t) => /^confirm cover/i.test(t.title))
+              if (accepted) {
+                const insurer = accepted.insurer ? ` ${accepted.insurer}` : ''
+                result = {
+                  ...base, ...stamp, job: 'sales.client.record', status: 'retrieved', title: 'Current cover', subject, data: d,
+                  summary: `No active policy is recorded. Your${insurer} offer ${accepted.reference} has been accepted and is awaiting cover confirmation.`,
+                  links: [
+                    { label: `Offer ${accepted.reference}`, to: `/broker/customers?person=${person.id}&tab=quotes&offer=${accepted.id}` },
+                    ...(confirmTask ? [{ label: confirmTask.title, to: `/broker/customers?person=${person.id}&tab=overview` }] : []),
+                    { label: 'Confirm cover', to: `/broker/routes?start=policy_setup&personId=${person.id}&offerId=${accepted.id}` },
+                  ],
+                }
+                break
+              }
+            }
+          }
+          result = { ...base, ...stamp, job, status: 'retrieved', title: 'Policies', subject, data: list,
+            summary: `No active policy is recorded for ${label(subject)}.`,
+            links: subject.open_path ? [{ label: 'Open record', to: subject.open_path }] : [] }
+        }
         break
       }
       case 'history': {
@@ -1273,7 +1302,10 @@ interface SalesPersonJson {
   offers?: Array<OfferRef & { sale?: { reference: string } | null; created_at?: string }>
 }
 
-const BOOK_PATH = '/broker/book'
+/** Customer Area is the single broker client home (legacy /broker/book redirects here). */
+const BOOK_PATH = '/broker/customers'
+const clientPath = (personId: string | number) => `${BOOK_PATH}/people/${personId}`
+const teamPath = `${BOOK_PATH}?desk=team`
 const OPEN_STATUSES: Record<string, string[]> = {
   sales_offer_sent: ['draft', 'sent'],
   sales_accept: ['sent', 'draft'],
@@ -1411,7 +1443,7 @@ async function runSalesStep(a: {
         summary: `${label(subject)} has ${offers.length} open offers. Choose one.`, choice_kind: 'record',
         choices: offers.map((o) => ({
           record_type: 'offer', id: o.id, number: o.reference, name: `${o.insurer ?? ''} · ${(o.product ?? '').replace(/_/g, ' ')}`, category,
-          detail: `${o.status} · ${money(o.premium_amount)} ${o.premium_frequency ?? ''}`, open_path: `${BOOK_PATH}/clients/${subject.id}`,
+          detail: `${o.status} · ${money(o.premium_amount)} ${o.premium_frequency ?? ''}`, open_path: clientPath(subject.id),
         })),
       },
     }
@@ -1424,12 +1456,12 @@ async function runSalesStep(a: {
     context.offer = offer
     if (d.client_id) {
       context.person = { record_type: 'client', id: String(d.client_id), number: (d.client_number as string) ?? null, name: String(d.client_name ?? personHint?.name ?? ''), category,
-        open_path: `${BOOK_PATH}/clients/${d.client_id}`, account: d.account_id ? { id: String(d.account_id), number: (d.account_number as string) ?? null, name: String(d.account_name ?? '') } : null }
+        open_path: clientPath(d.client_id as string), account: d.account_id ? { id: String(d.account_id), number: (d.account_number as string) ?? null, name: String(d.account_name ?? '') } : null }
     }
     return {
-      ...base, ...stamp, job, status: 'saved', title, subject: context.person ?? personHint ?? null, receipt: receiptOf(d, `${BOOK_PATH}/clients/${pid}`),
+      ...base, ...stamp, job, status: 'saved', title, subject: context.person ?? personHint ?? null, receipt: receiptOf(d, clientPath(pid)),
       summary: `${String(d.summary)}${done(d)}.`, data: d,
-      links: [{ label: 'Open client', to: `${BOOK_PATH}/clients/${pid}` }],
+      links: [{ label: 'Open client', to: clientPath(pid) }],
     }
   }
 
@@ -1450,7 +1482,7 @@ async function runSalesStep(a: {
         ...base, ...stamp, job: 'sales.workspace.setup', status: 'saved', title: d.reopened ? 'Workspace reopened' : 'Workspace created', data: d,
         receipt: { reference: d.member.referral_code, record_type: 'workspace', summary: d.summary, open_path: BOOK_PATH, replayed: d.reopened, category },
         summary: `${d.summary} Your customer referral link is ${abs(d.member.referral_path)}.${d.brokerage.live_available ? '' : ' Sample is ready now; Live opens once B-Covered activates the brokerage.'}`,
-        links: [{ label: 'Open my workspace', to: BOOK_PATH }, ...referralLinks(d.member)],
+        links: [{ label: 'Open Customer Area', to: BOOK_PATH }, ...referralLinks(d.member)],
       }
     }
 
@@ -1479,12 +1511,12 @@ async function runSalesStep(a: {
         : d.invite_status === 'needs_email' ? ` Add ${m.name.split(' ')[0]}’s email address to send the private team invitation.` : d.invite_status === 'joined' ? '' : ` Team invitation: ${String(d.invite_status ?? '').replace(/_/g, ' ')}.`
       return {
         ...base, ...stamp, job: 'sales.team.invite', status: 'saved', title: d.existing ? 'Team member found' : 'Team member invited', data: d,
-        receipt: receiptOf(d, `${BOOK_PATH}?tab=team`),
+        receipt: receiptOf(d, teamPath),
         summary: `${String(d.summary)}${done(d)}. Customer referral link: ${abs(m.referral_path)}.${invite}`,
         links: [
           ...referralLinks(m),
           ...(d.invite_path ? [{ label: 'Copy team invitation', to: d.invite_path, copy: abs(d.invite_path) }] : []),
-          { label: 'Open team', to: `${BOOK_PATH}?tab=team` },
+          { label: 'Open team', to: teamPath },
         ],
       }
     }
@@ -1533,7 +1565,7 @@ async function runSalesStep(a: {
       return {
         ...base, ...stamp, job: 'sales.enquiry.capture', status: 'saved', title: d.linked_existing ? 'Enquiry linked' : 'Prospect loaded', subject: context.person ?? null, data: d,
         receipt: receiptOf(d, String(d.open_path ?? BOOK_PATH)), summary: `${String(d.summary)}${done(d)}.`,
-        links: [{ label: 'Open client', to: String(d.open_path ?? BOOK_PATH) }, { label: 'Open my workspace', to: BOOK_PATH }],
+        links: [{ label: 'Open client', to: String(d.open_path ?? BOOK_PATH) }, { label: 'Open Customer Area', to: BOOK_PATH }],
       }
     }
 
@@ -1599,7 +1631,7 @@ async function runSalesStep(a: {
       const r = await tools.call('sales.sale.record', { offer_id: offer!.id, insurer_reference: reference, cover_start_date: start, idempotency_key: key, copilot: input.copilot })
       if (!r.ok) return fail('sales.sale.record', r.error)
       const res = offerSaved('sales.sale.record', r.data as Record<string, unknown>, (r.data as { already_recorded?: boolean }).already_recorded ? 'Sale already recorded' : 'Sale recorded', person)
-      res.links.push({ label: 'Open my workspace', to: BOOK_PATH })
+      res.links.push({ label: 'Open Customer Area', to: BOOK_PATH })
       return res
     }
 
@@ -1621,7 +1653,7 @@ async function runSalesStep(a: {
         summary: d.rows.length
           ? `${d.rows.length} ${cat} client${d.rows.length === 1 ? '' : 's'}${who}: ${t.new_enquiry ?? 0} new enquir${t.new_enquiry === 1 ? 'y' : 'ies'}, ${t.offer_sent ?? 0} offer sent, ${t.accepted ?? 0} accepted, ${t.sold ?? 0} sold. Open any row for its offers and communications.`
           : `No ${cat} clients${who} yet.`,
-        links: [{ label: 'Open in my workspace', to: member ? `${BOOK_PATH}?member=${member.member_id}` : p.member === 'me' ? `${BOOK_PATH}?scope=mine` : BOOK_PATH }],
+        links: [{ label: 'Open in Customer Area', to: member ? `${BOOK_PATH}?member=${member.member_id}` : p.member === 'me' ? `${BOOK_PATH}?scope=mine` : BOOK_PATH }],
       }
     }
   }

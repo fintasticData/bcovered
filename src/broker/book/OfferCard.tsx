@@ -1,19 +1,24 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BadgeCheck, CheckCircle2, Loader2, Mail, MessageCircle, Send, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useStartRoute } from '@/api/hooks'
 import { newKey, salesApi, useSalesMutation, whatsappUrl, type Channel, type Offer } from '@/copilot/salesApi'
 import { useDataCategory } from '@/lib/supabase/category'
 import { useSupabaseAuth } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { guidePath } from '../routes/launchRoute'
 import { CategoryBadge, CopyButton, ErrorText, Field, OfferStatusBadge, inputClass, money, perFrequency, shortDate, today } from './bits'
 
 type Panel = null | 'share' | 'sent' | 'accept' | 'sale'
 
-/** One offer with the short selling sequence: share, mark sent, record acceptance, record the sale once cover is confirmed. */
+/** One offer with the short selling sequence: share, mark sent, record acceptance, confirm cover via policy_setup. */
 export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; highlighted?: boolean; canWrite: boolean }) {
   const category = useDataCategory()
   const auth = useSupabaseAuth()
+  const navigate = useNavigate()
+  const startRoute = useStartRoute()
   const [chosen, setPanel] = useState<Panel>(null)
   const panel: Panel = canWrite && offer.status !== 'sold' && offer.status !== 'declined' && offer.status !== 'withdrawn' ? chosen : null
   const [keys] = useState(() => ({ sent: newKey(), accept: newKey(), sale: newKey() }))
@@ -31,13 +36,34 @@ export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; high
   const accept = useSalesMutation(salesApi.accept)
   const record = useSalesMutation(salesApi.recordSale)
   const closed = offer.status === 'declined' || offer.status === 'withdrawn' || offer.status === 'sold'
+  const awaitingCover = offer.status === 'accepted' && !offer.sale
   const sampleQuote = offer.from_sample_quote || offer.category === 'sample'
+
+  const confirmCover = () => {
+    startRoute.mutate(
+      {
+        definition_id: 'policy_setup',
+        person_id: offer.person_id,
+        offer_id: offer.id,
+        offer_prefill: {
+          insurer_name: offer.insurer,
+          cover_type: offer.product,
+          premium_amount: offer.premium_amount,
+          item_label: offer.product.replace(/_/g, ' '),
+          item_type: offer.product.includes('motor') ? 'vehicle' : 'other',
+          reference: offer.reference,
+        },
+        key: newKey(),
+      },
+      { onSuccess: (s) => navigate(guidePath(s.progress.run.id)) },
+    )
+  }
 
   const step = (s: string) => ({ draft: 0, sent: 1, accepted: 2, sold: 3 })[s] ?? -1
   const at = step(offer.status)
 
   return (
-    <article id={`offer-${offer.id}`} className={cn('rounded-xl border bg-white p-4', highlighted ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-navy-800/10')}>
+    <article id={`offer-${offer.id}`} className={cn('min-w-0 overflow-hidden rounded-xl border bg-white p-4', highlighted ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-navy-800/10')}>
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-navy-900">
@@ -46,20 +72,20 @@ export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; high
             <CategoryBadge category={offer.category} />
             {offer.from_sample_quote && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">From a Sample quote</span>}
           </p>
-          <p className="mt-0.5 text-xs text-navy-600">
+          <p className="mt-0.5 break-words text-xs text-navy-600">
             <span className="font-mono">{offer.reference}</span> · {money(offer.premium_amount)} {perFrequency(offer.premium_frequency)} · responsible: {offer.responsible?.name ?? '–'}
           </p>
         </div>
       </header>
 
-      <ol className="mt-3 grid grid-cols-4 gap-1 text-[11px]" aria-label="Offer progress">
+      <ol className="mt-3 grid grid-cols-2 gap-1 text-[11px] sm:grid-cols-4" aria-label="Offer progress">
         {[
           ['Created', offer.created_at],
           ['Offer sent', offer.sent_at],
           ['Accepted', offer.accepted_at],
           ['Sold', offer.sale?.created_at ?? null],
         ].map(([label, when], i) => (
-          <li key={label as string} className={cn('rounded-lg px-2 py-1.5', i <= at ? 'bg-emerald-50 text-emerald-800' : 'bg-navy-50 text-navy-500')}>
+          <li key={label as string} className={cn('min-w-0 rounded-lg px-2 py-1.5', i <= at ? 'bg-emerald-50 text-emerald-800' : 'bg-navy-50 text-navy-500')}>
             <span className="block font-semibold">{label}</span>
             <span>{when ? shortDate(when as string) : '–'}</span>
           </li>
@@ -72,12 +98,20 @@ export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; high
           <span className="font-mono font-semibold">{offer.sale.insurer_reference}</span> · cover from {shortDate(offer.sale.cover_start_date)}
         </p>
       )}
-      {offer.status === 'accepted' && !offer.sale && (
-        <p className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-900">Accepted on {shortDate(offer.accepted_at)}. Waiting for the insurer to confirm cover; record the sale once you have their reference.</p>
+      {awaitingCover && (
+        <p className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-900">
+          <span className="font-semibold">Offer accepted · Awaiting cover confirmation</span>
+          <span className="mt-0.5 block">Accepted on {shortDate(offer.accepted_at)}. Confirm cover when the insurer has placed it — that files the policy and marks the opportunity Live. Marking a follow-up Done is not the same as confirming cover.</span>
+        </p>
       )}
 
       {canWrite && !closed && offer.status !== 'sold' && (
         <div className="mt-3 flex flex-wrap gap-2">
+          {awaitingCover && (
+            <Button size="sm" variant="accent" disabled={startRoute.isPending} onClick={confirmCover}>
+              {startRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Confirm cover
+            </Button>
+          )}
           <Button size="sm" variant={panel === 'share' ? 'default' : 'outline'} onClick={() => setPanel(panel === 'share' ? null : 'share')}>
             <MessageCircle /> Share offer
           </Button>
@@ -91,11 +125,18 @@ export function OfferCard({ offer, highlighted, canWrite }: { offer: Offer; high
               <BadgeCheck /> Client accepted
             </Button>
           )}
-          {(offer.status === 'sent' || offer.status === 'accepted') && (
-            <Button size="sm" variant={panel === 'sale' ? 'default' : 'accent'} onClick={() => setPanel(panel === 'sale' ? null : 'sale')}>
-              <ShieldCheck /> Record sale
+          {offer.status === 'sent' && (
+            <Button size="sm" variant={panel === 'sale' ? 'default' : 'outline'} onClick={() => setPanel(panel === 'sale' ? null : 'sale')}>
+              <ShieldCheck /> Record sale (advanced)
             </Button>
           )}
+        </div>
+      )}
+      {canWrite && offer.status === 'sold' && offer.sale && (
+        <div className="mt-3">
+          <Button size="sm" variant="outline" disabled={startRoute.isPending} onClick={confirmCover}>
+            {startRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Open / file policy
+          </Button>
         </div>
       )}
 

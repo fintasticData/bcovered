@@ -13,7 +13,7 @@ const PROPERTY_KEYS = COVER_CLASSES.filter((c) => c.group === 'property').map((c
 
 function quoteLabel(q: LeadDetail['quotes'][number]): string {
   const covers = q.risk_summary.covers ?? []
-  if (covers.length) return covers.map((c) => coverLabel(c) !== c ? coverLabel(c) : humanise(c)).slice(0, 2).join(', ') + (covers.length > 2 ? ` +${covers.length - 2}` : '')
+  if (covers.length) return covers.map((c) => (coverLabel(c) !== c ? coverLabel(c) : humanise(c))).slice(0, 2).join(', ') + (covers.length > 2 ? ` +${covers.length - 2}` : '')
   if (q.risk_summary.vehicle) return 'Motor comparison'
   return humanise(q.product_category)
 }
@@ -31,6 +31,10 @@ export function QuoteRequestPanel({ data }: { data: LeadDetail }) {
   const navigate = useNavigate()
   const create = useCreateQuoteRequest()
   const commercial = data.lead.line === 'commercial'
+  const qualified =
+    data.lead.status !== 'lead' &&
+    data.lead.status !== 'contacted' &&
+    Boolean(data.lead.qualification.confirmed_cover_need?.trim() || data.lead.product_category)
   const options = useMemo(
     () =>
       commercial
@@ -39,8 +43,22 @@ export function QuoteRequestPanel({ data }: { data: LeadDetail }) {
     [commercial],
   )
   const [picking, setPicking] = useState(false)
-  const [selected, setSelected] = useState<string[]>(() => (commercial ? suggestedCommercialCovers(data) : []))
+  const [selected, setSelected] = useState<string[]>(() => {
+    if (commercial) return suggestedCommercialCovers(data)
+    if (data.lead.product_category) return [data.lead.product_category]
+    return []
+  })
   const [error, setError] = useState<string | null>(null)
+
+  const missingBeforeSubmit = useMemo(() => {
+    const gaps: string[] = []
+    if (!data.lead.qualification.contact_person?.trim() && !(data.customer.full_name ?? '').trim()) gaps.push('Contact person')
+    if (!data.lead.qualification.confirmed_cover_need?.trim() && !selected.length) gaps.push('Confirmed cover need')
+    if (commercial && !data.lead.qualification.assets?.trim() && !data.lead.qualification.estimated_values?.trim()) {
+      gaps.push('Assets or estimated values')
+    }
+    return gaps
+  }, [data, selected, commercial])
 
   const toggle = (key: string) => {
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
@@ -65,9 +83,9 @@ export function QuoteRequestPanel({ data }: { data: LeadDetail }) {
     <section className="panel p-5">
       <h2 className="text-sm font-semibold text-navy-900">Quotes</h2>
       <p className="mt-1 text-[11px] text-navy-500">
-        {data.lead.product_category
-          ? 'Choose cover types when you start a quote from this opportunity.'
-          : 'No cover on this opportunity yet. Pick cover types here to start a quote when they ask.'}
+        {qualified
+          ? 'Open a draft quote request with confirmed details, or hand off for manual broking.'
+          : 'Review and qualify this opportunity before requesting a quote.'}
       </p>
 
       {data.quotes.length > 0 && (
@@ -86,12 +104,35 @@ export function QuoteRequestPanel({ data }: { data: LeadDetail }) {
         </ul>
       )}
 
-      {!picking ? (
+      {!qualified ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-amber-900">
+            Next action: {data.lead.next_action?.trim() || 'Confirm workshop assets and values / cover need'}
+          </p>
+          <Button type="button" variant="accent" size="sm" onClick={() => document.getElementById('lead-qualify')?.scrollIntoView({ behavior: 'smooth' })}>
+            Review and qualify
+          </Button>
+        </div>
+      ) : !picking ? (
         <div className="mt-3">
           {data.quotes.length === 0 && <p className="mb-3 text-xs text-navy-600">No comparison yet.</p>}
-          <Button type="button" variant="accent" size="sm" onClick={() => setPicking(true)}>
-            Request quote
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="accent" size="sm" onClick={() => setPicking(true)}>
+              Draft quote request
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void create.mutateAsync({ lead_id: data.lead.id, covers: selected.length ? selected : commercial ? suggestedCommercialCovers(data) : ['motor'] }).then((q) =>
+                  navigate(`/broker/quotes/${q.id}`),
+                )
+              }}
+            >
+              Manual broking task
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="mt-3 space-y-3">
@@ -115,10 +156,20 @@ export function QuoteRequestPanel({ data }: { data: LeadDetail }) {
               )
             })}
           </div>
+          {missingBeforeSubmit.length > 0 && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="font-semibold">Still missing before submission</p>
+              <ul className="mt-1 list-disc pl-4">
+                {missingBeforeSubmit.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {error && <p className="text-xs text-red-700">{error}</p>}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="accent" size="sm" disabled={create.isPending} onClick={() => void submit()}>
-              {create.isPending ? 'Opening…' : 'Confirm cover and open quote'}
+              {create.isPending ? 'Opening…' : 'Open draft quote request'}
             </Button>
             <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => setPicking(false)}>
               Cancel

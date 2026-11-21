@@ -11,11 +11,12 @@ import { EmptyState, ErrorState, LoadingState, PageHeader } from '../PageHeader'
 import { dateTime, ErrorText } from '../book/bits'
 
 const STATUS_LABEL = { active: 'In progress', completed: 'Complete', abandoned: 'Closed' } as const
-const GROUP_ORDER = ['policies', 'claims', 'quotes'] as const
+const GROUP_ORDER = ['policies', 'claims', 'quotes', 'financials'] as const
 const GROUP_LABEL: Record<(typeof GROUP_ORDER)[number], string> = {
   policies: 'Policies',
   claims: 'Claims',
   quotes: 'Quotes',
+  financials: 'Broker financials',
 }
 
 /** Routes hub: What you wanna do! + My work / Team work. */
@@ -32,17 +33,29 @@ export default function RoutesPage() {
 
   const { routes, runs } = q.data ?? { routes: [], runs: [] }
 
-  // Deep-link Add: /broker/routes?start=policy_setup&personId=…&policyId=…
+  // Deep-link Add: /broker/routes?start=policy_setup&personId=…&policyId=…&offerId=…
   useEffect(() => {
     const definition_id = params.get('start')
     if (!definition_id || autoStarted.current || start.isPending) return
     autoStarted.current = true
+    const offerId = params.get('offerId')
     start.mutate(
       {
         definition_id,
         person_id: params.get('personId'),
         policy_id: params.get('policyId'),
         claim_id: params.get('claimId'),
+        offer_id: offerId,
+        offer_prefill: offerId
+          ? {
+              insurer_name: params.get('insurer'),
+              cover_type: params.get('cover'),
+              premium_amount: params.get('premium') ? Number(params.get('premium')) : null,
+              item_label: params.get('item'),
+              item_type: params.get('itemType'),
+              reference: params.get('offerRef'),
+            }
+          : null,
         key: newKey(),
       },
       {
@@ -52,6 +65,13 @@ export default function RoutesPage() {
           next.delete('personId')
           next.delete('policyId')
           next.delete('claimId')
+          next.delete('offerId')
+          next.delete('insurer')
+          next.delete('cover')
+          next.delete('premium')
+          next.delete('item')
+          next.delete('itemType')
+          next.delete('offerRef')
           setParams(next, { replace: true })
           navigate(`/broker/routes/runs/${s.progress.run.id}`)
         },
@@ -132,6 +152,26 @@ export default function RoutesPage() {
           )
         })}
         <ErrorText error={start.error} />
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-navy-800">Broker financials</h3>
+          <div className="grid gap-3 md:grid-cols-3">
+            {[
+              { to: '/broker/financials?tab=transactions', title: 'Review commission', outcome: 'Open earnings with calculation, scale and allocations.' },
+              { to: '/broker/financials?tab=statements', title: 'Reconcile insurer statement', outcome: 'Match sample statement lines and investigate variances.' },
+              { to: '/broker/financials?tab=payouts', title: 'Review broker payouts', outcome: 'See simulated adviser and franchise payouts linked to earnings.' },
+            ].map((r) => (
+              <article key={r.to} className="panel flex flex-col gap-3 p-4">
+                <h4 className="text-base font-semibold text-navy-900">{r.title}</h4>
+                <p className="text-sm text-navy-600">{r.outcome}</p>
+                <div className="mt-auto flex justify-end">
+                  <Button size="sm" variant="accent" asChild>
+                    <Link to={r.to}>Open</Link>
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section aria-labelledby="routes-work" className="space-y-3">

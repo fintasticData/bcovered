@@ -95,7 +95,7 @@ export default function BusinessRiskReviewPage() {
   const openPortal = () => {
     if (!contactIdentity?.user_id) return
     session.set(contactIdentity.user_id)
-    navigate('/portal/business')
+    navigate('/my/business')
   }
 
   return (

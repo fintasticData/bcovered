@@ -7,6 +7,15 @@ export interface LaunchRouteArgs {
   person_id?: string | null
   policy_id?: string | null
   claim_id?: string | null
+  offer_id?: string | null
+  offer_prefill?: {
+    insurer_name?: string | null
+    cover_type?: string | null
+    premium_amount?: number | null
+    item_label?: string | null
+    item_type?: string | null
+    reference?: string | null
+  } | null
   intent?: string | null
   business_key?: string | null
 }
@@ -21,12 +30,15 @@ export async function launchRoute(args: LaunchRouteArgs) {
       policy_id: args.policy_id,
       claim_id: args.claim_id,
       intent: args.intent ?? args.definition_id,
+      draft_id: args.offer_id ?? null,
     })
   const started = await api.routes.start({
     definition_id: args.definition_id,
     person_id: args.person_id ?? null,
     policy_id: args.policy_id ?? null,
     claim_id: args.claim_id ?? null,
+    offer_id: args.offer_id ?? null,
+    offer_prefill: args.offer_prefill ?? null,
     business_key,
     intent: args.intent ?? null,
     key,

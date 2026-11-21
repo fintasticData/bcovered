@@ -1,14 +1,127 @@
 import { z } from 'zod'
-import type { LeadStatus } from '../db/schema'
+import type { Customer, LeadStatus } from '../db/schema'
 import { LEAD_PIPELINE_STAGES } from '../db/schema'
+import type { Repo } from '../db/store'
+import { detectIndustry, FALLBACK_TEMPLATE_KEY } from '../domain/commercial/industryTemplates'
 import { ToolError } from '../lib/errors'
 import { defineTool, STAFF, type ToolDef } from './registry'
+import { selfOf } from './person'
+import { templateFor } from './risk'
+
+export type CustomerAreaLink = {
+  person_id: string | null
+  business_profile_id: string | null
+  open_path: string
+}
+
+/** Resolve Customer Area path when person/profile already exists (read path). */
+export function customerAreaLinkForCustomer(repo: Repo, customer: Customer): CustomerAreaLink | null {
+  if (customer.customer_type === 'commercial') {
+    const profile = repo.find('business_profiles', (p) => p.customer_id === customer.id && p.status !== 'archived')
+    if (!profile) return null
+    return {
+      person_id: null,
+      business_profile_id: profile.id,
+      open_path: `/broker/customers/businesses/${profile.id}`,
+    }
+  }
+  const person = selfOf(repo, customer.id)
+  if (!person) return null
+  return {
+    person_id: person.id,
+    business_profile_id: null,
+    open_path: `/broker/customers/people/${person.id}`,
+  }
+}
+
+/** Ensure the CRM customer also appears in Customer Area (persons or business_profiles). */
+export function ensureCustomerAreaForCustomer(repo: Repo, customer: Customer, actorId: string | null): CustomerAreaLink {
+  const existing = customerAreaLinkForCustomer(repo, customer)
+  if (existing) return existing
+
+  if (customer.customer_type === 'commercial') {
+    let profile = repo.find('business_profiles', (p) => p.customer_id === customer.id && p.status !== 'archived')
+    if (!profile) {
+      const templates = repo.list('industry_risk_templates', (t) => t.is_active)
+      const industry = detectIndustry(customer.full_name, templates) ?? FALLBACK_TEMPLATE_KEY
+      const template = templateFor(repo, industry)
+      profile = repo.insert('business_profiles', {
+        customer_id: customer.id,
+        registered_name: customer.full_name,
+        trading_name: customer.full_name,
+        registration_number: null,
+        vat_number: null,
+        industry_key: template.key,
+        activities_summary: 'Commercial prospect captured as a lead.',
+        years_trading: null,
+        annual_turnover: null,
+        employee_count: null,
+        operating_regions: customer.region ? [customer.region] : [],
+        primary_contact:
+          customer.email || customer.phone
+            ? { name: customer.full_name, email: customer.email, phone: customer.phone, role: 'Contact' }
+            : null,
+        existing_cover: null,
+        loss_history: null,
+        cover_interests: [],
+        field_sources: {
+          registered_name: 'declared',
+          trading_name: 'declared',
+          industry_key: 'inferred',
+        },
+        missing_info: ['Contact person', 'Company registration number', 'Assets and sums insured', 'Current insurance'],
+        status: 'discovery',
+        assigned_broker_id: actorId,
+        is_synthetic: true,
+        created_by: actorId,
+      })
+    }
+    return {
+      person_id: null,
+      business_profile_id: profile.id,
+      open_path: `/broker/customers/businesses/${profile.id}`,
+    }
+  }
+
+  let person = selfOf(repo, customer.id)
+  if (!person) {
+    const parts = customer.full_name.trim().split(/\s+/).filter(Boolean)
+    const first_names = parts.length <= 1 ? customer.full_name.trim() || 'Prospect' : parts.slice(0, -1).join(' ')
+    const surname = parts.length <= 1 ? '—' : parts[parts.length - 1]!
+    person = repo.insert('persons', {
+      first_names,
+      surname,
+      preferred_name: null,
+      date_of_birth: null,
+      gender: null,
+      id_type: null,
+      id_lookup_hash: null,
+      id_last4: null,
+      date_of_death: null,
+      is_synthetic: true,
+    })
+    repo.insert('customer_persons', {
+      customer_id: customer.id,
+      person_id: person.id,
+      role: 'self',
+      is_primary: true,
+      effective_from: new Date().toISOString().slice(0, 10),
+      effective_to: null,
+    })
+  }
+  return {
+    person_id: person.id,
+    business_profile_id: null,
+    open_path: `/broker/customers/people/${person.id}`,
+  }
+}
 
 const LEAD_STATUSES = [
   'lead',
   'contacted',
+  'qualified',
   'quoting',
-  'proposal_released',
+  'offer_sent',
   'accepted',
   'live',
   'closed',
@@ -143,8 +256,14 @@ export const leadTools = [
         closed_at_stage: null,
         closed_at: null,
         policy_id: null,
+        next_action: null,
+        next_action_due_at: null,
+        last_activity_at: null,
+        qualification_confirmed: {},
+        activity: [],
       })
-      return { customer, lead, created }
+      const area = ensureCustomerAreaForCustomer(repo, customer, actor.type === 'user' ? actor.id : null)
+      return { customer, lead, created, ...area }
     },
     auditEntity: (r) => ({ table: 'leads', id: r.lead.id }),
   }),
@@ -157,7 +276,15 @@ export const leadTools = [
     input: z.object({ lead_id: z.uuid() }),
     run: ({ repo }, { lead_id }) => {
       const lead = repo.require('leads', lead_id)
-      return { lead, customer: repo.require('customers', lead.customer_id) }
+      const customer = repo.require('customers', lead.customer_id)
+      const area = customerAreaLinkForCustomer(repo, customer)
+      return {
+        lead,
+        customer,
+        person_id: area?.person_id ?? null,
+        business_profile_id: area?.business_profile_id ?? null,
+        open_path: area?.open_path ?? '/broker/customers',
+      }
     },
   }),
 
@@ -205,7 +332,7 @@ export const leadTools = [
     input: z.object({
       lead_id: z.uuid(),
       reason: z.string().trim().min(2),
-      closed_at_stage: z.enum(['lead', 'contacted', 'quoting', 'proposal_released', 'accepted', 'live']).optional(),
+      closed_at_stage: z.enum(['lead', 'contacted', 'qualified', 'quoting', 'offer_sent', 'accepted', 'live']).optional(),
     }),
     run: ({ repo }, { lead_id, reason, closed_at_stage }) => {
       const lead = repo.require('leads', lead_id)
@@ -270,6 +397,126 @@ export const leadTools = [
       return repo.update('leads', lead_id, {
         qualification: { ...lead.qualification, risk: { ...risk, assessed_at: new Date().toISOString() } },
         status: nextStatus,
+      })
+    },
+    auditEntity: (r) => ({ table: 'leads', id: r.id }),
+  }),
+
+  defineTool({
+    name: 'lead.save_qualification',
+    description: 'Save partial qualification details and optional next action. Advances to Qualified when cover need and next step are set.',
+    allow: [...STAFF],
+    sideEffect: true,
+    input: z.object({
+      lead_id: z.uuid(),
+      contact_person: z.string().optional(),
+      confirmed_cover_need: z.string().optional(),
+      assets: z.string().optional(),
+      estimated_values: z.string().optional(),
+      existing_cover: z.string().optional(),
+      renewal_date: z.string().optional(),
+      next_action: z.string().optional(),
+      next_action_due_at: z.string().datetime().nullable().optional(),
+      mark_qualified: z.boolean().optional(),
+    }),
+    run: ({ repo, actor }, input) => {
+      const lead = repo.require('leads', input.lead_id)
+      if (lead.status === 'closed' || lead.status === 'live') {
+        throw new ToolError('validation', 'This opportunity is already closed or live.')
+      }
+      const q = {
+        ...lead.qualification,
+        ...(input.contact_person !== undefined ? { contact_person: input.contact_person } : {}),
+        ...(input.confirmed_cover_need !== undefined ? { confirmed_cover_need: input.confirmed_cover_need } : {}),
+        ...(input.assets !== undefined ? { assets: input.assets } : {}),
+        ...(input.estimated_values !== undefined ? { estimated_values: input.estimated_values } : {}),
+        ...(input.existing_cover !== undefined ? { existing_cover: input.existing_cover } : {}),
+        ...(input.renewal_date !== undefined ? { renewal_date: input.renewal_date } : {}),
+      }
+      const confirmed = { ...(lead.qualification_confirmed ?? {}) }
+      for (const key of ['contact_person', 'confirmed_cover_need', 'assets', 'estimated_values', 'existing_cover', 'renewal_date'] as const) {
+        if (input[key] !== undefined && String(input[key] ?? '').trim()) confirmed[key] = 'broker'
+      }
+      const now = new Date().toISOString()
+      const activity = [
+        ...(lead.activity ?? []),
+        {
+          id: crypto.randomUUID(),
+          kind: 'qualification' as const,
+          outcome: 'Saved',
+          note: 'Qualification details updated',
+          at: now,
+          by: actor.type === 'user' ? actor.id : 'broker',
+        },
+      ]
+      const hasNeed = Boolean((q.confirmed_cover_need ?? '').trim())
+      const nextAction = input.next_action !== undefined ? input.next_action : lead.next_action
+      const advance =
+        input.mark_qualified ||
+        (hasNeed && Boolean((nextAction ?? '').trim()) && (lead.status === 'lead' || lead.status === 'contacted'))
+      const status = advance && LEAD_PIPELINE_STAGES.indexOf(lead.status as (typeof LEAD_PIPELINE_STAGES)[number]) < LEAD_PIPELINE_STAGES.indexOf('qualified')
+        ? 'qualified'
+        : lead.status
+      const missing = [...lead.missing_info]
+      const drop = (label: string, ok: boolean) => {
+        const i = missing.indexOf(label)
+        if (ok && i >= 0) missing.splice(i, 1)
+        if (!ok && i < 0) missing.push(label)
+      }
+      drop('Contact person', Boolean((q.contact_person ?? '').trim()))
+      drop('Assets and sums insured', Boolean((q.assets ?? '').trim()) || Boolean((q.estimated_values ?? '').trim()))
+      drop('Current insurance', Boolean((q.existing_cover ?? '').trim()) || Boolean((q.renewal_date ?? '').trim()))
+      return repo.update('leads', lead.id, {
+        qualification: q,
+        qualification_confirmed: confirmed,
+        next_action: nextAction ?? null,
+        next_action_due_at: input.next_action_due_at !== undefined ? input.next_action_due_at : lead.next_action_due_at,
+        last_activity_at: now,
+        activity,
+        status,
+        missing_info: missing,
+      })
+    },
+    auditEntity: (r) => ({ table: 'leads', id: r.id }),
+  }),
+
+  defineTool({
+    name: 'lead.log_activity',
+    description: 'Log contact, a note, or a follow-up on an opportunity. Successful contact advances Lead → Contacted.',
+    allow: [...STAFF],
+    sideEffect: true,
+    input: z.object({
+      lead_id: z.uuid(),
+      kind: z.enum(['contact', 'note', 'follow_up']),
+      outcome: z.string().optional(),
+      note: z.string().optional(),
+      next_action: z.string().optional(),
+      next_action_due_at: z.string().datetime().nullable().optional(),
+      successful_contact: z.boolean().optional(),
+    }),
+    run: ({ repo, actor }, input) => {
+      const lead = repo.require('leads', input.lead_id)
+      if (lead.status === 'closed') throw new ToolError('validation', 'This opportunity is closed.')
+      const now = new Date().toISOString()
+      const activity = [
+        ...(lead.activity ?? []),
+        {
+          id: crypto.randomUUID(),
+          kind: input.kind,
+          outcome: input.outcome ?? null,
+          note: input.note ?? null,
+          at: now,
+          by: actor.type === 'user' ? actor.id : 'broker',
+        },
+      ]
+      let status = lead.status
+      if (input.kind === 'contact' && input.successful_contact && status === 'lead') status = 'contacted'
+      return repo.update('leads', lead.id, {
+        activity,
+        last_activity_at: now,
+        status,
+        next_action: input.next_action !== undefined ? input.next_action : lead.next_action,
+        next_action_due_at: input.next_action_due_at !== undefined ? input.next_action_due_at : lead.next_action_due_at,
       })
     },
     auditEntity: (r) => ({ table: 'leads', id: r.id }),

@@ -106,6 +106,8 @@ export interface BusinessLocation {
   backup_power: boolean | null
   public_access: boolean
   seating_capacity: number | null
+  /** When set, Assets & cover Map uses Site layout for this place. */
+  floor_plan_url?: string | null
   source: FieldSource
   created_at: ISODate
   updated_at: ISODate
@@ -124,6 +126,8 @@ export interface BusinessActivity {
   created_at: ISODate
 }
 
+export type AssetMobilityType = 'fixed' | 'portable' | 'vehicle'
+
 export interface CommercialAsset {
   id: UUID
   tenant_id: UUID
@@ -135,9 +139,41 @@ export interface CommercialAsset {
   declared_value: number | null
   value_basis: ValueBasis
   valuation_date: ISODate | null
+  /** What the customer paid / acquisition cost when known. */
+  purchase_price?: number | null
+  purchase_date?: ISODate | null
+  /** Explicit insured amount from active cover (optional). */
+  insured_value?: number | null
+  /** How the asset moves — fixed at a place, portable across places, or vehicle. */
+  mobility_type?: AssetMobilityType
+  /** Usual base place (often same as location_id for fixed assets). */
+  usual_base_place_id?: UUID | null
   source: FieldSource
   created_at: ISODate
   updated_at: ISODate
+}
+
+/** Customer-confirmed places where a portable asset is typically used (count asset once in totals). */
+export interface AssetPlaceOfUse {
+  id: UUID
+  tenant_id: UUID
+  asset_id: UUID
+  place_id: UUID
+  relationship: 'typically_used'
+  created_at: ISODate
+}
+
+/** Effective-dated valuation history for commercial assets. */
+export interface CommercialAssetValuation {
+  id: UUID
+  tenant_id: UUID
+  asset_id: UUID
+  amount: number
+  value_basis: ValueBasis | 'purchase' | 'insured'
+  effective_from: ISODate
+  effective_to: ISODate | null
+  source: FieldSource | string
+  created_at: ISODate
 }
 
 export interface BusinessRiskProfile {
@@ -594,6 +630,7 @@ export interface CommercialTables {
   business_locations: BusinessLocation[]
   business_activities: BusinessActivity[]
   commercial_assets: CommercialAsset[]
+  asset_places_of_use: AssetPlaceOfUse[]
   business_risk_profiles: BusinessRiskProfile[]
   risk_dependencies: RiskDependency[]
   risk_exposures: RiskExposure[]

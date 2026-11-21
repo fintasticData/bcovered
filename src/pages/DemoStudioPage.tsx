@@ -1,11 +1,13 @@
-import { useNavigate } from 'react-router-dom'
-import { Bot, Building2, Database, FlaskConical, Handshake, Loader2, Play, RotateCcw, ShieldAlert, Target, Users } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Bot, Building2, Database, FlaskConical, Handshake, LayoutPanelLeft, Loader2, Play, RotateCcw, ShieldAlert, Target, Users } from 'lucide-react'
 import { session } from '@/api/client'
 import { useIdentities, usePlatform, useResetDemo } from '@/api/hooks'
 import { Button } from '@/components/ui/button'
+import { FINTASTIC_CENTRE_LINKS, FINTASTIC_DRAWER_LINKS } from '@/fintastic-ux'
 import { OB } from '@/server/db/onboardingSeed'
 import { BROKER_ONBOARDING, DEMO_BUSINESS_SUMMARIES, NEW_MOTOR_LEAD, PLANNED_COMMERCIAL_SCENARIOS, PLANNED_SCENARIOS, RESTAURANT_GROUP, type DemoScenario } from '@/server/demo/scenarios'
 import { OnboardingDemo } from './demo/OnboardingDemo'
+import { BrokerFinancialsDemo } from './demo/BrokerFinancialsDemo'
 
 export default function DemoStudioPage() {
   const navigate = useNavigate()
@@ -97,14 +99,26 @@ export default function DemoStudioPage() {
             </Button>
           </div>
           <p className="mb-3 text-xs text-navy-600">
-            Added with “Load demo businesses” on the Risk Twins page. Fixed records, so loading again adds nothing; Reset removes them.
+            Added with “Load demo businesses” on the Risk Twins page. Creates three commercial profiles plus portal contacts
+            (Anil Pillay, Lerato Molefe, Kagiso Mokoena) for My Business Page. Loading again only fills missing portal users;
+            Reset removes them.
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {DEMO_BUSINESS_SUMMARIES.map((b) => (
-              <div key={b.name} className="panel p-5">
+              <div key={b.name} className="panel flex flex-col p-5">
                 <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">{b.industry}</p>
                 <h4 className="mt-1 font-semibold text-navy-900">{b.name}</h4>
-                <p className="mt-1 text-xs text-navy-600">{b.summary}</p>
+                <p className="mt-1 flex-1 text-xs text-navy-600">{b.summary}</p>
+                <p className="mt-2 text-[11px] font-semibold text-navy-700">Portal · {b.contactName}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 self-start"
+                  onClick={() => asBroker(b.previewPath)}
+                  disabled={!broker}
+                >
+                  Preview My Business Page
+                </Button>
               </div>
             ))}
           </div>
@@ -122,6 +136,55 @@ export default function DemoStudioPage() {
             ))}
           </div>
         </section>
+
+        <h2 className="mt-10 mb-3 flex items-center gap-2 text-sm font-semibold text-navy-900">
+          <LayoutPanelLeft className="h-4 w-4 text-brand-500" /> Fintastic UX
+        </h2>
+        <section className="panel space-y-5 p-5">
+          <div>
+            <h3 className="text-sm font-semibold text-navy-900">Centre-first hosts</h3>
+            <p className="mt-1 text-xs text-navy-600">
+              Full main workspace with Russ beside the decision. Never open these inside a right slide-out.
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {FINTASTIC_CENTRE_LINKS.map((link) => (
+                <li key={link.id}>
+                  <Button size="sm" variant="outline" onClick={() => asBroker(link.to)} disabled={!broker} title={link.hint}>
+                    {link.label}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="border-t border-navy-800/10 pt-4">
+            <h3 className="text-sm font-semibold text-navy-900">Right-hand modes</h3>
+            <p className="mt-1 text-xs text-navy-600">
+              Record work drawer (complete) · focused-item inspect (thin) · task form (bound Create job). Right-click / ⋯ uses the same ActionCard → form handoff.
+            </p>
+            <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+              {FINTASTIC_DRAWER_LINKS.map((link) => (
+                <li key={link.id} className="rounded-xl border border-navy-800/10 bg-navy-50/40 p-3">
+                  <p className="text-[11px] font-semibold tracking-wide text-navy-500 uppercase">{link.label}</p>
+                  <p className="mt-1 text-xs text-navy-600">{link.hint}</p>
+                  <Button size="sm" variant="accent" className="mt-3" onClick={() => asBroker(link.to)} disabled={!broker}>
+                    Open
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="text-xs text-navy-500">
+            Full notes:{' '}
+            <Link to="/updates#fintastic-drawers" className="font-semibold text-brand-700 hover:underline">
+              Updates · Fintastic drawers
+            </Link>
+          </p>
+        </section>
+
+        <h2 className="mt-10 mb-3 flex items-center gap-2 text-sm font-semibold text-navy-900">
+          <FlaskConical className="h-4 w-4 text-brand-500" /> Broker financials
+        </h2>
+        <BrokerFinancialsDemo />
 
         <h2 className="mt-10 mb-3 flex items-center gap-2 text-sm font-semibold text-navy-900">
           <Handshake className="h-4 w-4 text-brand-500" /> Broker onboarding and brokerage workspaces

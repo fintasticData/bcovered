@@ -90,6 +90,21 @@ const PAYMENT_REPAIR: Opt[] = [
   { value: 'outstanding', label: 'Outstanding' },
 ]
 
+const COVER_TYPES: Opt[] = [
+  { value: 'motor', label: 'Motor' },
+  { value: 'home', label: 'Home / building' },
+  { value: 'contents', label: 'Contents' },
+  { value: 'motorbike', label: 'Motorbike' },
+  { value: 'valuables', label: 'Valuables' },
+  { value: 'other', label: 'Other' },
+]
+
+const ITEM_TYPES: Opt[] = [
+  { value: 'vehicle', label: 'Vehicle' },
+  { value: 'building', label: 'Building' },
+  { value: 'contents', label: 'Contents' },
+]
+
 const FIELD_OPTIONS: Record<string, Opt[]> = {
   channel: CHANNELS,
   confirmation_source: CONFIRM_SOURCES,
@@ -103,6 +118,8 @@ const FIELD_OPTIONS: Record<string, Opt[]> = {
   settlement_status: SETTLEMENT_STATUS,
   payment_status: PAYMENT_REPAIR,
   repair_status: PAYMENT_REPAIR,
+  cover_type: COVER_TYPES,
+  item_type: ITEM_TYPES,
 }
 
 function optionsFor(field: string, actionId: string): Opt[] | undefined {
@@ -116,6 +133,7 @@ function optionsFor(field: string, actionId: string): Opt[] | undefined {
 /** Exact action id → fields. Order matters; first match wins via exact lookup. */
 const FIELDS_BY_ACTION: Record<string, string[]> = {
   'policy_setup.source.confirm': ['source_type', 'quote_id', 'policy_number', 'schedule_note'],
+  'policy_setup.details.review': ['insurer_name', 'cover_type', 'premium_amount', 'excess', 'item_label', 'item_type'],
   'policy_setup.placement.confirm': ['policy_number', 'confirmed_effective_at', 'confirmation_source', 'insurer_reference'],
   'policy_setup.file.handover': ['channel', 'note'],
   'policy_change.capture.request': ['policy_id', 'requested_effective_at', 'summary', 'notes'],
@@ -188,7 +206,22 @@ function SelectField({
 }
 
 function human(f: string) {
-  return f.replace(/_/g, ' ')
+  const labels: Record<string, string> = {
+    insurer_name: 'Insurer',
+    cover_type: 'Cover type',
+    premium_amount: 'Monthly premium (R)',
+    excess: 'Excess (R)',
+    item_label: 'Insured item (e.g. 2019 Toyota Corolla CA 123-456)',
+    item_type: 'Item type',
+    policy_number: 'Policy number',
+    confirmed_effective_at: 'Confirmed effective date',
+    confirmation_source: 'Confirmation source',
+    insurer_reference: 'Insurer reference',
+    quote_id: 'Quote / offer reference',
+    schedule_note: 'Schedule note',
+    source_type: 'Source',
+  }
+  return labels[f] ?? f.replace(/_/g, ' ')
 }
 
 function HubClientSelect({ busy, run, progress }: SurfaceProps) {
@@ -302,10 +335,20 @@ export function HubFormSurface(props: SurfaceProps) {
 
   const state = progress.run.state as Record<string, unknown>
   const personId = (progress.run.subject_id || (state.client as { person_id?: string } | undefined)?.person_id || '') as string
+  const str = (k: string) => (typeof state[k] === 'string' || typeof state[k] === 'number' ? String(state[k]) : '')
   const [form, setForm] = useState<Record<string, string>>(() => ({
     policy_id: (state.policy_id as string) || progress.run.policy_id || '',
     claim_id: (state.claim_id as string) || progress.run.claim_id || '',
-    source_type: (state.source_type as string) || '',
+    source_type: str('source_type'),
+    quote_id: str('quote_id') || str('offer_id'),
+    offer_id: str('offer_id') || str('quote_id'),
+    insurer_name: str('insurer_name'),
+    cover_type: str('cover_type'),
+    premium_amount: str('premium_amount'),
+    item_label: str('item_label'),
+    item_type: str('item_type'),
+    policy_number: str('policy_number'),
+    insurer_reference: str('insurer_reference'),
   }))
   const [confirmed, setConfirmed] = useState(false)
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
@@ -420,9 +463,17 @@ export function HubFormSurface(props: SurfaceProps) {
       {action.id === 'policy_setup.source.confirm' && (
         <div className="flex flex-wrap gap-2 text-xs">
           {personId && sourceType === 'accepted_quote' && (
-            <Link className="inline-flex items-center gap-1 font-semibold text-brand-700 underline" to={`/broker/book/clients/${personId}`}>
-              <Plus className="h-3 w-3" /> Add / open quotes on client
-            </Link>
+            <>
+              {(form.quote_id || form.offer_id) && (
+                <p className="w-full text-navy-700">
+                  Linked accepted offer <span className="font-mono font-semibold">{form.quote_id || form.offer_id}</span>
+                  {form.insurer_name ? ` · ${form.insurer_name}` : ''}. Review details next, then confirm placement.
+                </p>
+              )}
+              <Link className="inline-flex items-center gap-1 font-semibold text-brand-700 underline" to={`/broker/customers?person=${personId}&tab=quotes`}>
+                <Plus className="h-3 w-3" /> Open quotes on client
+              </Link>
+            </>
           )}
           {personId && sourceType === 'insurer_schedule' && (
             <p className="text-navy-600">Paste a schedule reference or note below. File the schedule on the client record after save.</p>

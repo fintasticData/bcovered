@@ -138,12 +138,12 @@ export const SCREENS: Screen[] = [
   },
 
   // ------------------------------------------------------------------ portals
-  { route: '/portal', label: 'My portal', area: 'portal', roles: ['customer'], tables: ['customer_user_access', 'quotes', 'communications', 'tasks', 'jobs'], current: 'service_layer' },
+  { route: '/portal', label: 'Redirects to My Page', area: 'portal', roles: ['customer'], tables: ['customer_user_access', 'quotes', 'communications', 'tasks', 'jobs'], current: 'service_layer' },
   { route: '/portal/proposals/:quoteId', label: 'Released proposal', area: 'portal', roles: ['customer'], tables: ['quotes', 'quote_options', 'quote_option_terms', 'insurers'], current: 'service_layer' },
-  { route: '/portal/business', label: 'Business portal', area: 'portal', roles: ['customer'], tables: ['customer_user_access', 'business_profiles', 'tasks', 'commercial_submissions', 'documents'], current: 'service_layer' },
+  { route: '/my/business', label: 'My Business Page (assets, requests, values)', area: 'portal', roles: ['customer'], tables: ['customer_user_access', 'business_profiles', 'tasks', 'commercial_submissions', 'documents', 'commercial_assets'], current: 'service_layer' },
   {
-    route: '/portal/business/risk-profile',
-    label: 'Business risk profile',
+    route: '/my/business/risk-profile',
+    label: 'Business risk profile (edit declarations)',
     area: 'portal',
     roles: ['customer'],
     tables: ['business_profiles', 'twin_entities', 'business_legal_entities', 'business_locations', 'business_activities', 'commercial_assets', 'loss_events'],
@@ -153,11 +153,11 @@ export const SCREENS: Screen[] = [
   // ------------------------------------------------------------------ broker: personal
   { route: '/broker', label: 'Overview', area: 'broker', roles: STAFF, tables: ['leads', 'approval_requests', 'quotes', 'jobs', 'customers', 'audit_events', 'app_users', 'agents'], current: 'service_layer' },
   { route: '/broker/workspace', label: 'AR, Ava and Russ: database copilots (Records) and workflow lenses (Workflows)', area: 'broker', roles: STAFF, tables: ['conversations', 'conversation_messages', ...JOB_TRACE, 'leads', 'quotes', 'approval_requests', 'customers', 'persons', 'policies', 'client_interactions', 'copilot_actions'], current: 'service_layer' },
-  { route: '/broker/book', label: 'My workspace: client grid, team, referrals and Russ (Supabase)', area: 'broker', roles: STAFF, tables: ['persons', 'customers', 'sales_team_members', 'sales_enquiries', 'sales_offers', 'sales_records', 'client_interactions', 'tasks', 'quotes', 'quote_options', 'copilot_actions'], current: 'service_layer' },
+  { route: '/broker/customers', label: 'Customer Area: people queue, team, referrals, businesses and Ava (Supabase)', area: 'broker', roles: STAFF, tables: ['persons', 'customers', 'sales_team_members', 'sales_enquiries', 'sales_offers', 'sales_records', 'client_interactions', 'tasks', 'quotes', 'quote_options', 'copilot_actions'], current: 'service_layer' },
   { route: '/broker/routes', label: 'Routes: What you wanna do! action hub (policies, claims, quotes) plus My work / Team work', area: 'broker', roles: STAFF, tables: ['route_runs', 'route_action_results', 'persons'], current: 'service_layer' },
   { route: '/broker/routes/runs/:runId', label: 'Route guide: phases and actions with Russ; policy/claim/quote jobs and Demo Quotes', area: 'broker', roles: STAFF, tables: ['route_runs', 'route_action_results', 'persons', 'customers', 'client_interactions', 'tasks', 'claims', 'policy_service_requests', 'copilot_actions'], current: 'service_layer' },
   { route: '/broker/franchise', label: 'Franchise: outlet performance (Live by default), franchise enquiries, franchisees, outlet QR codes and Russ (Supabase)', area: 'broker', roles: STAFF, tables: ['franchise_partners', 'franchise_outlets', 'franchise_outlet_staff', 'sales_enquiries', 'sales_records', 'sales_offers', 'copilot_actions'], current: 'service_layer' },
-  { route: '/broker/book/clients/:personId', label: 'Client sales record: offers, sale and communications timeline (Supabase)', area: 'broker', roles: STAFF, tables: ['persons', 'customers', 'sales_enquiries', 'sales_offers', 'sales_records', 'client_interactions', 'tasks', 'contact_assignment_events'], current: 'service_layer' },
+  { route: '/broker/customers/people/:personId', label: 'Client sales record: offers, sale and communications timeline (Supabase)', area: 'broker', roles: STAFF, tables: ['persons', 'customers', 'sales_enquiries', 'sales_offers', 'sales_records', 'client_interactions', 'tasks', 'contact_assignment_events'], current: 'service_layer' },
   { route: '/broker/personal', label: 'Personal lines by product', area: 'broker', roles: STAFF, tables: ['leads', 'quotes', 'policies', 'customers', 'insurers'], current: 'service_layer' },
   { route: '/broker/personal/policies/:policyId', label: 'Short-term policy with notes and activity (Supabase)', area: 'broker', roles: STAFF, tables: ['policies', 'customers', 'persons', 'insurers', 'client_interactions'], current: 'service_layer' },
   { route: '/broker/accounts/:accountId', label: 'Client account overview and history (Supabase)', area: 'broker', roles: STAFF, tables: ['customers', 'persons', 'policies', 'business_profiles', 'group_schemes', 'client_interactions', 'tasks'], current: 'service_layer' },

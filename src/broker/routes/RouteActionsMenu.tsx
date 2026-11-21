@@ -9,12 +9,23 @@ export function RouteStartButtons({
   personId,
   policyId,
   claimId,
+  offerId,
+  offerPrefill,
   actions,
 }: {
   personId: string
   policyId?: string | null
   claimId?: string | null
-  actions: Array<{ definition_id: string; label: string }>
+  offerId?: string | null
+  offerPrefill?: {
+    insurer_name?: string | null
+    cover_type?: string | null
+    premium_amount?: number | null
+    item_label?: string | null
+    item_type?: string | null
+    reference?: string | null
+  } | null
+  actions: Array<{ definition_id: string; label: string; variant?: 'outline' | 'accent' | 'default' }>
 }) {
   const start = useStartRoute()
   const navigate = useNavigate()
@@ -23,9 +34,9 @@ export function RouteStartButtons({
     <div className="flex flex-wrap gap-1.5">
       {actions.map((a) => (
         <Button
-          key={a.definition_id}
+          key={a.definition_id + (a.label ?? '')}
           size="sm"
-          variant="outline"
+          variant={a.variant ?? 'outline'}
           disabled={start.isPending}
           onClick={() =>
             start.mutate(
@@ -34,6 +45,8 @@ export function RouteStartButtons({
                 person_id: personId,
                 policy_id: policyId ?? null,
                 claim_id: claimId ?? null,
+                offer_id: offerId ?? null,
+                offer_prefill: offerPrefill ?? null,
                 key: newKey(),
               },
               { onSuccess: (s) => navigate(guidePath(s.progress.run.id)) },

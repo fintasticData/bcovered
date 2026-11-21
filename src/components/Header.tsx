@@ -138,16 +138,27 @@ export default function Header() {
   const { pathname } = useLocation()
   const navRef = useRef<HTMLElement>(null)
   const { data: me } = useMe()
-  const workspace =
-    me?.platform_role
-      ? { to: '/platform/onboarding', label: 'Platform admin' }
-      : me?.member_role && me.organisation?.lifecycle_status !== 'active'
-        ? { to: '/onboarding', label: 'Continue onboarding' }
-        : me?.role === 'customer' || me?.member_role || (me && ['broker', 'manager', 'admin'].includes(me.role))
-          ? { to: '/my', label: 'My Area' }
+  const isStaff =
+    Boolean(me?.member_role) ||
+    Boolean(me?.platform_role) ||
+    Boolean(me && ['broker', 'manager', 'admin', 'platform_admin'].includes(me.role))
+  const workspace = me?.platform_role
+    ? { to: '/platform/onboarding', label: 'Platform admin' }
+    : me?.member_role && me.organisation?.lifecycle_status !== 'active'
+      ? { to: '/onboarding', label: 'Continue onboarding' }
+      : me?.role === 'customer'
+        ? { to: me.home || '/my', label: 'My Page' }
+        : isStaff
+          ? { to: '/broker/customers', label: 'Customer Area' }
           : null
   const inPersonal = pathname.startsWith('/insurance/')
   const inBusiness = pathname.startsWith('/business')
+  const onCoverDesk =
+    pathname === '/my' ||
+    pathname.startsWith('/my/') ||
+    pathname === '/demo/my' ||
+    pathname.startsWith('/demo/my/')
+  const shellX = onCoverDesk ? 'desk-x' : 'container-x'
 
   useEffect(() => {
     setOpen(false)
@@ -171,7 +182,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-800/10 bg-sand/90 backdrop-blur">
-      <div className="container-x flex h-18 items-center justify-between gap-4 py-3">
+      <div className={`${shellX} flex h-18 items-center justify-between gap-4 py-3`}>
         <Logo />
 
         <nav ref={navRef} className="hidden min-w-0 items-center gap-0.5 lg:flex xl:gap-1" aria-label="Main">
@@ -187,7 +198,6 @@ export default function Header() {
           <NavLink to="/demo" className={navLink()}>Demo Studio</NavLink>
           <NavLink to="/brokers/join" className={navLink('hidden 2xl:inline-block')}>For brokers</NavLink>
           <NavLink to="/help" className={navLink('hidden 2xl:inline-block')}>Help</NavLink>
-          {workspace && <NavLink to={workspace.to} className={navLink()}>{workspace.label}</NavLink>}
         </nav>
 
         <div className="hidden shrink-0 items-center gap-3 lg:flex">
@@ -201,8 +211,8 @@ export default function Header() {
               </Link>
             </>
           ) : (
-            <Link to={workspace?.to ?? '/my'} className="btn-primary whitespace-nowrap px-4 xl:px-6">
-              {workspace?.label ?? 'My Area'}
+            <Link to={workspace?.to ?? (me?.role === 'customer' ? me.home || '/my' : '/broker/customers')} className="btn-primary whitespace-nowrap px-4 xl:px-6">
+              {workspace?.label ?? (me?.role === 'customer' ? 'My Page' : 'Customer Area')}
             </Link>
           )}
           <RoleSwitcher compact />
@@ -220,7 +230,7 @@ export default function Header() {
 
       {open && (
         <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-brand-800/10 bg-white lg:hidden">
-          <div className="container-x space-y-1 py-4">
+          <div className={`${shellX} space-y-1 py-4`}>
             <div data-identity="personal" className="space-y-1 border-l-4 border-brand-500 pl-1">
               <p className="eyebrow flex items-center gap-1.5 px-3 pb-1">
                 <User className="h-3.5 w-3.5" /> Personal

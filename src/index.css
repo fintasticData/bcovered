@@ -13,9 +13,21 @@
   --color-brand-700: #124d4a;
   --color-brand-800: #0f3d3e;
   --color-brand-900: #0a2b2c;
+  --color-gold-50: #fff9eb;
+  --color-gold-100: #fef0c8;
   --color-gold-300: #f8d27e;
   --color-gold-400: #f5b841;
   --color-gold-500: #e39f1c;
+  --color-gold-700: #9a6b0a;
+  --color-gold-900: #5c3f06;
+  /* African-inspired metal: silver alongside gold */
+  --color-silver-50: #f7f7f8;
+  --color-silver-100: #eceef1;
+  --color-silver-200: #d4d8de;
+  --color-silver-300: #b8bfc8;
+  --color-silver-500: #8a93a0;
+  --color-silver-700: #5c6570;
+  --color-silver-900: #2e343c;
   --color-sand: #faf7f2;
 
   --color-navy-50: #f2f5fa;
@@ -103,6 +115,10 @@ body {
 @utility container-x {
   @apply mx-auto w-full max-w-7xl px-5 sm:px-8;
 }
+/** Customer / broker workspaces — full usable width (no 7xl cap); gutters only */
+@utility desk-x {
+  @apply w-full px-3 sm:px-5 lg:px-8 xl:px-10;
+}
 @utility btn {
   @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
 }
@@ -150,6 +166,11 @@ body {
   select,
   textarea {
     font-size: 16px;
+  }
+
+  /* Prefer full-bleed drawers and avoid iOS rubber-band clipping under fixed shells */
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 }
 

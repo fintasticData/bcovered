@@ -39,15 +39,14 @@ export function ResearchEvidence({ data }: { data: LeadDetail }) {
     ['Purchasing intent', research.purchasing_intent],
   ] as const
   return (
-    <section className="panel p-5">
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-navy-900">Research and evidence</h2>
+        <p className="text-[11px] text-navy-500">Found by Russ from public pages. Outreach is left to you.</p>
         <span className="flex items-center gap-1.5">
           {p.is_sample && <SampleDataBadge />}
           {p.status !== 'active' && <span className="rounded bg-navy-100 px-1.5 py-0.5 text-[10px] font-semibold text-navy-700 uppercase">{humanise(p.status)}</span>}
         </span>
       </div>
-      <p className="text-[11px] text-navy-500">Found by Russ from public pages. Outreach is left to you.</p>
 
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <div>
@@ -148,6 +147,6 @@ export function ResearchEvidence({ data }: { data: LeadDetail }) {
           </ul>
         </>
       )}
-    </section>
+    </div>
   )
 }

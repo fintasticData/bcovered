@@ -41,7 +41,7 @@ function ContextControls({ menuPlacement }: { menuPlacement: 'above' | 'aside' }
 
       <div className="space-y-1.5">
         <p className="flex items-center gap-1.5 px-1 text-[10px] font-semibold text-navy-400">
-          <Eye className="h-3 w-3" /> Preview
+          <Eye className="h-3 w-3" /> Staff view
         </p>
         <PerspectiveSwitcher dark menuPlacement={menuPlacement} fullWidth />
       </div>

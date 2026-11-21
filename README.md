@@ -41,7 +41,7 @@ It runs as one durable job (`commercial_discovery_review`) on the same orchestra
 | `/broker/commercial` | Commercial Copilot (≈40%) + results, execution plan, Risk Twin and approval (≈60%). Try “Review Ubuntu Foods and identify outstanding insurance questions” |
 | `/broker/commercial/clients/:id` | Risk Twin map, exposures with explained advisory priority, provenance-labelled profile, requests |
 | `/broker/commercial/submissions/:id` | Submission editor: Current / Suggested / Apply to draft, sections, pack preview, export, approval |
-| `/portal/business`, `/portal/business/risk-profile` | Customer view as Nomsa Dlamini: review status, document requests, provenance labels |
+| `/my/business`, `/my/business/risk-profile` | Customer My Business Page as Nomsa Dlamini: assets, requests, risk profile (`/portal/business*` redirects here) |
 
 Guardrails: exposures are “potential” and never confirmed as covered without analysed wording; priority is advisory and lists its
 inputs; agents cannot overwrite verified values or approve; any pack change makes a pending approval stale; nothing is sent to an

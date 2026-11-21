@@ -14,6 +14,16 @@ const write = (scope: string, id: string | null) => {
   localStorage.setItem(KEY, JSON.stringify(all))
 }
 
+/** Drop cached conversation ids when Demo-as / Auth identity changes (stops 403 recreate loops). */
+export function clearPersistentConversations() {
+  try {
+    localStorage.removeItem(KEY)
+  } catch {
+    // private mode
+  }
+  inFlight.clear()
+}
+
 /** Keeps one conversation per channel and identity in this browser, starting a fresh one when needed. */
 export function usePersistentConversation(channel: Channel, assistant?: AssistantKind) {
   const token = useSessionToken()

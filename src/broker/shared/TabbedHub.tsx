@@ -27,6 +27,7 @@ export const SETTINGS_HUB: Hub = {
     { to: '/broker/settings/profile', label: 'Brokerage profile' },
     { to: '/broker/settings/team', label: 'Team' },
     { to: '/broker/settings/insurers', label: 'Insurer access' },
+    { to: '/broker/settings/commission-scales', label: 'Commission & fee scales' },
     { to: '/broker/imports/client-book', label: 'Client-book import' },
   ],
 }

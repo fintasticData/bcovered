@@ -41,6 +41,9 @@ export const useLead = (id: string | undefined) =>
   useQuery({ queryKey: useKey('lead', id), queryFn: () => api.lead(id!), enabled: Boolean(id) })
 export const useCaptureLead = () => useInvalidatingMutation(api.captureLead)
 export const useCloseLead = () => useInvalidatingMutation(api.closeLead)
+export const useSaveLeadQualification = () => useInvalidatingMutation(api.saveLeadQualification)
+export const useLogLeadActivity = () => useInvalidatingMutation(api.logLeadActivity)
+export const useDemoAdvanceLeads = () => useInvalidatingMutation(api.demoAdvanceLeads)
 export const useBulkLeads = () => useInvalidatingMutation(api.bulkLeads)
 
 export const useQuote = (id: string | undefined) =>
@@ -79,6 +82,8 @@ export const useUpdateSection = () => useInvalidatingMutation(c.updateSection)
 export const useRequestSubmissionApproval = () => useInvalidatingMutation(c.requestApproval)
 export const useUpdateTask = () => useInvalidatingMutation(c.updateTask)
 export const usePortalBusiness = () => useQuery({ queryKey: useKey('portal-business'), queryFn: c.portal })
+export const useUpdatePortalProfile = () => useInvalidatingMutation(c.updatePortalProfile)
+export const useUpdatePortalAsset = () => useInvalidatingMutation(c.updatePortalAsset)
 
 const t = api.twin
 export const useTwinWorkspace = (profileId: string | null | undefined) =>

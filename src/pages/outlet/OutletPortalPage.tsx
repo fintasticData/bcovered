@@ -60,7 +60,7 @@ export default function OutletPortalPage() {
               {outlets.map((o) => <option key={o.outlet.id} value={o.outlet.id}>{o.outlet.label}</option>)}
             </select>
           )}
-          {current.staff.can_sell && <Link to="/broker/book" className="btn-dark">Open My workspace to make offers</Link>}
+          {current.staff.can_sell && <Link to="/broker/customers" className="btn-dark">Open Customer Area to make offers</Link>}
           <button type="button" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink/60 hover:text-ink" onClick={() => void supabaseAuth.signOut()}>
             <LogOut className="h-4 w-4" /> Sign out
           </button>

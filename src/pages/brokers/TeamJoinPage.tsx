@@ -27,7 +27,7 @@ export default function TeamJoinPage() {
 
   const signedInAsInvitee = auth.status === 'signed_in' && inv?.email && auth.email?.toLowerCase() === inv.email.toLowerCase()
 
-  const done = () => navigate('/broker/book', { replace: true })
+  const done = () => navigate('/broker/customers', { replace: true })
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
     setError(null)
@@ -60,7 +60,7 @@ export default function TeamJoinPage() {
             <ShieldAlert className="h-8 w-8 text-amber-500" />
             <h1 className="font-display text-2xl text-brand-900">This invitation cannot be used</h1>
             <p className="text-sm text-ink/70">{inv?.reason ?? (preview.error as Error | null)?.message ?? 'Ask your broker for a new invitation link.'}</p>
-            <Link to="/sign-in?next=/broker/book" className="text-sm font-semibold text-brand-600 underline">Sign in instead</Link>
+            <Link to="/sign-in?next=/broker/customers" className="text-sm font-semibold text-brand-600 underline">Sign in instead</Link>
           </div>
         ) : confirm ? (
           <div className="mt-4 space-y-3 text-center">

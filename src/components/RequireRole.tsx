@@ -40,7 +40,7 @@ export function RequireRole({ roles, area, children }: { roles: Role[]; area: st
             </Link>
           </div>
           <p className="max-w-sm text-[11px] leading-snug text-navy-500">
-            Tip: Demo as <strong>Johan van der Merwe</strong> for Client zone, or <strong>Thabo Nkosi</strong> for Broker zone. Accounts created only in this browser are not listed under Supabase Auth Users.
+            Tip: Demo as <strong>Naledi</strong> for VIP Concierge, <strong>Lerato Mokoena</strong> for the Concierge queue, or <strong>Protea Concierge Desk</strong> for the insurer partner view.
           </p>
         </div>
       </div>

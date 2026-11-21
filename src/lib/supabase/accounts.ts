@@ -34,12 +34,13 @@ export interface ClientProfile {
   name: string
   email: string
   customer_id?: string
+  person_id?: string
   tenant_id?: string
   has_workspace?: boolean
   home: string
 }
 
-const DATABASE_USERS_KEY = 'bcovered_database_users_v1'
+const DATABASE_USERS_KEY = 'bcovered_database_users_v2'
 
 function databaseUsers(): string[] {
   try {
@@ -154,7 +155,11 @@ export async function ensureClientProfile(): Promise<ClientProfile> {
     }
     throw new Error(error.message)
   }
-  return data as ClientProfile
+  const profile = data as ClientProfile
+  if (profile.kind === 'client' && !profile.person_id) {
+    throw new Error('Your customer profile is missing a Person link. Ask your broker for an invitation, or contact support.')
+  }
+  return profile
 }
 
 /**
@@ -164,7 +169,18 @@ export async function ensureClientProfile(): Promise<ClientProfile> {
 export async function adoptDatabaseUser(): Promise<SalesProfile | null> {
   const auth = supabaseAuth.get()
   if (!supabase || auth.status !== 'signed_in' || !auth.userId) return null
-  rememberDatabaseUser(auth.userId)
+  // Seeded Demo-as Auth (VIP Concierge + brokerage demo staff) must stay switchable.
+  const seededDemo =
+    Boolean(auth.email) &&
+    (/@(?:bcovered|example)\.demo$/i.test(auth.email!) ||
+      [
+        'naledi.vip@example.demo',
+        'thandi.walkthrough@example.demo',
+        'lerato.mokoena@bcovered.demo',
+        'protea.desk@bcovered.demo',
+        'karoo.desk@bcovered.demo',
+      ].includes(auth.email!.toLowerCase()))
+  if (!seededDemo) rememberDatabaseUser(auth.userId)
   const { data: sessionData } = await supabase.auth.getSession()
   if (!sessionData.session?.access_token) {
     throw new Error('Your sign-in session was lost before your profile could open. Sign in again.')
@@ -178,6 +194,11 @@ export async function adoptDatabaseUser(): Promise<SalesProfile | null> {
   // Creator / platform staff with no brokerage yet still need the local platform_staff mirror for /platform.
   if (profile.platform_role) mirrorPlatformRole(auth.userId, profile.platform_role)
   const demo = auth.email ? identity.userByEmail(auth.email) : undefined
+  // Seeded Demo-as (staff or VIP customer): keep the in-browser Demo identity; do not adopt as a live login.
+  if (demo && seededDemo) {
+    session.set(demo.id)
+    return profile
+  }
   // Only keep seeded Demo-as staff identities — never divert a live Client Auth login.
   if (demo && demo.role !== 'customer' && !isDatabaseUser(demo.id) && demo.id !== auth.userId) {
     session.set(demo.id)
@@ -240,12 +261,13 @@ export async function signInDatabase(a: { email: string; password: string }): Pr
   const profile = await adoptDatabaseUser()
   if (profile?.has_workspace) {
     session.set(auth.userId)
-    return { home: '/my' }
+    return { home: '/broker/customers' }
   }
   // adoptDatabaseUser already ensured + mirrored a client profile when there is no brokerage workspace.
   const userId = supabaseAuth.get().userId ?? auth.userId
   session.set(userId)
-  return { home: '/my' }
+  const client = await ensureClientProfile().catch(() => null)
+  return { home: client?.home || '/my' }
 }
 
 export interface BrokerSignUp {
@@ -264,7 +286,7 @@ export async function signUpBroker(a: BrokerSignUp): Promise<{ status: 'ready'; 
   const { data, error } = await supabase.auth.signUp({
     email,
     password: a.password,
-    options: { data: { full_name: a.full_name.trim(), brokerage_name: a.brokerage_name.trim() }, emailRedirectTo: `${window.location.origin}/sign-in?next=/broker/book` },
+    options: { data: { full_name: a.full_name.trim(), brokerage_name: a.brokerage_name.trim() }, emailRedirectTo: `${window.location.origin}/sign-in?next=/broker/customers` },
   })
   if (error) throw new Error(error.message)
   if (!data.session && !(await signInAfterSignUp(email, a.password))) return { status: 'needs_confirmation' }

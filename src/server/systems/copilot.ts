@@ -40,7 +40,7 @@ const ROUTE_ALIASES: Array<[RegExp, string]> = [
   [/twin workspace/, '/broker/commercial/risk-twins/:profileId'],
   [/risk twins? (page|portfolio)|portfolio/, '/broker/commercial/risk-twins'],
   [/approvals? (page|screen)/, '/broker/approvals'],
-  [/business portal/, '/portal/business'],
+  [/business portal|my business page/, '/my/business'],
   [/customer portal|my portal/, '/portal'],
   [/broker overview|overview page/, '/broker'],
 ]

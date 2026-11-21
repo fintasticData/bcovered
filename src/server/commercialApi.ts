@@ -27,9 +27,11 @@ import { coverLabel, coverOrder } from './domain/commercial/coverClasses'
 import { audit } from './lib/audit'
 import { hashPayload } from './lib/hash'
 import { ToolError } from './lib/errors'
-import type { EditableProfileField } from './tools/business'
+import { compactRand } from './domain/commercial/format'
+import { PROFILE_FIELD_LABELS, type EditableProfileField } from './tools/business'
 import { templateFor } from './tools/risk'
 import { invokeTool } from './tools/registry'
+import { rand } from '@/lib/quote'
 
 const nameOf = (p: BusinessProfile) => p.trading_name ?? p.registered_name
 const currentTwin = (repo: Repo, profileId: string) =>
@@ -144,6 +146,7 @@ export interface BusinessDetail {
   locations: BusinessLocation[]
   activities: BusinessActivity[]
   assets: CommercialAsset[]
+  places_of_use: Array<{ asset_id: string; place_id: string; relationship: string }>
   risk_profile: BusinessRiskProfile | null
   risk_versions: BusinessRiskProfile[]
   dependencies: RiskDependency[]
@@ -163,6 +166,11 @@ export function businessDetail(repo: Repo, profileId: string): BusinessDetail {
   const twin = currentTwin(repo, profileId)
   const order = { high: 0, medium: 1, low: 2 }
   const submissions = of(repo.list('commercial_submissions')).sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const assets = of(repo.list('commercial_assets'))
+  const assetIds = new Set(assets.map((a) => a.id))
+  const places_of_use = repo
+    .list('asset_places_of_use', (r) => assetIds.has(r.asset_id))
+    .map((r) => ({ asset_id: r.asset_id, place_id: r.place_id, relationship: r.relationship }))
   return {
     profile,
     customer: repo.require('customers', profile.customer_id),
@@ -170,7 +178,8 @@ export function businessDetail(repo: Repo, profileId: string): BusinessDetail {
     legal_entities: of(repo.list('business_legal_entities')),
     locations: of(repo.list('business_locations')).sort((a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name)),
     activities: of(repo.list('business_activities')),
-    assets: of(repo.list('commercial_assets')),
+    assets,
+    places_of_use,
     risk_profile: twin,
     risk_versions: of(repo.list('business_risk_profiles')).sort((a, b) => b.version - a.version),
     dependencies: twin ? repo.list('risk_dependencies', (d) => d.risk_profile_id === twin.id) : [],
@@ -495,18 +504,31 @@ export function requestSubmissionApproval(auth: Auth, body: { submission_id: str
 
 // ---------------------------------------------------------------- customer portal
 
+export interface PortalFieldChange {
+  id: string
+  at: string
+  actor_label: string
+  field_label: string
+  from: string
+  to: string
+  source: string | null
+}
+
 export interface PortalBusinessView {
   customer: Customer
   profile: BusinessProfile
   industry_name: string
   locations: BusinessLocation[]
   assets: CommercialAsset[]
+  /** Typically-used place links for portable assets (count once in totals). */
+  places_of_use: Array<{ asset_id: string; place_id: string; relationship: string }>
   activities: BusinessActivity[]
   exposures: Array<Pick<RiskExposure, 'id' | 'title' | 'description' | 'category' | 'coverage_status'> & { classes: string[] }>
   review_status: string
   open_requests: Task[]
   completed_requests: Task[]
   notifications: Communication[]
+  recent_changes: PortalFieldChange[]
 }
 
 const CUSTOMER_REVIEW_LABEL: Record<CommercialSubmission['status'], string> = {
@@ -517,20 +539,105 @@ const CUSTOMER_REVIEW_LABEL: Record<CommercialSubmission['status'], string> = {
   rejected: 'Your broker will contact you',
 }
 
-export function getPortalBusiness(auth: Auth): PortalBusinessView {
+const ASSET_FIELD_LABELS: Record<string, string> = {
+  quantity: 'Quantity',
+  declared_value: 'Declared value',
+  value_basis: 'Value basis',
+}
+
+function formatChangeValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'Not given'
+  if (field === 'annual_turnover' || field === 'declared_value') {
+    const n = typeof value === 'number' ? value : Number(value)
+    return Number.isFinite(n) ? (field === 'annual_turnover' ? compactRand(n) : rand(n)) : String(value)
+  }
+  if (typeof value === 'number') return String(value)
+  return String(value)
+}
+
+function actorLabel(repo: Repo, actorType: string, actorId: string, viewerUserId: string | null): string {
+  if (viewerUserId && actorId === viewerUserId) return 'you'
+  if (actorType === 'agent') return 'an agent'
+  if (actorType === 'system') return 'the system'
+  const user = repo.get('app_users', actorId)
+  if (user?.full_name) return user.full_name
+  return 'your broker'
+}
+
+function portalRecentChanges(repo: Repo, profile: BusinessProfile, assets: CommercialAsset[], viewerUserId: string | null): PortalFieldChange[] {
+  const assetIds = new Set(assets.map((a) => a.id))
+  const assetById = new Map(assets.map((a) => [a.id, a]))
+  const events = repo
+    .list(
+      'audit_events',
+      (e) =>
+        (e.action === 'business.update_profile' && e.entity_id === profile.id) ||
+        (e.action === 'business.update_asset' && !!e.entity_id && assetIds.has(e.entity_id)),
+    )
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+  const out: PortalFieldChange[] = []
+  for (const e of events) {
+    const before = (e.before ?? {}) as Record<string, unknown>
+    const after = (e.after ?? {}) as Record<string, unknown>
+    const keys = Object.keys(after).filter((k) => k !== 'field_sources' && k !== 'source')
+    const who = actorLabel(repo, e.actor_type, e.actor_id, viewerUserId)
+    const source =
+      e.action === 'business.update_asset'
+        ? typeof after.source === 'string'
+          ? after.source
+          : null
+        : (() => {
+            const fs = after.field_sources as Record<string, string> | undefined
+            return fs ? (Object.values(fs)[0] ?? null) : null
+          })()
+
+    for (const key of keys) {
+      if (before[key] === after[key]) continue
+      const field_label =
+        e.action === 'business.update_asset'
+          ? `${assetById.get(e.entity_id!)?.description ?? 'Asset'} · ${ASSET_FIELD_LABELS[key] ?? key}`
+          : (PROFILE_FIELD_LABELS[key as EditableProfileField] ?? key)
+      out.push({
+        id: `${e.id}:${key}`,
+        at: e.created_at,
+        actor_label: who,
+        field_label,
+        from: formatChangeValue(key, before[key]),
+        to: formatChangeValue(key, after[key]),
+        source,
+      })
+      if (out.length >= 20) return out
+    }
+  }
+  return out
+}
+
+function requirePortalProfile(auth: Auth) {
   const p = principal(auth)
   const customer = requireCustomer(p)
   const profile = p.repo.find('business_profiles', (b) => b.customer_id === customer.id)
   if (!profile) throw new ToolError('not_found', 'No business profile is linked to this customer.')
+  return { p, customer, profile }
+}
+
+export function getPortalBusiness(auth: Auth): PortalBusinessView {
+  const { p, customer, profile } = requirePortalProfile(auth)
   const twin = currentTwin(p.repo, profile.id)
   const sub = latestSubmission(p.repo, profile.id)
   const tasks = p.repo.list('tasks', (t) => t.subject_id === profile.id && t.audience === 'customer')
+  const assets = p.repo.list('commercial_assets', (a) => a.business_profile_id === profile.id)
+  const assetIds = new Set(assets.map((a) => a.id))
+  const places_of_use = p.repo
+    .list('asset_places_of_use', (r) => assetIds.has(r.asset_id))
+    .map((r) => ({ asset_id: r.asset_id, place_id: r.place_id, relationship: r.relationship }))
   return {
     customer,
     profile,
     industry_name: templateFor(p.repo, profile.industry_key).name,
     locations: p.repo.list('business_locations', (l) => l.business_profile_id === profile.id),
-    assets: p.repo.list('commercial_assets', (a) => a.business_profile_id === profile.id),
+    assets,
+    places_of_use,
     activities: p.repo.list('business_activities', (a) => a.business_profile_id === profile.id),
     exposures: twin
       ? p.repo
@@ -543,5 +650,48 @@ export function getPortalBusiness(auth: Auth): PortalBusinessView {
     notifications: p.repo
       .list('communications', (c) => c.customer_id === customer.id && c.channel === 'in_app' && c.status === 'sent')
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    recent_changes: portalRecentChanges(p.repo, profile, assets, p.user?.id ?? null),
   }
+}
+
+export function updatePortalProfile(
+  auth: Auth,
+  body: { changes: Partial<Record<EditableProfileField, string | number | null>> },
+): PortalBusinessView {
+  const { p, profile } = requirePortalProfile(auth)
+  invokeTool(
+    'business.update_profile',
+    { profile_id: profile.id, changes: body.changes, source: 'declared' },
+    { repo: p.repo, actor: p.actor },
+  )
+  const open = latestSubmission(p.repo, profile.id)
+  if (open && ['draft', 'awaiting_approval'].includes(open.status)) {
+    invokeTool(
+      'underwriting.refresh_pack',
+      { submission_id: open.id },
+      { repo: p.repo, actor: { type: 'agent', id: 'portal', role: 'agent' } },
+    )
+  }
+  return getPortalBusiness(auth)
+}
+
+export function updatePortalAsset(
+  auth: Auth,
+  body: {
+    asset_id: string
+    quantity?: number
+    declared_value?: number | null
+    value_basis?: CommercialAsset['value_basis']
+  },
+): PortalBusinessView {
+  const { p, profile } = requirePortalProfile(auth)
+  const asset = p.repo.require('commercial_assets', body.asset_id)
+  if (asset.business_profile_id !== profile.id) throw new ToolError('forbidden', 'That asset does not belong to your business.')
+  const { asset_id, ...changes } = body
+  invokeTool(
+    'business.update_asset',
+    { asset_id, ...changes, source: 'declared' },
+    { repo: p.repo, actor: p.actor },
+  )
+  return getPortalBusiness(auth)
 }
