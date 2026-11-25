@@ -122,6 +122,15 @@ const ServiceProvidersPage = lazy(() => import('./broker/concierge/ServiceProvid
 const PartnerConciergeQueuePage = lazy(() => import('./pages/partner/PartnerConciergeQueuePage'))
 const PartnerConciergeRequestPage = lazy(() => import('./pages/partner/PartnerConciergeRequestPage'))
 const OnboardingPage = lazy(() => import('./onboarding/OnboardingPage'))
+const MigrationLayout = lazy(() => import('./pages/migration/MigrationLayout'))
+const MigrationHomePage = lazy(() => import('./pages/migration/HomePage'))
+const MigrationProductPage = lazy(() => import('./pages/migration/ProductPage'))
+const MigrationAboutPage = lazy(() => import('./pages/migration/AboutPage'))
+const MigrationNewsPage = lazy(() => import('./pages/migration/NewsPage'))
+const MigrationContactPage = lazy(() => import('./pages/migration/ContactPage'))
+const MigrationPiPage = lazy(() => import('./pages/migration/PiPage'))
+const MigrationTermsPage = lazy(() => import('./pages/migration/TermsPage'))
+const MigrationSitemapPage = lazy(() => import('./pages/migration/SitemapPage'))
 const PlatformLayout = lazy(() => import('./platform/PlatformLayout'))
 const QueuePage = lazy(() => import('./platform/QueuePage'))
 const ReviewPage = lazy(() => import('./platform/ReviewPage'))
@@ -249,6 +258,19 @@ export default function App() {
     <Suspense fallback={<AppLoading />}>
       <ScrollToTop />
       <Routes>
+        {/* Public www.bcovered.co.za clone — isolated chrome, not InsuroFlow PublicLayout */}
+        <Route path="/migration" element={<MigrationLayout />}>
+          <Route index element={<MigrationHomePage />} />
+          <Route path="about-us" element={<MigrationAboutPage />} />
+          <Route path="news" element={<MigrationNewsPage />} />
+          <Route path="contact-us" element={<MigrationContactPage />} />
+          <Route path="pi" element={<MigrationPiPage />} />
+          <Route path="terms" element={<MigrationTermsPage />} />
+          <Route path="sitemap" element={<MigrationSitemapPage />} />
+          <Route path="car-insurance" element={<MigrationProductPage />} />
+          <Route path="home-contents-insurance" element={<MigrationProductPage />} />
+          <Route path="building-insurance" element={<MigrationProductPage />} />
+        </Route>
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/insurance/:slug" element={<ProductPage />} />

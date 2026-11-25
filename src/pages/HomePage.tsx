@@ -175,6 +175,11 @@ export default function HomePage() {
           </div>
 
           <p className="mt-6 text-center text-sm text-ink/55">
+            Public marketing site clone:{' '}
+            <Link to="/migration" className="font-semibold text-brand-600 underline">
+              Open /migration
+            </Link>
+            {' · '}
             Have an invite?{' '}
             <Link to="/brokers/invite" className="font-semibold text-brand-600 underline">
               Open your invitation
