@@ -60,6 +60,8 @@ export async function submitWebsiteEnquiry(input: WebsiteEnquiryInput): Promise<
     p_channel: input.channel,
   }
 
+  if (!supabase) throw new CopilotError(503, 'Supabase is not configured for this build.')
+
   const { data, error } = await supabase.rpc('website_submit_enquiry', payload)
 
   if (!error && data && typeof data === 'object' && (data as { ok?: boolean }).ok) {
